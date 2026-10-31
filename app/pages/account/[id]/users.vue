@@ -201,7 +201,10 @@ const exportMenuItems = computed(() => [
 
 // Initialize data
 onMounted(async () => {
-  await enclaveStore.initialize()
+  // Enclave data only labels accounts; the user list still loads without it
+  await enclaveStore.initialize().catch((err) => {
+    logger.error('Failed to load enclave data:', err)
+  })
   await initialize()
   await fetchUsers()
   // Fetch IDC sessions in parallel (don't block on this)

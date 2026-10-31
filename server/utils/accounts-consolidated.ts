@@ -14,11 +14,12 @@
  * - Keeping only actively used functions
  */
 
-import { scanItems, updateItem } from './dynamodb'
+import { scanAllItems } from './dynamodb'
 import { getOrganizationsClient, hasCredentials } from '../lib/aws-client-factory'
 import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../types'
 import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
 import { logger } from './logger'
+import { accountCache, CacheTags } from './cache-manager'
 
 /**
  * Get the DynamoDB table name for accounts (with config loader)
@@ -242,10 +243,26 @@ function _sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// Every account page, list and lookup reads the whole registry, so one scan
+// is shared for a few minutes. Tagged ACCOUNTS so cache invalidation clears it.
+const ACCOUNT_METADATA_CACHE_KEY = 'accounts:dynamodb-metadata'
+const ACCOUNT_METADATA_TTL_SECONDS = 300
+
 export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
+  // The scan returns null on failure, which the cache does not store, so an
+  // outage is not served as an empty registry for the whole TTL.
+  const items = await accountCache.getOrSet(
+    ACCOUNT_METADATA_CACHE_KEY,
+    scanAccountMetadataFromDynamoDB,
+    { ttl: ACCOUNT_METADATA_TTL_SECONDS, tags: [CacheTags.ACCOUNTS] }
+  )
+  return items ?? []
+}
+
+async function scanAccountMetadataFromDynamoDB(): Promise<any[] | null> {
   if (!hasCredentials('govcloud')) {
     logger.warn('No credentials available for govcloud environment, skipping DynamoDB query')
-    return []
+    return null
   }
 
   const MAX_ATTEMPTS = 5
@@ -255,10 +272,11 @@ export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
     try {
       const tableName = await getAccountsTableName()
       const environment = await getTableEnvironment('externalAccounts')
-      const result = await scanItems(tableName, undefined, undefined, undefined, environment)
+      // Every page: a single Scan stops at 1 MB and would drop accounts.
+      const items = await scanAllItems(tableName, undefined, environment)
       // Successful read — refresh stale cache and return
-      _staleAccountsCache = result.items
-      return result.items
+      _staleAccountsCache = items
+      return items
     } catch (error: any) {
       const isThrottled =
         error?.name === 'ProvisionedThroughputExceededException' ||
@@ -275,9 +293,9 @@ export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
         continue
       }
 
-      // Non-throttle error — fall through to original behaviour
+      // Non-throttle error: serve the last good read if there is one
       logger.error('Failed to get accounts from DynamoDB:', error)
-      return []
+      return _staleAccountsCache
     }
   }
 
@@ -424,8 +442,16 @@ export async function lookupAccountUnified(criteria: AccountLookupCriteria): Pro
     if (criteria.govCloudAccountId && (acc.govCloudAccountId === criteria.govCloudAccountId || acc.awsGovCloudAccountID === criteria.govCloudAccountId)) {
       return true
     }
-    if (criteria.requestId && (acc.requestId === criteria.requestId || acc.requestID === criteria.requestId)) {
+    // requestID arrives as a string from JSON bodies but is stored as a number.
+    if (criteria.requestID && (String(acc.requestId) === String(criteria.requestID) || String(acc.requestID) === String(criteria.requestID))) {
       return true
+    }
+    // The registry stores the project code as projectNumber.
+    if (criteria.projectCode) {
+      const code = String(criteria.projectCode).toLowerCase()
+      if ([acc.projectCode, acc.projectNumber].some(value => value !== undefined && value !== null && String(value).toLowerCase() === code)) {
+        return true
+      }
     }
     if (criteria.accountEmail && acc.email?.toLowerCase().includes(criteria.accountEmail.toLowerCase())) {
       return true
@@ -437,60 +463,6 @@ export async function lookupAccountUnified(criteria: AccountLookupCriteria): Pro
   })
   
   return account || null
-}
-
-/**
- * Update account metadata in DynamoDB
- */
-export async function updateAccountMetadata(
-  accountId: string,
-  metadata: Partial<AccountInfo>
-): Promise<AccountInfo | null> {
-  if (!hasCredentials('govcloud')) {
-    throw new Error('GovCloud credentials required to update account metadata')
-  }
-  
-  try {
-    const tableName = await getAccountsTableName()
-    const environment = await getTableEnvironment('externalAccounts')
-
-    // Ensure we don't overwrite the primary account ID
-    const { accountId: _, ...safeMetadata } = metadata
-    const updateData = {
-      ...safeMetadata,
-      modifiedDate: new Date().toISOString()
-    }
-
-    await updateItem(tableName, { accountId }, updateData, environment)
-    
-    // Return the updated account with full data
-    return lookupAccountUnified({ accountId })
-  } catch (error) {
-    logger.error(`Failed to update metadata for account ${accountId}:`, error)
-    throw error
-  }
-}
-
-/**
- * Sync account from Organizations (placeholder for sync functionality)
- */
-export async function syncAccountFromOrganizations(
-  accountId: string,
-  environment: AWSEnvironmentType = 'commercial'
-): Promise<AccountInfo | null> {
-  try {
-    // Get fresh data from Organizations
-    const orgData = await getAccountFromOrganizations(accountId, environment)
-    if (!orgData) {
-      throw new Error(`Account ${accountId} not found in Organizations`)
-    }
-    
-    logger.info(`Synced account ${accountId} from Organizations (${environment})`)
-    return orgData
-  } catch (error) {
-    logger.error(`Failed to sync account ${accountId} from Organizations:`, error)
-    throw error
-  }
 }
 
 /**

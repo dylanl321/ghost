@@ -174,16 +174,16 @@ export default defineEventHandler(handleAsync(async (event) => {
       attributeList = attributeList.filter(attr => attr.coveragePercentage >= minCoverage)
     }
 
-    // Sort results
+    // Each comparison is ascending; order=desc reverses it.
     attributeList.sort((a, b) => {
       let comparison = 0
 
       switch (sortBy) {
         case 'coverage':
-          comparison = b.coveragePercentage - a.coveragePercentage
+          comparison = a.coveragePercentage - b.coveragePercentage
           break
         case 'populated':
-          comparison = b.populatedCount - a.populatedCount
+          comparison = a.populatedCount - b.populatedCount
           break
         case 'name':
         default:

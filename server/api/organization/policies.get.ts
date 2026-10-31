@@ -6,7 +6,7 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import {
-  getAttachedPolicies,
+  collectScpPolicies,
   getOrganizationalUnitTree,
   getAccountOU
 } from '../../utils/organizations'
@@ -104,15 +104,6 @@ registerEndpoint('/api/organization/policies', 'GET', {
   }
 })
 
-interface PolicyInfo {
-  id: string
-  name: string
-  description?: string
-  type: string
-  arn?: string
-  source: 'direct' | 'inherited'
-  attachedAt: string
-}
 
 export default defineEventHandler(handleAsync(async (event) => {
   const { environment } = parseQueryParams(event)
@@ -128,9 +119,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (!targetType || !['ACCOUNT', 'ORGANIZATIONAL_UNIT'].includes(targetType)) {
     return errors.badRequest(event, 'targetType must be ACCOUNT or ORGANIZATIONAL_UNIT')
   }
-
-  const directPolicies: PolicyInfo[] = []
-  const inheritedPolicies: PolicyInfo[] = []
 
   try {
     // Get the organizational tree to find parent hierarchy
@@ -182,51 +170,15 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }
 
-    // Get policies directly attached to the target
-    try {
-      const targetPolicies = await getAttachedPolicies(targetId, targetType, environment)
-      for (const policy of targetPolicies) {
-        directPolicies.push({
-          id: policy.id,
-          name: policy.name,
-          description: policy.description,
-          type: policy.type || 'SERVICE_CONTROL_POLICY',
-          arn: policy.arn,
-          source: 'direct',
-          attachedAt: hierarchyPath[hierarchyPath.length - 1]?.name || targetId
-        })
-      }
-    } catch (error) {
-      logger.warn(`Failed to get policies for ${targetType} ${targetId}:`, error)
-    }
-
-    // Get inherited policies from all parent OUs
-    for (const node of hierarchyPath) {
-      // Skip the target itself (we already got its direct policies)
-      if (node.id === targetId) continue
-
-      try {
-        const ouPolicies = await getAttachedPolicies(node.id, 'ORGANIZATIONAL_UNIT', environment)
-        for (const policy of ouPolicies) {
-          inheritedPolicies.push({
-            id: policy.id,
-            name: policy.name,
-            description: policy.description,
-            type: policy.type || 'SERVICE_CONTROL_POLICY',
-            arn: policy.arn,
-            source: 'inherited',
-            attachedAt: node.name
-          })
-        }
-      } catch (error) {
-        logger.warn(`Failed to get policies for OU ${node.id}:`, error)
-      }
-    }
-
-    // Combine all policies and remove duplicates
-    const allPolicies = [...directPolicies, ...inheritedPolicies]
-    const uniquePolicies = allPolicies.filter((policy, index, self) =>
-      index === self.findIndex(p => p.id === policy.id)
+    const { directPolicies, inheritedPolicies, allPolicies: uniquePolicies } = await collectScpPolicies(
+      {
+        id: targetId,
+        type: targetType,
+        // For an account the path ends at its OU, so label it by its own ID.
+        label: targetType === 'ACCOUNT' ? targetId : (hierarchyPath[hierarchyPath.length - 1]?.name || targetId)
+      },
+      hierarchyPath,
+      environment
     )
 
     return sendSuccess(event, {

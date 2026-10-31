@@ -430,6 +430,13 @@ export function classifyInstances(
   }
   classified.sort((a, b) => order[a.classification] - order[b.classification])
 
+  return { summary: summarizeClassifications(classified), instances: classified }
+}
+
+/**
+ * Summary counts and potential savings for a set of classified instances
+ */
+export function summarizeClassifications(classified: InstanceClassification[]): ClassificationSummary {
   const summary: ClassificationSummary = {
     totalInstances: classified.length,
     overProvisioned: 0,
@@ -465,13 +472,14 @@ export function classifyInstances(
     switch (inst.runtimeClassification) {
       case 'usually-running': summary.runtimeSummary.usuallyRunning++; break
       case 'usually-stopped': summary.runtimeSummary.usuallyStopped++; break
-      case 'no-data': summary.runtimeSummary.noData++; break
+      default: summary.runtimeSummary.noData++; break
     }
   }
 
   summary.totalPotentialMonthlySavings = Math.round(summary.totalPotentialMonthlySavings * 100) / 100
 
-  return { summary, instances: classified }
+  return summary
+
 }
 
 /**

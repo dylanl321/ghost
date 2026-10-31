@@ -35,35 +35,38 @@ export default defineEventHandler(async (event) => {
 
     const { account } = lookupResult
 
-    // Try to get current month costs (non-blocking - if it fails, just omit)
-    let monthlyCost: number | undefined
-    try {
-      // Get current month start/end dates
-      const now = new Date()
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-
-      const costData = await getCostAndUsage({
-        environment: account.environment || 'commercial',
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
-        granularity: 'MONTHLY',
-        groupBy: 'NONE',
-        accountIds: [accountId]
-      })
-
-      // Extract total cost from response
-      if (costData?.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount) {
-        monthlyCost = parseFloat(costData.ResultsByTime[0].Total.UnblendedCost.Amount)
-      }
-    } catch (costError: any) {
-      logger.warn(`[Account Summary] Could not fetch costs for ${accountId}:`, costError.message)
-      // Continue without cost data
-    }
-
     // Always use commercial ID for links (GHOST UI uses commercial IDs everywhere)
     const commercialId = account.accountId || account.awsStandardAccountID || account.id
     const govcloudId = account.govCloudAccountId || account.awsGovCloudAccountID
+
+    // Month-to-date cost (non-blocking - if it fails, just omit). Cost
+    // Explorer only exists in commercial and bills GovCloud usage to the
+    // paired commercial account, so always query the commercial ID.
+    let monthlyCost: number | undefined
+    if (commercialId) {
+      try {
+        const now = new Date()
+        const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        // Cost Explorer's end date is exclusive.
+        const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+
+        const costData = await getCostAndUsage({
+          startDate: startDate.toISOString().split('T')[0]!,
+          endDate: endDate.toISOString().split('T')[0]!,
+          granularity: 'MONTHLY',
+          metrics: ['UnblendedCost'],
+          filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [commercialId] } }
+        }, 'commercial')
+
+        const amount = costData?.total?.UnblendedCost?.Amount
+        if (amount) {
+          monthlyCost = parseFloat(amount)
+        }
+      } catch (costError: any) {
+        logger.warn(`[Account Summary] Could not fetch costs for ${accountId}:`, costError.message)
+        // Continue without cost data
+      }
+    }
 
     // Determine which ID was queried
     const wasGovcloudQuery = accountId === govcloudId

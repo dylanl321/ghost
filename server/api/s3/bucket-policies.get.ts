@@ -6,7 +6,7 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { S3Client, GetBucketPolicyCommand } from '@aws-sdk/client-s3'
-import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, errors, handleAsync, validateEnvironment } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { getClient } from '../../lib/aws-client-factory'
 import {
@@ -103,7 +103,8 @@ registerEndpoint('/api/s3/bucket-policies', 'GET', {
                       criticalRisks: { type: 'integer' },
                       highRisks: { type: 'integer' },
                       mediumRisks: { type: 'integer' },
-                      lowRisks: { type: 'integer' }
+                      lowRisks: { type: 'integer' },
+                      bucketsNotRead: { type: 'integer', description: 'Buckets whose policy could not be read (see each analysis.error)' }
                     }
                   }
                 }
@@ -117,30 +118,31 @@ registerEndpoint('/api/s3/bucket-policies', 'GET', {
 })
 
 /**
- * Fetch bucket policy from S3
+ * Fetch a bucket policy. A missing policy is null; any other failure
+ * (access denied, wrong region, no such bucket) is returned as an error so
+ * the bucket is not reported as having no risky policy.
  */
 async function fetchBucketPolicy(
   s3Client: S3Client,
   bucketName: string
-): Promise<BucketPolicy | null> {
+): Promise<{ policy: BucketPolicy | null; error?: string }> {
   try {
-    const command = new GetBucketPolicyCommand({ Bucket: bucketName })
-    const response = await s3Client.send(command)
-
-    if (response.Policy) {
-      return JSON.parse(response.Policy)
-    }
-
-    return null
+    const response = await s3Client.send(new GetBucketPolicyCommand({ Bucket: bucketName }))
+    return { policy: response.Policy ? JSON.parse(response.Policy) : null }
   } catch (error: any) {
-    // No policy or access denied
     if (error.name === 'NoSuchBucketPolicy') {
-      return null
+      return { policy: null }
     }
     logger.warn(`[S3 Policy] Failed to fetch policy for ${bucketName}:`, error.message)
-    return null
+    const hint = error.name === 'PermanentRedirect' || error.$metadata?.httpStatusCode === 301
+      ? ' (bucket is in another region; pass its region)'
+      : ''
+    return { policy: null, error: `${error.name || 'Error'}: ${error.message}${hint}` }
   }
 }
+
+// S3 bucket naming rules (3-63 chars, lowercase letters, digits, dots, hyphens)
+const BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/
 
 export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
@@ -150,16 +152,21 @@ export default defineEventHandler(handleAsync(async (event) => {
   const bucketNamesParam = query.bucketNames as string
   const region = (query.region as string) || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1')
 
-  // Validation
-  if (!accountId) {
-    return errors.validationError(event, ['accountId is required'])
+  if (!validateEnvironment(environment)) {
+    return errors.validationError(event, ['environment must be commercial or govcloud'])
+  }
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.validationError(event, ['accountId must be a 12-digit AWS account ID'])
+  }
+  if (!/^[a-z]{2}(-gov)?-[a-z]+-\d$/.test(region)) {
+    return errors.validationError(event, ['region is not a valid AWS region'])
   }
 
   if (!bucketNamesParam) {
     return errors.validationError(event, ['bucketNames is required'])
   }
 
-  const bucketNames = bucketNamesParam.split(',').map(name => name.trim()).filter(Boolean)
+  const bucketNames = [...new Set(bucketNamesParam.split(',').map(name => name.trim()).filter(Boolean))]
 
   if (bucketNames.length === 0) {
     return errors.validationError(event, ['At least one bucket name is required'])
@@ -169,30 +176,28 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.validationError(event, ['Maximum 100 buckets per request'])
   }
 
-  logger.info(`[S3 Policy] Analyzing ${bucketNames.length} buckets in account ${accountId}`)
-
-  // Create S3 client
-  const s3Client = await getClient<S3Client>(environment, 's3', region, accountId)
-
-  // Fetch policies for all buckets
-  const policyPromises = bucketNames.map(async (bucketName) => {
-    const policy = await fetchBucketPolicy(s3Client, bucketName)
-    return { name: bucketName, policy, accountId }
-  })
-
-  const buckets = await Promise.all(policyPromises)
-
-  // Analyze policies
-  const analyses: BucketPolicyAnalysis[] = []
-  for (const bucket of buckets) {
-    const analysis = analyzeBucketPolicy(bucket.name, bucket.policy, bucket.accountId)
-    analyses.push(analysis)
+  const invalidNames = bucketNames.filter(name => !BUCKET_NAME_PATTERN.test(name))
+  if (invalidNames.length > 0) {
+    return errors.validationError(event, [`Invalid bucket names: ${invalidNames.join(', ')}`])
   }
 
-  // Generate summary
-  const summary = generatePolicySummary(analyses)
+  logger.info(`[S3 Policy] Analyzing ${bucketNames.length} buckets in account ${accountId}`)
 
-  logger.info(`[S3 Policy] Analysis complete: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account`)
+  const s3Client = await getClient<S3Client>(environment, 's3', region, accountId)
+
+  const analyses: BucketPolicyAnalysis[] = await Promise.all(bucketNames.map(async (bucketName) => {
+    const { policy, error } = await fetchBucketPolicy(s3Client, bucketName)
+    const analysis = analyzeBucketPolicy(bucketName, policy, accountId)
+    return error ? { ...analysis, error } : analysis
+  }))
+
+  const summary = {
+    ...generatePolicySummary(analyses.filter(a => !a.error)),
+    totalBuckets: analyses.length,
+    bucketsNotRead: analyses.filter(a => a.error).length
+  }
+
+  logger.info(`[S3 Policy] Analysis complete: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account, ${summary.bucketsNotRead} not read`)
 
   return sendSuccess(event, {
     analyses,

@@ -1,18 +1,13 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { organizationCache, CacheTags } from '../../utils/cache-manager'
-import getMasterAccountCredentials, { assumeChildAccountRole } from '~~/server/utils/credentials/awsAccountCredentials'
 import { getCostForecast } from '../../utils/cost-explorer'
 import { getQuery } from 'h3'
-import type { GetCostAndUsageCommandInput, GetCostAndUsageCommandOutput } from "@aws-sdk/client-cost-explorer";
-import { CostExplorerClient,GetCostAndUsageCommand
-} from "@aws-sdk/client-cost-explorer";
-import { OrganizationsClient, ListAccountsCommand } from "@aws-sdk/client-organizations";
-import { scanItems } from '../../utils/dynamodb'
-import { getAccountsTableName } from '../../utils/accounts-consolidated'
+import type { CostExplorerClient, GetCostAndUsageCommandInput, GetCostAndUsageCommandOutput } from "@aws-sdk/client-cost-explorer";
+import { GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
+import { getCostExplorerClient } from '../../lib/aws-client-factory'
+import { getAllAccountMetadataFromDynamoDB, getAllAccountsFromOrganizations } from '../../utils/accounts-consolidated'
 import { logger } from '../../utils/logger'
-
-const region = 'us-east-1'
 
 type DailyCost = {
   date: string; // format: "YYYY-MM-DD"
@@ -104,32 +99,27 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
 })
 
 async function getAccountCounts() {
-  const creds = getMasterAccountCredentials('commercial');
-  const orgClient = new OrganizationsClient({ credentials: creds, region });
+  // Shared Organizations listing (throttle retries, factory credentials).
+  // It returns [] on failure; an organization always has accounts, so treat
+  // that as a failure rather than caching zero accounts for 20 minutes.
+  const accounts = await getAllAccountsFromOrganizations('commercial')
+  if (accounts.length === 0) {
+    throw new Error('Organizations account list is unavailable')
+  }
 
-  let accounts: any = [];
-  let nextToken = undefined;
+  const activeCount = accounts.filter(acc => acc.accountStatus === "ACTIVE").length;
+  const suspendedCount = accounts.filter(acc => acc.accountStatus === "SUSPENDED").length;
 
-  do {
-    const response: any = await orgClient.send(new ListAccountsCommand({ NextToken: nextToken }));
-    accounts = accounts.concat(response.Accounts || []);
-    nextToken = response.NextToken;
-  } while (nextToken);
-
-  const activeCount = accounts.filter((acc: any) => acc.Status === "ACTIVE").length;
-  const suspendedCount = accounts.filter((acc: any) => acc.Status === "SUSPENDED").length;
-
-  return { activeCount, suspendedCount, activeAccountIds: accounts.filter((acc: any) => acc.Status === "ACTIVE").map((acc: any) => acc.Id) };
+  return { activeCount, suspendedCount };
 }
 
 // Calculate budget health metrics
 // Accounts for savings plans being pre-allocated on day 1 by using daily burn rate (excluding day 1)
-async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: string, endOfMonth: string, activeAccountIds: string[]) {
+async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: string, endOfMonth: string) {
   try {
-    // Get account metadata from DynamoDB
-    const tableName = await getAccountsTableName();
-    const scanResult = await scanItems(tableName, undefined, undefined, undefined, 'commercial');
-    const accountsData = scanResult.items;
+    // Account budgets live in the GovCloud account registry; the shared
+    // reader scans every page of it in the right partition.
+    const accountsData = await getAllAccountMetadataFromDynamoDB();
 
     logger.info(`[Budget Health] Scanned ${accountsData.length} accounts from DynamoDB`)
 
@@ -245,10 +235,24 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
   }
 }
 
+// Grouped results are paged; merge every page's groups into its period.
+async function sendAllPages(client: CostExplorerClient, params: GetCostAndUsageCommandInput): Promise<GetCostAndUsageCommandOutput> {
+  let response = await client.send(new GetCostAndUsageCommand(params));
+  const results = response.ResultsByTime ?? [];
+  while (response.NextPageToken) {
+    response = await client.send(new GetCostAndUsageCommand({ ...params, NextPageToken: response.NextPageToken }));
+    (response.ResultsByTime ?? []).forEach((period, index) => {
+      if (results[index]) {
+        results[index].Groups = [...(results[index].Groups ?? []), ...(period.Groups ?? [])];
+      }
+    });
+  }
+  return { ...response, ResultsByTime: results, NextPageToken: undefined };
+}
+
 async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsageCommandInput): Promise<GetCostAndUsageCommandOutput> {
   try {
-    const command = new GetCostAndUsageCommand(params);
-    return await client.send(command);
+    return await sendAllPages(client, params);
   } catch (error: any) {
     // If Cost Explorer says our start date is too early, retry with the earliest supported date
     if (error.name === 'ValidationException' && error.message?.includes('Earliest supported Start is')) {
@@ -259,8 +263,7 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
         if (earliestStart < params.TimePeriod.End) {
           logger.warn(`Cost Explorer start date clamped from ${params.TimePeriod.Start} to ${earliestStart}`)
           const retryParams = { ...params, TimePeriod: { Start: earliestStart, End: params.TimePeriod.End } }
-          const command = new GetCostAndUsageCommand(retryParams)
-          return await client.send(command)
+          return await sendAllPages(client, retryParams)
         }
         // Start >= End means no valid range; return empty result
         logger.warn(`Cost Explorer has no data for range ${params.TimePeriod.Start} - ${params.TimePeriod.End} (earliest: ${earliestStart})`)
@@ -313,7 +316,6 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
   const proformaAccountId = process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
 
   const startOfMonth = buildPaddedDate(year, month, 1);
-  const tomorrow = buildPaddedDate(year, month, today + 1); // exclusive - for actual daily costs
   const endOfMonth = buildPaddedDate(year, month + 1, 1); // exclusive - captures full month including pre-allocated Savings Plan charges
 
   // Forecast date range (AWS forecast requires start >= today)
@@ -337,17 +339,16 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
   logger.info(`Running queries with values: startOfMonth=${startOfMonth},
-    tomorrow=${tomorrow}, endOfMonth=${endOfMonth}, forecastStart=${forecastStart}, forecastEnd=${forecastEnd},
+    endOfMonth=${endOfMonth}, forecastStart=${forecastStart}, forecastEnd=${forecastEnd},
     prevStart=${prevStart}, prevMTDEnd=${prevMTDEnd}, dailyEnd=${dailyEnd}, dailyStart=${dailyStart}, `)
 
   // ----- Queries -----
 
-  const creds = getMasterAccountCredentials('commercial');
-  const costClient = new CostExplorerClient({ region, credentials: creds });
+  // Factory clients get timeouts and Cost Explorer call metering.
+  const costClient = await getCostExplorerClient('commercial');
 
   const [
     rolling14DailyResponse,
-    mtdDailyResponse,
     mtdMonthly,
     prevMonthly,
     prevMtd,
@@ -357,11 +358,6 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
   ] = await Promise.all([
     fetchCostData(costClient, {
       TimePeriod: { Start: dailyStart, End: dailyEnd },
-      Granularity: "DAILY",
-      Metrics: ["UnblendedCost"],
-    }),
-    fetchCostData(costClient, {
-      TimePeriod: { Start: startOfMonth, End: tomorrow },
       Granularity: "DAILY",
       Metrics: ["UnblendedCost"],
     }),
@@ -383,15 +379,14 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
     getCostForecast(forecastStart, forecastEnd, "UNBLENDED_COST", "MONTHLY", undefined, "commercial")
       .catch(err => { logger.warn(`Cost forecast failed: ${err.message}`); return { total: undefined, forecastResultsByTime: [] } }),
     getAccountCounts(),
-    getBudgetHealth(costClient, startOfMonth, endOfMonth, []),
+    getBudgetHealth(costClient, startOfMonth, endOfMonth),
   ]);
 
   // Query for top accounts - use proforma or master account based on parameter
   let byAccountMonthly
   if (useProforma) {
     logger.info(`Querying proforma account (${proformaAccountId}) for top accounts`)
-    const proformaCreds = await assumeChildAccountRole('commercial', proformaAccountId)
-    const proformaClient = new CostExplorerClient({ region, credentials: proformaCreds })
+    const proformaClient = await getCostExplorerClient('commercial', undefined, proformaAccountId)
     byAccountMonthly = await fetchCostData(proformaClient, {
       TimePeriod: { Start: startOfMonth, End: endOfMonth },
       Granularity: "MONTHLY",
@@ -413,7 +408,6 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
   const mtdTotal = parseFloat(mtdMonthly.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount || "0");
 
   const rolling14Daily = dailySeries(rolling14DailyResponse)
-  const mtdDaily = dailySeries(mtdDailyResponse)
 
   // Use AWS's native forecast API which uses ML models to predict spending
   // This matches the AWS Console forecast exactly

@@ -74,10 +74,12 @@ export async function queryCostAnomalies(input: {
   let nextToken = input.cursor
   let pages = 0
   do {
-    const response = await client.send(new GetAnomaliesCommand({ DateInterval: dateInterval, MaxResults: Math.min(100, limit), NextPageToken: nextToken }))
+    // Ask only for the remaining count: matches past `limit` on a page would
+    // be dropped while the cursor moves beyond them, so the next page would skip them
+    const response = await client.send(new GetAnomaliesCommand({ DateInterval: dateInterval, MaxResults: Math.min(100, limit - anomalies.length), NextPageToken: nextToken }))
     const records = (response.Anomalies || []).map(anomaly => parseCostAnomaly(anomaly, names))
       .filter(anomaly => !input.accountId || anomaly.accountId === input.accountId || anomaly.rootCauses.some(cause => cause.linkedAccount === input.accountId))
-    anomalies.push(...records.slice(0, limit - anomalies.length))
+    anomalies.push(...records)
     nextToken = response.NextPageToken
     pages++
   } while (nextToken && anomalies.length < limit && pages < 10)

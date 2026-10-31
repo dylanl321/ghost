@@ -5,10 +5,12 @@
  */
 
 import { defineEventHandler, readBody } from 'h3'
-import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, errors, handleAsync, validateEnvironment } from '../../utils/api-response'
 import { batchGetEBSVolumePricing } from '../../utils/aws-pricing'
 import type { AWSEnvironmentType } from '../../types'
 import { logger } from '../../utils/logger'
+
+const MAX_VOLUMES = 2000
 
 export default defineEventHandler(handleAsync(async (event) => {
   try {
@@ -20,6 +22,19 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     if (!volumes || !Array.isArray(volumes)) {
       return errors.validationError(event, 'volumes array is required')
+    }
+    if (!validateEnvironment(environment)) {
+      return errors.validationError(event, 'environment must be commercial or govcloud')
+    }
+    if (volumes.length > MAX_VOLUMES) {
+      return errors.validationError(event, `At most ${MAX_VOLUMES} volumes per request`)
+    }
+    const invalid = volumes.find(v =>
+      !v || typeof v.volumeType !== 'string' || typeof v.region !== 'string' ||
+      typeof v.sizeGB !== 'number' || !Number.isFinite(v.sizeGB) || v.sizeGB < 0
+    )
+    if (invalid) {
+      return errors.validationError(event, 'Each volume needs volumeType, region and a non-negative sizeGB')
     }
 
     logger.info(`[Volumes Pricing API] Calculating pricing for ${volumes.length} volumes in ${environment}`)

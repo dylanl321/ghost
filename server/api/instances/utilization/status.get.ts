@@ -6,7 +6,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
-import { lookupAccountOptimized } from '../../../utils/account-lookup-optimized'
+import { lookupAccountOptimized, getEnvironmentAccountId } from '../../../utils/account-lookup-optimized'
 import { getLatestAnalysis, getAnalysisJob } from '../../../utils/utilization-persistence'
 
 registerEndpoint('/api/instances/utilization/status', 'GET', {
@@ -35,19 +35,15 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Resolve account
-  let targetAccountId: string
+  let targetAccountId: string | undefined
   try {
     const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
-    if (environment === 'govcloud') {
-      targetAccountId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-    } else {
-      targetAccountId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-    }
-    if (!targetAccountId) {
-      return errors.badRequest(event, `Account found but missing ${environment} account ID`)
-    }
+    targetAccountId = getEnvironmentAccountId(lookupResult.account, environment)
   } catch {
     return errors.notFound(event, `No account found for identifier: ${accountIdentifier}`)
+  }
+  if (!targetAccountId) {
+    return errors.badRequest(event, `Account found but missing ${environment} account ID`)
   }
 
   const latest = await getLatestAnalysis(targetAccountId, environment).catch(() => null)

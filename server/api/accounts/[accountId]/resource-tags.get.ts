@@ -11,7 +11,7 @@ import {
   GetResourcesCommand
 } from '@aws-sdk/client-resource-groups-tagging-api'
 import { getResourceGroupsTaggingClient } from '../../../lib/aws-client-factory'
-import { sendSuccess, parseQueryParams, handleAsync } from '../../../utils/api-response'
+import { sendSuccess, parseQueryParams, handleAsync, errors } from '../../../utils/api-response'
 import { costCache, CacheTags } from '../../../utils/cache-manager'
 import { logger } from '../../../utils/logger'
 import type { AWSEnvironmentType } from '../../../types/aws'
@@ -22,7 +22,8 @@ const COMMERCIAL_REGIONS = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']
 const GOVCLOUD_REGIONS = ['us-gov-west-1', 'us-gov-east-1']
 
 /**
- * Fetch all tag keys from GetTagKeys in a single region (this API returns account-wide keys)
+ * Fetch all tag keys from GetTagKeys in the primary region (GetTagKeys is
+ * regional; the per-region GetResources scan covers the other regions)
  */
 async function fetchAllTagKeys(
   environment: AWSEnvironmentType,
@@ -127,8 +128,8 @@ async function scanRegionResources(
 
 export default defineEventHandler(handleAsync(async (event) => {
   const accountId = event.context.params?.accountId
-  if (!accountId) {
-    throw new Error('accountId is required')
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
   }
 
   const { environment } = parseQueryParams(event)
@@ -147,6 +148,12 @@ export default defineEventHandler(handleAsync(async (event) => {
         fetchAllTagKeys(environment, primaryRegion, accountId),
         ...regions.map(region => scanRegionResources(environment, region, accountId))
       ])
+
+      // Nothing reachable (role missing, access denied): fail rather than
+      // cache an empty tag list for ten minutes.
+      if (tagKeysResult.status === 'rejected' && regionResults.every(result => result.status === 'rejected')) {
+        throw tagKeysResult.reason
+      }
 
       // Merge GetResources results from all regions
       const resourceTagMap = new Map<string, Set<string>>()

@@ -167,10 +167,8 @@ export default defineNitroPlugin(async (nitroApp) => {
 
       logger.info('[SecurityScheduler] Starting nightly security summary computation...')
       const jobStart = Date.now()
-      const { buildSecuritySummaryViaAthena } = await import('../utils/security-hub-athena')
-      const { saveSecuritySummary } = await import('../utils/security-summary-store')
-      const result = await buildSecuritySummaryViaAthena()
-      await saveSecuritySummary(result, { durationMs: Date.now() - jobStart })
+      const { refreshSecuritySummary } = await import('../utils/security-summary-store')
+      await refreshSecuritySummary()
       logger.info(`[SecurityScheduler] Nightly summary complete in ${Date.now() - jobStart}ms`)
       // The lock is keyed by date, so it is left to expire: releasing it let a
       // container whose cron fired a moment later claim it and run again.

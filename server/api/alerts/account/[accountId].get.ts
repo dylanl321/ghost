@@ -6,8 +6,7 @@
 import { defineEventHandler, getRouterParam, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
-import { getAlertsByAccount, validateDateRange } from '../../../utils/budget-alerts'
-import type { BudgetAlertLevel, BudgetAlertDeliveryStatus } from '#shared/types/budget-alerts'
+import { getAlertsByAccount, parseBudgetAlertQuery } from '../../../utils/budget-alerts'
 import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
@@ -150,74 +149,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Invalid account ID format. Must be a 12-digit AWS account ID.')
   }
 
-  // Parse query parameters
-  const query = getQuery(event)
-
-  // Parse limit (default 50, max 100)
-  let limit = parseInt(query.limit as string) || 50
-  if (limit < 1) limit = 1
-  if (limit > 100) limit = 100
-
-  // Parse other parameters
-  const nextToken = query.nextToken as string | undefined
-  const sortOrder = (query.sortOrder as 'asc' | 'desc') || 'desc'
-  const dateFrom = query.dateFrom as string | undefined
-  const dateTo = query.dateTo as string | undefined
-  const deliveryStatus = query.deliveryStatus as BudgetAlertDeliveryStatus | undefined
-
-  // Validate date range
-  const dateValidation = validateDateRange(dateFrom, dateTo)
-  if (!dateValidation.valid) {
-    return errors.badRequest(event, dateValidation.error!)
+  const parsed = parseBudgetAlertQuery(getQuery(event), 100)
+  if ('error' in parsed) {
+    return errors.badRequest(event, parsed.error)
   }
-
-  // Parse level filter (can be string or array)
-  let levels: BudgetAlertLevel[] | undefined
-  if (query.level) {
-    const levelParam = query.level
-    if (Array.isArray(levelParam)) {
-      levels = levelParam as BudgetAlertLevel[]
-    } else {
-      levels = [levelParam as BudgetAlertLevel]
-    }
-    // Validate levels
-    const validLevels = ['INFO', 'WARNING', 'CRITICAL', 'ESCALATION']
-    for (const level of levels) {
-      if (!validLevels.includes(level)) {
-        return errors.badRequest(event, `Invalid alert level: ${level}. Must be one of: ${validLevels.join(', ')}`)
-      }
-    }
-  }
-
-  // Parse type filter (can be string or array)
-  let types: ('FORECAST' | 'ACTUAL')[] | undefined
-  if (query.type) {
-    const typeParam = query.type
-    if (Array.isArray(typeParam)) {
-      types = typeParam as ('FORECAST' | 'ACTUAL')[]
-    } else {
-      types = [typeParam as 'FORECAST' | 'ACTUAL']
-    }
-    // Validate types
-    const validTypes = ['FORECAST', 'ACTUAL']
-    for (const type of types) {
-      if (!validTypes.includes(type)) {
-        return errors.badRequest(event, `Invalid alert type: ${type}. Must be one of: ${validTypes.join(', ')}`)
-      }
-    }
-  }
-
-  // Validate delivery status
-  if (deliveryStatus) {
-    const validStatuses = ['SENT', 'FAILED', 'PENDING']
-    if (!validStatuses.includes(deliveryStatus)) {
-      return errors.badRequest(event, `Invalid delivery status: ${deliveryStatus}. Must be one of: ${validStatuses.join(', ')}`)
-    }
-  }
+  const { limit, nextToken, sortOrder, dateFrom, dateTo, levels, types, deliveryStatus } = parsed.options
 
   try {
-    logger.info('[Alerts API] Starting query for account:', { accountId, limit, sortOrder })
-
     // Query alerts by account
     const result = await getAlertsByAccount(accountId, {
       limit,
@@ -229,8 +167,6 @@ export default defineEventHandler(handleAsync(async (event) => {
       types,
       deliveryStatus
     })
-
-    logger.info('[Alerts API] Query completed:', { accountId, count: result.count, hasMore: !!result.nextToken })
 
     // Return success response
     return sendSuccess(event, result.alerts, {

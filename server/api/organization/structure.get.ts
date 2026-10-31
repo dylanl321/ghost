@@ -69,10 +69,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   
   // Generate cache keys for organization data
   const orgInfoCacheKey = `organization:info:${environment}`
-  const ouTreeCacheKey = `organization:tree:${environment}`
   
-  // Get both organization info and OU tree with caching
-  const [orgInfo, ouTree] = await Promise.all([
+  // The OU tree has its own 5-minute cache in getOrganizationalUnitTree, so
+  // it is not cached again here: a degraded (partial) tree used to stick for
+  // an hour.
+  const [orgInfo, treeResult] = await Promise.all([
     organizationCache.getOrSet(
       orgInfoCacheKey,
       async () => {
@@ -84,31 +85,20 @@ export default defineEventHandler(handleAsync(async (event) => {
         tags: [CacheTags.ORGANIZATION, environment]
       }
     ),
-    organizationCache.getOrSet(
-      ouTreeCacheKey,
-      async () => {
-        logger.info(`Cache miss: Fetching organizational unit tree for ${environment} environment...`)
-        const result = await getOrganizationalUnitTree(environment)
-        return result.tree
-      },
-      {
-        ttl: 3600, // 1 hour - OU structure changes infrequently
-        tags: [CacheTags.ORGANIZATION, environment]
-      }
-    )
+    getOrganizationalUnitTree(environment)
   ])
-  
+  const ouTree = treeResult.tree
+
   if (!orgInfo) {
     return errors.serverError(event, 'Unable to access Organizations service')
   }
-  
+
   if (!ouTree) {
     return errors.notFound(event, 'Organizational unit tree not found')
   }
-  
+
   // Add cache metadata
   const orgInfoCache = organizationCache.getEntryInfo(orgInfoCacheKey)
-  const ouTreeCache = organizationCache.getEntryInfo(ouTreeCacheKey)
   const cacheStats = organizationCache.getStats()
   
   const metadata = {
@@ -120,9 +110,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         ttl: orgInfoCache?.ttl || null
       },
       organizationTree: {
-        hit: !!ouTreeCache,
-        age: ouTreeCache?.age || null,
-        ttl: ouTreeCache?.ttl || null
+        degraded: treeResult.degraded,
+        failedOUs: treeResult.failedOUs
       },
       hitRate: `${cacheStats.hitRate.toFixed(1)}%`,
       totalEntries: cacheStats.entries

@@ -9,13 +9,7 @@
  * Designed to run in parallel with CloudWatch metrics and Compute Optimizer.
  */
 
-import {
-  StartQueryExecutionCommand,
-  GetQueryExecutionCommand,
-  GetQueryResultsCommand,
-} from '@aws-sdk/client-athena'
-import { getAthenaClient } from '../lib/aws-client-factory'
-import { buildTableName, getEnvironmentConfig } from './security-lake-consolidated'
+import { buildTableName, getEnvironmentConfig, runAthenaQuery } from './athena-query'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
 
@@ -39,8 +33,7 @@ export interface ActivityDetectionResult {
 const CACHE_TTL = 3600 // 1 hour
 const CACHE_KEY_PREFIX = 'instance-activity'
 const DEFAULT_LOOKBACK_DAYS = 14
-const MAX_POLL_ATTEMPTS = 60 // 60 * 2s = 2 minutes max wait
-const POLL_INTERVAL_MS = 2000
+const QUERY_TIMEOUT_MS = 120_000
 
 /**
  * SSM agent noise events to exclude from "meaningful" call counts.
@@ -105,7 +98,8 @@ export async function batchGetInstanceActivity(
     const cached = await cache.get<{ activities: Record<string, InstanceApiActivity>; errors: string[] }>(cacheKey)
     if (cached) {
       logger.info(`[Instance Activity] Cache hit for account ${accountId}`)
-      result.activities = new Map(Object.entries(cached.activities))
+      const requested = new Set(instanceIds)
+      result.activities = new Map(Object.entries(cached.activities).filter(([id]) => requested.has(id)))
       result.errors = cached.errors
       result.queryDurationMs = Date.now() - startTime
       return result
@@ -118,8 +112,10 @@ export async function batchGetInstanceActivity(
     const config = getEnvironmentConfig(environment)
     const tableName = buildTableName(environment, 'cloud_trail_mgmt')
 
-    // Get Athena client for the Security Lake / monitoring account
-    const client = await getAthenaClient(environment, config.region, config.monitoringAccountId)
+    // accountId is interpolated into the SQL below
+    if (!/^\d{12}$/.test(accountId)) {
+      throw new Error(`Invalid account ID: ${accountId}`)
+    }
 
     // Build the instance ID filter. For large sets we use a LIKE-based approach
     // via the regexp_extract rather than an IN clause on principalId, because the
@@ -154,148 +150,74 @@ export async function batchGetInstanceActivity(
       instanceCount: instanceIds.length,
     })
 
-    // -- Start query execution --
-    const startCommand = new StartQueryExecutionCommand({
-      QueryString: sqlQuery,
-      QueryExecutionContext: {
-        Database: config.database,
-      },
-      ResultConfiguration: {
-        OutputLocation: `s3://${config.athenaResultsBucket}/instance-activity/`,
-      },
+    const queryResult = await runAthenaQuery(sqlQuery, {
+      environment,
+      database: config.database,
+      outputPrefix: 'instance-activity',
+      timeoutMs: QUERY_TIMEOUT_MS
     })
-
-    const startResponse = await client.send(startCommand)
-    const queryExecutionId = startResponse.QueryExecutionId
-
-    if (!queryExecutionId) {
-      throw new Error('Failed to start Athena query - no execution ID returned')
-    }
-
-    logger.debug('[Instance Activity] Query started', { queryExecutionId })
-
-    // -- Poll for completion --
-    let queryStatus = 'RUNNING'
-    let attempts = 0
-
-    while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
-      if (attempts >= MAX_POLL_ATTEMPTS) {
-        throw new Error(`Athena query timeout after ${MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS / 1000}s`)
-      }
-
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
-      attempts++
-
-      const statusResponse = await client.send(
-        new GetQueryExecutionCommand({ QueryExecutionId: queryExecutionId })
-      )
-
-      queryStatus = statusResponse.QueryExecution?.Status?.State || 'UNKNOWN'
-
-      if (queryStatus === 'FAILED' || queryStatus === 'CANCELLED') {
-        const reason = statusResponse.QueryExecution?.Status?.StateChangeReason || 'Unknown error'
-        throw new Error(`Athena query ${queryStatus.toLowerCase()}: ${reason}`)
-      }
-    }
 
     logger.info('[Instance Activity] Query completed', {
-      queryExecutionId,
-      pollAttempts: attempts,
-      durationSeconds: attempts * (POLL_INTERVAL_MS / 1000),
+      queryExecutionId: queryResult.queryExecutionId,
+      durationMs: queryResult.executionTimeMs,
+      rows: queryResult.rows.length,
     })
 
-    // -- Fetch results (with pagination) --
-    // Build a set of requested instance IDs for fast lookup
-    const requestedIds = new Set(instanceIds)
-
-    // Intermediate aggregation: instanceId -> { totalCalls, meaningfulCalls, events[] }
+    // Aggregate every instance in the account; the cache holds all of them
+    // and each caller gets the subset it asked for.
     const activityMap = new Map<string, {
       totalCalls: number
       meaningfulCalls: number
       events: Map<string, { eventName: string; eventSource: string; count: number }>
     }>()
 
-    let nextToken: string | undefined
-    let isFirstPage = true
+    for (const rowData of queryResult.rows) {
+      const instanceId = rowData.instance_id
+      const eventName = rowData.event_name || ''
+      const eventSource = rowData.event_source || ''
+      const callCount = parseInt(rowData.call_count || '0', 10)
 
-    do {
-      const resultsResponse = await client.send(
-        new GetQueryResultsCommand({
-          QueryExecutionId: queryExecutionId,
-          MaxResults: 1000,
-          ...(nextToken ? { NextToken: nextToken } : {}),
-        })
-      )
+      if (!instanceId || !instanceId.startsWith('i-')) continue
 
-      const rows = resultsResponse.ResultSet?.Rows || []
-      const columns = resultsResponse.ResultSet?.ResultSetMetadata?.ColumnInfo || []
-
-      // Skip header row on the first page
-      const dataRows = isFirstPage ? rows.slice(1) : rows
-      isFirstPage = false
-
-      for (const row of dataRows) {
-        if (!row.Data) continue
-
-        // Parse row into named fields
-        const rowData: Record<string, string | undefined> = {}
-        row.Data.forEach((cell, index) => {
-          const colName = columns[index]?.Name || `col_${index}`
-          rowData[colName] = cell.VarCharValue
-        })
-
-        const instanceId = rowData.instance_id
-        const eventName = rowData.event_name || ''
-        const eventSource = rowData.event_source || ''
-        const callCount = parseInt(rowData.call_count || '0', 10)
-
-        // Skip rows without a valid instance ID or not in our requested set
-        if (!instanceId || !instanceId.startsWith('i-')) continue
-        if (!requestedIds.has(instanceId)) continue
-
-        // Accumulate into the activity map
-        let entry = activityMap.get(instanceId)
-        if (!entry) {
-          entry = { totalCalls: 0, meaningfulCalls: 0, events: new Map() }
-          activityMap.set(instanceId, entry)
-        }
-
-        entry.totalCalls += callCount
-
-        if (!SSM_NOISE_EVENTS.has(eventName)) {
-          entry.meaningfulCalls += callCount
-        }
-
-        // Track per-event counts for top-N calculation
-        const eventKey = `${eventSource}::${eventName}`
-        const existing = entry.events.get(eventKey)
-        if (existing) {
-          existing.count += callCount
-        } else {
-          entry.events.set(eventKey, { eventName, eventSource, count: callCount })
-        }
+      // Accumulate into the activity map
+      let entry = activityMap.get(instanceId)
+      if (!entry) {
+        entry = { totalCalls: 0, meaningfulCalls: 0, events: new Map() }
+        activityMap.set(instanceId, entry)
       }
 
-      nextToken = resultsResponse.NextToken
-    } while (nextToken)
+      entry.totalCalls += callCount
+
+      if (!SSM_NOISE_EVENTS.has(eventName)) {
+        entry.meaningfulCalls += callCount
+      }
+
+      // Track per-event counts for top-N calculation
+      const eventKey = `${eventSource}::${eventName}`
+      const existing = entry.events.get(eventKey)
+      if (existing) {
+        existing.count += callCount
+      } else {
+        entry.events.set(eventKey, { eventName, eventSource, count: callCount })
+      }
+    }
 
     // -- Build final result --
-    const activityEntries = Array.from(activityMap.entries())
-    for (const [instanceId, entry] of activityEntries) {
-      // Sort events by count descending and take top 5
-      const allEvents: Array<{ eventName: string; eventSource: string; count: number }> =
-        Array.from(entry.events.values())
-      const topEvents = allEvents
+    const allActivities: Record<string, InstanceApiActivity> = {}
+    for (const [instanceId, entry] of activityMap) {
+      const topEvents = Array.from(entry.events.values())
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
-
-      result.activities.set(instanceId, {
+      allActivities[instanceId] = {
         instanceId,
         totalCalls: entry.totalCalls,
         meaningfulCalls: entry.meaningfulCalls,
         topEvents,
-      })
+      }
     }
+
+    const requested = new Set(instanceIds)
+    result.activities = new Map(Object.entries(allActivities).filter(([id]) => requested.has(id)))
 
     logger.info('[Instance Activity] Results processed', {
       accountId,
@@ -303,24 +225,9 @@ export async function batchGetInstanceActivity(
       instancesRequested: instanceIds.length,
     })
 
-    // -- Cache the result --
-    const completionRate = instanceIds.length > 0
-      ? result.activities.size / instanceIds.length
-      : 0
-
-    try {
-      const cacheData = {
-        activities: Object.fromEntries(result.activities),
-        errors: result.errors,
-      }
-
-      if (completionRate >= 0.5 || result.activities.size > 0) {
-        // Cache even partial results — instances with zero activity simply won't appear
-        await cache.set(cacheKey, cacheData, { ttl: CACHE_TTL })
-      }
-    } catch {
-      // Non-fatal cache write failure
-    }
+    // A successful query is cached even when no instance had activity, so
+    // idle accounts do not rerun the scan on every request.
+    await cache.set(cacheKey, { activities: allActivities, errors: result.errors }, { ttl: CACHE_TTL }).catch(() => undefined)
   } catch (error: any) {
     const message = error?.message || String(error)
     logger.error('[Instance Activity] Query failed', {

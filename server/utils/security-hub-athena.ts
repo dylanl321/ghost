@@ -8,8 +8,7 @@
  * Falls back to the legacy Security Hub API if Athena fails.
  */
 
-import { getAthenaClient } from '../lib/aws-client-factory'
-import { getEnvironmentConfig } from './security-lake-consolidated'
+import { runAthenaQuery } from './athena-query'
 import { getAllAccountsUnified, lookupAccountUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
@@ -28,7 +27,7 @@ import type {
 import type { FindingSeverity } from '../../shared/types/security-hub'
 
 // ProgressEvent is already exported from security-hub-statistics.ts (auto-imported by Nitro)
-interface AthenaProgressEvent {
+export interface AthenaProgressEvent {
   stage: string
   message: string
   percent: number
@@ -37,7 +36,7 @@ interface AthenaProgressEvent {
   findingsSoFar?: number
 }
 
-type ProgressCallback = (event: AthenaProgressEvent) => void
+export type SecuritySummaryProgressCallback = (event: AthenaProgressEvent) => void
 
 // ---------------------------------------------------------------------------
 // security_hub source subquery helper
@@ -67,69 +66,10 @@ async function executeAthenaSQL(
   sql: string,
   environment: 'commercial' | 'govcloud'
 ): Promise<Record<string, string>[]> {
-  // Reuse getEnvironmentConfig for region, account, and bucket — but override database
-  const config = getEnvironmentConfig(environment)
-  const athenaClient = await getAthenaClient(environment, config.region, config.monitoringAccountId)
-
-  const { StartQueryExecutionCommand } = await import('@aws-sdk/client-athena')
-  const startResponse = await athenaClient.send(new StartQueryExecutionCommand({
-    QueryString: sql,
-    WorkGroup: 'primary',
-    QueryExecutionContext: {
-      Database: SECURITY_HUB_DATABASE,
-    },
-    ResultConfiguration: {
-      OutputLocation: `s3://${config.athenaResultsBucket}/security-lake/`,
-    },
-  }))
-
-  if (!startResponse.QueryExecutionId) {
-    throw new Error('Failed to start Athena query')
-  }
-
-  // Poll for completion
-  const { GetQueryExecutionCommand } = await import('@aws-sdk/client-athena')
-  const pollIntervalMs = 2000
-  const maxAttempts = 120 // 4 minutes
-  let attempts = 0
-
-  while (attempts < maxAttempts) {
-    const statusResponse = await athenaClient.send(new GetQueryExecutionCommand({
-      QueryExecutionId: startResponse.QueryExecutionId,
-    }))
-
-    const state = statusResponse.QueryExecution?.Status?.State
-    if (state === 'SUCCEEDED') break
-    if (state === 'FAILED' || state === 'CANCELLED') {
-      const reason = statusResponse.QueryExecution?.Status?.StateChangeReason || 'Unknown error'
-      throw new Error(`Athena query failed: ${reason}`)
-    }
-
-    await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
-    attempts++
-  }
-
-  if (attempts >= maxAttempts) {
-    throw new Error('Athena query timeout after 4 minutes')
-  }
-
-  // Get results
-  const { GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
-  const resultsResponse = await athenaClient.send(new GetQueryResultsCommand({
-    QueryExecutionId: startResponse.QueryExecutionId,
-  }))
-
-  const rows = resultsResponse.ResultSet?.Rows || []
-  const columns = rows[0]?.Data || []
-
-  return rows.slice(1).map(row => {
-    const record: Record<string, string> = {}
-    row.Data?.forEach((cell, index) => {
-      const columnName = columns[index]?.VarCharValue || `column_${index}`
-      record[columnName] = cell.VarCharValue || ''
-    })
-    return record
-  })
+  // Every result page: per-account and per-resource groupings exceed the
+  // 1,000 rows a single GetQueryResults call returns.
+  const { rows } = await runAthenaQuery(sql, { environment, database: SECURITY_HUB_DATABASE, outputPrefix: 'security-lake' })
+  return rows.map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v ?? ''])))
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +88,47 @@ export function getRiskLevel(score: number): AccountRiskEntry['riskLevel'] {
   return 'MINIMAL'
 }
 
+/** Remediation guidance shown on the account security summary */
+export function buildAccountRecommendations(
+  severityBreakdown: Record<FindingSeverity, number>,
+  findingsByProduct: Record<string, number>,
+  passRate: number,
+  complianceTotal: number
+): string[] {
+  const recommendations: string[] = []
+  if (severityBreakdown.CRITICAL > 0) {
+    recommendations.push(`Address ${severityBreakdown.CRITICAL} critical finding(s) immediately - these represent severe security risks`)
+  }
+  if (severityBreakdown.HIGH > 0) {
+    recommendations.push(`Review and remediate ${severityBreakdown.HIGH} high severity finding(s) as soon as possible`)
+  }
+  if (findingsByProduct['Inspector']) {
+    recommendations.push('Review Inspector vulnerability findings for outdated packages or known CVEs')
+  }
+  if (findingsByProduct['Security Hub']) {
+    recommendations.push('Check Security Hub for compliance standard violations and misconfigurations')
+  }
+  if (passRate < 70 && complianceTotal > 0) {
+    recommendations.push(`Compliance pass rate is ${passRate}% - review failed controls to improve posture`)
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('Security posture is healthy - continue monitoring for new findings')
+  }
+  return recommendations
+}
+
+/** The partition whose Security Hub data the Athena tables and API hold */
+export function getSecurityHubEnvironment(): 'commercial' | 'govcloud' {
+  return (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+}
+
+/** The account ID that Security Hub findings carry for this registry account */
+export async function resolveSecurityHubAccountId(accountId: string): Promise<string> {
+  if (getSecurityHubEnvironment() !== 'govcloud') return accountId
+  const account = await lookupAccountUnified({ accountId })
+  return account?.awsGovCloudAccountID || accountId
+}
+
 // ---------------------------------------------------------------------------
 // Account-level Athena query
 // ---------------------------------------------------------------------------
@@ -163,16 +144,14 @@ export async function buildAccountSecurityViaAthena(
   accountName: string,
   sourceFilter: SecuritySourceFilter = 'all'
 ): Promise<AccountSecuritySummary> {
-  const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+  const environment = getSecurityHubEnvironment()
   const findingsSource = buildFindingsSource(sourceFilter)
 
-  // Resolve the correct account ID for the Athena tables (GovCloud stores GovCloud IDs)
-  let resolvedAccountId = accountId
-  if (environment === 'govcloud') {
-    const account = await lookupAccountUnified({ accountId })
-    if (account?.awsGovCloudAccountID) {
-      resolvedAccountId = account.awsGovCloudAccountID
-    }
+  // GovCloud findings carry GovCloud account IDs
+  const resolvedAccountId = await resolveSecurityHubAccountId(accountId)
+  // Interpolated into every query below
+  if (!/^\d{12}$/.test(resolvedAccountId)) {
+    throw new Error(`Invalid account ID: ${resolvedAccountId}`)
   }
 
   logger.info(`[SecurityAthena] Account query for ${accountId} (resolved: ${resolvedAccountId}), source: ${sourceFilter}`)
@@ -370,26 +349,7 @@ export async function buildAccountSecurityViaAthena(
     ? Math.round((complianceCounts.passed / complianceCounts.total) * 100)
     : 100
 
-  // Recommendations
-  const recommendations: string[] = []
-  if (severityBreakdown.CRITICAL > 0) {
-    recommendations.push(`Address ${severityBreakdown.CRITICAL} critical finding(s) immediately - these represent severe security risks`)
-  }
-  if (severityBreakdown.HIGH > 0) {
-    recommendations.push(`Review and remediate ${severityBreakdown.HIGH} high severity finding(s) as soon as possible`)
-  }
-  if (findingsByProduct['Inspector']) {
-    recommendations.push('Review Inspector vulnerability findings for outdated packages or known CVEs')
-  }
-  if (findingsByProduct['Security Hub']) {
-    recommendations.push('Check Security Hub for compliance standard violations and misconfigurations')
-  }
-  if (passRate < 70 && complianceCounts.total > 0) {
-    recommendations.push(`Compliance pass rate is ${passRate}% - review failed controls to improve posture`)
-  }
-  if (recommendations.length === 0) {
-    recommendations.push('Security posture is healthy - continue monitoring for new findings')
-  }
+  const recommendations = buildAccountRecommendations(severityBreakdown, findingsByProduct, passRate, complianceCounts.total)
 
   logger.info(`[SecurityAthena] Account ${accountId}: ${totalFindings} findings, risk ${riskLevel} (${riskScore})`)
 
@@ -426,10 +386,10 @@ export async function buildAccountSecurityViaAthena(
  * Falls back to the legacy Security Hub API (capped) if Athena fails entirely.
  */
 export async function buildSecuritySummaryViaAthena(
-  onProgress?: ProgressCallback,
+  onProgress?: SecuritySummaryProgressCallback,
   options: { allowFallback?: boolean } = {}
 ): Promise<OrgSecuritySummary> {
-  const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+  const environment = getSecurityHubEnvironment()
   const findingsSource = buildFindingsSource()
 
   onProgress?.({ stage: 'init', message: 'Initializing Athena security scan...', percent: 0 })
@@ -757,6 +717,7 @@ export async function buildSecuritySummaryViaAthena(
       accountRiskRanking,
       topFindings,
       lastUpdated: new Date().toISOString(),
+      dataSource: 'athena',
       findingsByRegion,
       findingsTrend,
       severityByProduct,
@@ -774,6 +735,6 @@ export async function buildSecuritySummaryViaAthena(
 
     // Fallback to the capped Security Hub API
     const { buildOrgSecuritySummary } = await import('./security-hub-statistics')
-    return buildOrgSecuritySummary(onProgress)
+    return { ...(await buildOrgSecuritySummary(onProgress)), dataSource: 'security-hub-api' }
   }
 }

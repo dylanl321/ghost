@@ -23,8 +23,9 @@ export default defineEventHandler(async (event) => {
 
     // Get query parameters
     const query = getQuery(event)
-    const limit = query.limit ? parseInt(query.limit as string) : 50
-    const sortOrder = (query.sortOrder as 'asc' | 'desc') || 'desc'
+    const parsedLimit = Number.parseInt(String(query.limit ?? ''), 10)
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 200) : 50
+    const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc'
 
     // List notes for the account
     const notes = await listAccountNotes({

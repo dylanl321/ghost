@@ -20,8 +20,8 @@ import { queryEntraUsers } from '../../utils/entra-users-data'
 import { queryConfigResources } from '../../utils/aws-config-data'
 import { querySecurityHubFindings } from '../../utils/security-hub-data'
 import { queryCloudTrailEvents } from '../../utils/cloudtrail-data'
-import { buildAccountSecurityViaAthena, buildSecuritySummaryViaAthena } from '../../utils/security-hub-athena'
-import { loadSecuritySummary } from '../../utils/security-summary-store'
+import { buildAccountSecurityViaAthena } from '../../utils/security-hub-athena'
+import { getOrgSecuritySummary } from '../../utils/security-summary-store'
 import { getAccountPatchCompliance, getInstancePatchStatus } from '../../utils/ssm-patch-compliance'
 import { analyzeBucketPolicy } from '../../utils/s3-policy-analyzer'
 import {
@@ -986,7 +986,7 @@ export function registerCatalogTools(
       if (account && !operationalId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
       const result = args.account_id
         ? await buildAccountSecurityViaAthena(operationalId!, accountDisplayName(account))
-        : await loadSecuritySummary() || await buildSecuritySummaryViaAthena()
+        : (await getOrgSecuritySummary()).summary
       return toolSuccess(result, args.account_id ? 'Account security summary loaded.' : 'Organization security summary loaded.', 'AWS Security Hub and Athena')
     }
   })

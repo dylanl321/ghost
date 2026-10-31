@@ -76,19 +76,19 @@ export function useAccountInfo(accountId: Ref<string> | ComputedRef<string>) {
       }
 
       // Fallback to API
-      const response = await fetch(`/api/get-account-info-complete?accountId=${id}`)
+      const response = await fetch(`/api/accounts/${encodeURIComponent(id)}?includeDecommissioned=true`)
       if (!response.ok) {
         throw new Error(`Failed to fetch account info: ${response.statusText}`)
       }
 
-      const data = await response.json()
+      const account = (await response.json()).data?.account || {}
       accountInfo.value = {
         id,
-        name: data.dynamo_accountName || data.org_Name || `Account ${id}`,
-        isGovCloud: data.dynamo_awsGovCloudAccountID === id,
-        standardAccountId: data.dynamo_awsStandardAccountID || id,
-        govCloudAccountId: data.dynamo_awsGovCloudAccountID,
-        status: data.org_Status || 'Unknown',
+        name: account.name || account.accountName || `Account ${id}`,
+        isGovCloud: account.govCloudAccountId === id,
+        standardAccountId: account.accountId || id,
+        govCloudAccountId: account.govCloudAccountId,
+        status: account.status || account.accountStatus || 'Unknown',
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch account information'

@@ -6,10 +6,7 @@
 
 import {
   DescribeAlarmsCommand,
-  DescribeAlarmsForMetricCommand,
-  type CloudWatchClient,
-  type MetricAlarm,
-  type StateValue
+  type MetricAlarm
 } from '@aws-sdk/client-cloudwatch'
 import { getCloudWatchClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
@@ -158,100 +155,10 @@ export async function getInstanceAlarms(
     return summary
 
   } catch (error: any) {
+    // An empty summary would read as "no alarms"; the caller reports the source as unavailable
     logger.error(`[CloudWatch] Failed to get alarms for ${instanceId}:`, error.message)
-
-    if (error.name === 'AccessDeniedException') {
-      logger.warn(`[CloudWatch] Access denied for account ${accountId}`)
-    }
-
-    return summary
-  }
-}
-
-/**
- * Get all alarms in ALARM state for an account
- */
-export async function getAccountAlarmsInAlarm(
-  accountId: string,
-  environment: AWSEnvironmentType = 'govcloud',
-  region?: string
-): Promise<{
-  accountId: string
-  environment: AWSEnvironmentType
-  region: string
-  inAlarm: number
-  total: number
-  alarms: CloudWatchAlarm[]
-}> {
-  const targetRegion = region || (environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1')
-
-  const result = {
-    accountId,
-    environment,
-    region: targetRegion,
-    inAlarm: 0,
-    total: 0,
-    alarms: [] as CloudWatchAlarm[]
-  }
-
-  try {
-    const client = await getCloudWatchClient(environment, targetRegion, accountId)
-
-    // Get only alarms in ALARM state
-    const command = new DescribeAlarmsCommand({
-      StateValue: 'ALARM' as StateValue,
-      MaxRecords: 100
-    })
-
-    const response = await client.send(command)
-
-    if (response.MetricAlarms) {
-      result.alarms = response.MetricAlarms.map(parseAlarm)
-      result.inAlarm = result.alarms.length
-      result.total = result.alarms.length
-    }
-
-    logger.info(`[CloudWatch] Account ${accountId}: ${result.inAlarm} alarms in ALARM state`)
-
-    return result
-
-  } catch (error: any) {
-    logger.error(`[CloudWatch] Failed to get account alarms for ${accountId}:`, error.message)
-    return result
-  }
-}
-
-/**
- * Get alarms for a specific metric
- */
-export async function getAlarmsForMetric(
-  metricName: string,
-  namespace: string,
-  dimensions: Array<{ name: string; value: string }>,
-  accountId: string,
-  environment: AWSEnvironmentType = 'govcloud',
-  region?: string
-): Promise<CloudWatchAlarm[]> {
-  const targetRegion = region || (environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1')
-
-  try {
-    const client = await getCloudWatchClient(environment, targetRegion, accountId)
-
-    const command = new DescribeAlarmsForMetricCommand({
-      MetricName: metricName,
-      Namespace: namespace,
-      Dimensions: dimensions.map(d => ({
-        Name: d.name,
-        Value: d.value
-      }))
-    })
-
-    const response = await client.send(command)
-
-    return (response.MetricAlarms || []).map(parseAlarm)
-
-  } catch (error: any) {
-    logger.error(`[CloudWatch] Failed to get alarms for metric ${metricName}:`, error.message)
-    return []
+    throw new Error(error.name === 'AccessDeniedException'
+      ? `CloudWatch access denied for account ${accountId}: ${error.message}`
+      : `CloudWatch alarm lookup failed for ${instanceId}: ${error.message}`, { cause: error })
   }
 }

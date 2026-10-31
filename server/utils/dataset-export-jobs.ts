@@ -5,7 +5,7 @@ import { getTableAccountId, getTableEnvironment, getTableName } from '../lib/dyn
 import { enqueueDatasetExportJob } from './dataset-export-job-queue'
 import { StopQueryExecutionCommand } from '@aws-sdk/client-athena'
 import { getAthenaClient } from '../lib/aws-client-factory'
-import { getEnvironmentConfig } from './security-lake-consolidated'
+import { getEnvironmentConfig } from './athena-query'
 import { deleteFromS3 } from './s3-storage'
 
 const TTL_HOURS = 24
