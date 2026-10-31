@@ -133,7 +133,7 @@
 
       <!-- Metadata tooltip on hover -->
       <div v-if="config.updatedAt" class="text-xs text-gray-400 dark:text-gray-500">
-        Updated {{ formatDate(config.updatedAt) }}
+        Updated {{ formatDateTime(config.updatedAt) }}
         <span v-if="config.updatedBy"> by {{ config.updatedBy }}</span>
       </div>
     </div>
@@ -212,16 +212,7 @@ async function handleReset() {
   }
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
+const { formatDateTime } = useDateFormatter()
 
 function getTypeIcon(type: string): string {
   const icons: Record<string, string> = {

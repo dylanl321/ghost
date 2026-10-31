@@ -66,7 +66,7 @@
         </template>
 
         <template #timestamp-data="{ row }">
-          {{ formatDate(row.timestamp) }}
+          {{ formatDateTime(row.timestamp) }}
         </template>
 
         <template #recipients-data="{ row }">
@@ -117,7 +117,7 @@
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <div class="text-gray-500">Sent At</div>
-              <div class="font-medium">{{ formatDate(selectedNotification.timestamp) }}</div>
+              <div class="font-medium">{{ formatDateTime(selectedNotification.timestamp) }}</div>
             </div>
             <div>
               <div class="text-gray-500">Recipients</div>
@@ -248,17 +248,7 @@ function getTypeColor(type: string): string {
   }
 }
 
-// Format date
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatDateTime } = useDateFormatter()
 
 // View notification details
 async function viewNotification(notification: Notification) {
@@ -319,7 +309,7 @@ async function fetchNotifications() {
     if (data.success && data.data?.notifications) {
       notifications.value = data.data.notifications
     } else {
-      throw new Error(data.error || 'Failed to fetch notifications')
+      throw new Error(apiErrorMessage(data, 'Failed to fetch notifications'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch notifications:', err)

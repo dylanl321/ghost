@@ -56,7 +56,7 @@
 
       <!-- Updated at -->
       <template #updatedAt-data="{ row }">
-        <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(row.updatedAt) }}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateOnly(row.updatedAt) }}</span>
       </template>
     </UTable>
 
@@ -125,8 +125,5 @@ function severityColor(severity: string) {
   }
 }
 
-function formatDate(iso: string) {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
+const { formatDateOnly } = useDateFormatter()
 </script>

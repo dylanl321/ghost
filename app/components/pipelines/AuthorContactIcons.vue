@@ -42,7 +42,8 @@
 </template>
 
 <script setup lang="ts">
-import { getMailtoUrl, getTeamsUrl, copyToClipboard } from '~/utils/author-helpers'
+import { getMailtoUrl, getTeamsUrl } from '~/utils/author-helpers'
+import { copyToClipboard } from '~/utils/clipboard'
 
 const props = defineProps<{
   email: string

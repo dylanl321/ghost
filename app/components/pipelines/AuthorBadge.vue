@@ -20,7 +20,8 @@
 </template>
 
 <script setup lang="ts">
-import { parseAuthor, formatAuthorName } from '~/utils/author-helpers'
+import { parseAuthorField } from '#shared/utils/author-parser'
+import { formatAuthorName } from '~/utils/author-helpers'
 import type { AuthorInfo } from '#shared/types/pipelines'
 import PipelinesAuthorContactIcons from './AuthorContactIcons.vue'
 
@@ -35,7 +36,7 @@ const props = withDefaults(defineProps<{
   maxNameLength: 30
 })
 
-const authorInfo = computed<AuthorInfo>(() => parseAuthor(props.authorField))
+const authorInfo = computed<AuthorInfo>(() => parseAuthorField(props.authorField))
 
 const authorName = computed(() => formatAuthorName(authorInfo.value, props.maxNameLength))
 

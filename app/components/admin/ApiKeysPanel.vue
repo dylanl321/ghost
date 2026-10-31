@@ -128,11 +128,11 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-calendar" class="w-4 h-4" />
-                    <span>Created {{ formatDate(key.createdAt) }}</span>
+                    <span>Created {{ formatDateTime(key.createdAt) }}</span>
                   </div>
                   <div v-if="key.expiresAt" class="flex items-center gap-2">
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
-                    <span>{{ isExpired(key) ? 'Expired' : 'Expires' }} {{ formatDate(key.expiresAt) }}</span>
+                    <span>{{ isExpired(key) ? 'Expired' : 'Expires' }} {{ formatDateTime(key.expiresAt) }}</span>
                   </div>
                   <div v-else class="flex items-center gap-2">
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
@@ -140,7 +140,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-arrow-path" class="w-4 h-4" />
-                    <span>{{ key.lastUsedAt ? `Last used ${formatDate(key.lastUsedAt)}` : 'Never used' }}</span>
+                    <span>{{ key.lastUsedAt ? `Last used ${formatDateTime(key.lastUsedAt)}` : 'Never used' }}</span>
                   </div>
                 </div>
               </div>
@@ -443,7 +443,7 @@
           <!-- Last Used -->
           <div v-if="usageStats?.lastUsed" class="text-sm text-gray-600 dark:text-gray-400">
             <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-2" />
-            Last used: {{ formatDate(usageStats.lastUsed) }}
+            Last used: {{ formatDateTime(usageStats.lastUsed) }}
           </div>
 
           <!-- Top Endpoints -->
@@ -479,7 +479,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                   <tr v-for="call in usageHistory.slice(0, 20)" :key="`${call.timestamp}-${call.endpoint}`">
-                    <td class="whitespace-nowrap px-3 py-2">{{ formatDate(call.timestamp) }}</td>
+                    <td class="whitespace-nowrap px-3 py-2">{{ formatDateTime(call.timestamp) }}</td>
                     <td class="px-3 py-2 font-mono">{{ call.method }}</td>
                     <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
                     <td class="px-3 py-2">
@@ -832,16 +832,7 @@ const isExpired = (key: any) => {
   return new Date(key.expiresAt) < new Date()
 }
 
-// Format date
-const formatDate = (date: string | Date) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+const { formatDateTime } = useDateFormatter()
 
 // Load keys on mount
 onMounted(() => {

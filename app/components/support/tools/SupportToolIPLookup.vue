@@ -42,7 +42,7 @@
       <div v-if="generatedQuery" class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 space-y-2">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Generated Query:</span>
-          <UButton size="xs" variant="ghost" @click="copyText(generatedQuery)">
+          <UButton size="xs" variant="ghost" @click="copyToClipboard(generatedQuery)">
             <Icon name="i-heroicons-clipboard" class="w-4 h-4" />
           </UButton>
         </div>
@@ -76,7 +76,7 @@
         </div>
         <div>
           <span class="text-gray-500">Resource ID:</span>
-          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(result.resource.resourceId)">
+          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(result.resource.resourceId)">
             {{ result.resource.resourceId }}
             <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1 opacity-50" />
           </span>
@@ -91,7 +91,7 @@
         </div>
         <div v-if="result.resource.configuration?.vpcId">
           <span class="text-gray-500">VPC:</span>
-          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(result.resource.configuration.vpcId)">
+          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(result.resource.configuration.vpcId)">
             {{ result.resource.configuration.vpcId }}
             <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1 opacity-50" />
           </span>
@@ -134,7 +134,7 @@
           </UButton>
         </div>
         <!-- CLI Hint -->
-        <div v-if="result.resource.resourceId?.startsWith('i-')" class="mt-2 text-xs text-gray-400 font-mono bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:text-gray-600 transition-colors" @click="copyText(`aws ec2 describe-instances --instance-ids ${result.resource.resourceId} --region ${result.resource.region}`)">
+        <div v-if="result.resource.resourceId?.startsWith('i-')" class="mt-2 text-xs text-gray-400 font-mono bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:text-gray-600 transition-colors" @click="copyToClipboard(`aws ec2 describe-instances --instance-ids ${result.resource.resourceId} --region ${result.resource.region}`)">
           $ aws ec2 describe-instances --instance-ids {{ result.resource.resourceId }} --region {{ result.resource.region }}
           <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1" />
         </div>
@@ -202,13 +202,6 @@ async function executeGeneratedIPQuery() {
   const ipMatch = generatedQuery.value.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/)
   if (ipMatch?.[1]) { ip.value = ipMatch[1]; await searchIP() }
   else { error.value = 'Could not extract IP from generated query. Please use manual mode.' }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { toast.add({ title: 'Failed to copy', color: 'red', timeout: 2000 }) }
 }
 
 const awsConsoleUrl = computed(() => {

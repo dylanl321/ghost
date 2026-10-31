@@ -4,7 +4,7 @@
  */
 
 import { getPipelineRunsByAuthor, getAuthorSummary } from '../../../../utils/athena-pipeline-queries'
-import { parseAuthorField } from '../../../../utils/author-parser'
+import { parseAuthorField } from '../../../../../shared/utils/author-parser'
 import { sendSuccess, errors } from '../../../../utils/api-response'
 
 export default defineEventHandler(async (event) => {

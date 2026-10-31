@@ -178,18 +178,8 @@ export function useSharedReports() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  /**
-   * Format date for display
-   */
-  function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    })
-  }
+  // Shared reports show dates in the user's timezone preference, like the rest of the app
+  const { formatDateTime: formatDate } = useDateFormatter()
 
   /**
    * Check if a report is expired

@@ -116,7 +116,7 @@
       <!-- Last State Change -->
       <template #configurationItemCaptureTime-data="{ row }">
         <div v-if="row.configurationItemCaptureTime" class="text-sm">
-          {{ formatDate(row.configurationItemCaptureTime) }}
+          {{ formatDateOnly(row.configurationItemCaptureTime) }}
         </div>
         <div v-else class="text-gray-500 text-sm">N/A</div>
       </template>
@@ -292,19 +292,7 @@ const columns = [
   { key: 'region', label: 'Region' }
 ]
 
-// Format date helper
-const formatDate = (dateString: string) => {
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  } catch {
-    return 'Invalid date'
-  }
-}
+const { formatDateOnly } = useDateFormatter()
 
 // Fetch instances with pricing
 const fetchInstances = async () => {

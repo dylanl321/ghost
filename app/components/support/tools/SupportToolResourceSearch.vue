@@ -43,7 +43,7 @@
       <div v-if="generatedQuery" class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 space-y-2">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Generated Config SQL:</span>
-          <UButton size="xs" variant="ghost" @click="copyText(generatedQuery)">
+          <UButton size="xs" variant="ghost" @click="copyToClipboard(generatedQuery)">
             <Icon name="i-heroicons-clipboard" class="w-4 h-4" />
           </UButton>
         </div>
@@ -184,13 +184,6 @@ async function executeGeneratedResourceQuery() {
   } catch (err: any) {
     error.value = err.data?.error?.message || err.message || 'Failed to execute query'
   } finally { loading.value = false }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { toast.add({ title: 'Failed to copy', color: 'red', timeout: 2000 }) }
 }
 
 function exportResults() {

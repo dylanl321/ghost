@@ -89,7 +89,7 @@
       <nav class="space-y-1 px-3 min-w-0 flex-shrink-0">
         <template v-for="(item, index) in navigationItems" :key="item.label">
           <div
-            v-if="item.section && (index === 0 || navigationItems[index - 1]?.section !== item.section) && (item.section !== 'Admin' || isAdmin)"
+            v-if="item.section && (index === 0 || navigationItems[index - 1]?.section !== item.section) && (item.section !== 'Admin' || showAdminSection)"
             class="relative h-4 overflow-hidden"
             :class="index === 0 ? 'mb-1' : 'mb-1 mt-5'"
           >
@@ -292,6 +292,14 @@ const logger = createLogger('SideNav')
 const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
+
+// Groups load on the client, so the server always renders a non-admin menu. Show the Admin
+// heading only after mount so hydration matches, like the admin links in <ClientOnly> below.
+const hasMounted = ref(false);
+onMounted(() => {
+  hasMounted.value = true;
+});
+const showAdminSection = computed(() => hasMounted.value && isAdmin.value);
 const { isIntroActive: mcpIntroActive } = useMcpOfferingDiscovery();
 
 const isSidebarExpanded = computed(

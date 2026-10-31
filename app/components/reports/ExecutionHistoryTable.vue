@@ -64,7 +64,7 @@
         <template #executionTime-data="{ row }">
           <div class="text-sm">
             <div class="text-gray-900 dark:text-white">
-              {{ formatDate(row.executionTime) }}
+              {{ formatShortDateTime(row.executionTime) }}
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400">
               {{ formatTimeAgo(row.executionTime) }}
@@ -75,7 +75,7 @@
         <!-- Duration Column -->
         <template #duration-data="{ row }">
           <span v-if="row.duration" class="text-sm text-gray-700 dark:text-gray-300">
-            {{ formatDuration(row.duration) }}
+            {{ formatDurationMs(row.duration) }}
           </span>
           <span v-else class="text-sm text-gray-400 italic">N/A</span>
         </template>
@@ -194,36 +194,7 @@ function statusBadgeColor(status: string): string {
   }
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
-
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-  return `${Math.floor(seconds / 604800)}w ago`
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
-}
+const { formatShortDateTime } = useDateFormatter()
 
 // Download report helper
 function downloadReport(url: string) {

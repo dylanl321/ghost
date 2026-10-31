@@ -128,6 +128,16 @@ export const useUserGroupStore = defineStore('userGroups', {
       logger.info('Dev mode: Set mock groups:', groups)
     },
 
+    // Apply the dev-mode groups configured by DEV_USER_GROUPS
+    applyConfiguredDevGroups() {
+      const config = useRuntimeConfig()
+      const groups = String(config.public.devUserGroups || 'AWS-Product-Team')
+        .split(',')
+        .map(group => group.trim())
+        .filter(Boolean)
+      this.setDevGroups(groups)
+    },
+
     // Set dev accounts with real enclave data - builds awsRoles so the user appears to have access
     setDevAccounts(accountIds: string[], roles: string[], enclaveData: Record<string, AWSEnclaveData>) {
       this.awsRoles = {}
@@ -210,6 +220,13 @@ export const useUserGroupStore = defineStore('userGroups', {
       if (!import.meta.client) return // only run on client-side
       if (!this.groupsNeedRefresh && !force) {
         logger.info('Using cached user group data.')
+        return
+      }
+
+      // Dev sessions have no Graph access; the Graph helpers return no groups, which would
+      // overwrite the configured dev groups and lock dev admins out of admin pages
+      if (useOidcAuth().user.value?.provider === 'dev') {
+        this.applyConfiguredDevGroups()
         return
       }
 

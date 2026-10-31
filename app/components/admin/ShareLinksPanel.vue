@@ -101,7 +101,7 @@
 
           <template #createdAt-data="{ row }">
             <div class="text-sm">
-              <div class="text-gray-900 dark:text-white">{{ formatDate(row.createdAt) }}</div>
+              <div class="text-gray-900 dark:text-white">{{ formatDateOnly(row.createdAt) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatTimeAgo(row.createdAt) }}
               </div>
@@ -142,7 +142,6 @@
 </template>
 
 <script setup lang="ts">
-const toast = useToast()
 
 // Shortlinks management
 const { links: shortlinks, total: shortlinksTotal, loading: shortlinksLoading, error: shortlinksError, fetchShortlinks } = useShortlinks()
@@ -157,45 +156,9 @@ const shortlinksColumns = [
   { key: 'actions', label: '', sortable: false }
 ]
 
-// Date formatting helpers
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
-
-const formatTimeAgo = (dateString: string) => {
-  const date = new Date(dateString)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-  return formatDate(dateString)
-}
+const { formatDateOnly } = useDateFormatter()
 
 // Copy to clipboard
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({
-      title: 'Copied to clipboard',
-      icon: 'i-heroicons-check-circle',
-      color: 'green'
-    })
-  } catch (err) {
-    toast.add({
-      title: 'Failed to copy',
-      icon: 'i-heroicons-x-circle',
-      color: 'red'
-    })
-  }
-}
-
 // Open link in new tab
 const openLink = (url: string) => {
   window.open(url, '_blank')

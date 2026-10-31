@@ -113,7 +113,7 @@
           </UBadge>
         </template>
         <template #createdAt-data="{ row }">
-          <span class="text-xs text-gray-500">{{ formatDate(row.createdAt) }}</span>
+          <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </UTable>
     </UCard>
@@ -165,9 +165,7 @@ const targetUserIds = computed(() => {
     .filter(Boolean)
 })
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })
-}
+const { formatDateTime } = useDateFormatter()
 
 async function sendBroadcast() {
   sending.value = true

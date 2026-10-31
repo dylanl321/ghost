@@ -19,12 +19,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const toast = useToast()
 
   if (user.value.provider === 'dev' && userGroupStore.groupsNeedRefresh) {
-    const config = useRuntimeConfig()
-    const groups = String(config.public.devUserGroups || 'AWS-Product-Team')
-      .split(',')
-      .map(group => group.trim())
-      .filter(Boolean)
-    userGroupStore.setDevGroups(groups)
+    userGroupStore.applyConfiguredDevGroups()
   } else if (accessToken && userGroupStore.groupsNeedRefresh) {
     try {
       await userGroupStore.ensureGroupsInitialized(accessToken)
