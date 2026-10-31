@@ -4,10 +4,12 @@
  */
 
 import type { UpdateReportRequest } from '../../../shared/types/scheduled-reports'
-import { getReport, updateReport } from '../../utils/scheduled-reports'
+import { updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
-import { isUserAdmin } from '../../utils/user-roles'
+import { requireScheduledReportAccess } from '../../utils/dataset-report-access'
+import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 import { logger } from '../../utils/logger'
+import { assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -21,8 +23,6 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = user.claims?.email || user.claims?.preferred_username
-
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
     if (!reportId) {
@@ -32,23 +32,32 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get existing report
-    const existing = await getReport(reportId)
-    if (!existing) {
-      throw createError({
-        statusCode: 404,
-        message: 'Report not found'
-      })
-    }
-
-    // Allow all authenticated users to update any report
+    const existing = await requireScheduledReportAccess(event, reportId)
 
     // Parse request body
     const updates = await readBody<UpdateReportRequest>(event)
+    if (!updates || typeof updates !== 'object') {
+      throw createError({ statusCode: 400, message: 'Request body is required' })
+    }
+
+    if (updates.reportName !== undefined && (typeof updates.reportName !== 'string' || !updates.reportName.trim())) {
+      throw createError({ statusCode: 400, message: 'Report name cannot be empty' })
+    }
+
+    if (updates.status !== undefined && !['active', 'paused', 'disabled'].includes(updates.status)) {
+      throw createError({ statusCode: 400, message: 'Invalid report status' })
+    }
+
+    if (updates.schedule) {
+      const scheduleErrors = getScheduleErrors({ ...existing.schedule, ...updates.schedule })
+      if (scheduleErrors.length > 0) {
+        throw createError({ statusCode: 400, message: scheduleErrors.join('; ') })
+      }
+    }
 
     // Validate recipients if provided
     if (updates.recipients) {
-      if (updates.recipients.length === 0) {
+      if (!Array.isArray(updates.recipients) || updates.recipients.length === 0) {
         throw createError({
           statusCode: 400,
           message: 'At least one recipient is required'
@@ -63,7 +72,7 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // Allow all authenticated users to set any recipients
+      await assertSelfOnlyRecipients(event, updates.recipients)
     }
 
     // Update the report

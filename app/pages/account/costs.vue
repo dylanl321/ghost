@@ -823,7 +823,8 @@ async function fetchAlertsSummary() {
     // UTC, matching Cost Explorer and the month notices on this page
     const month = new Date().toISOString().slice(0, 7)
     const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-      query: { month, limit: 100 }
+      // Filter server-side too: the 100-alert limit would otherwise be spent on other accounts
+      query: { month, limit: 100, ...(selectedAccounts.value.length > 0 && selectedAccounts.value.length <= 100 ? { accountIds: selectedAccounts.value.join(',') } : {}) }
     })
     if (res.success && res.data) {
       let filtered = res.data

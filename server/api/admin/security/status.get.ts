@@ -27,7 +27,8 @@ export default defineEventHandler(async (event) => {
         computedAt: metadata.computedAt,
         ageMinutes: metadata.ageMinutes,
         durationMs: metadata.durationMs,
-        source: 'athena',
+        source: metadata.source,
+        expired: metadata.expired,
       }
 
       // Load summary for preview stats

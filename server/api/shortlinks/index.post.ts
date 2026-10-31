@@ -1,42 +1,36 @@
-import { createShortLink } from '../../lib/shortlinks'
+import { createShortLink, validateShortLinkInput } from '../../lib/shortlinks'
 import { logger } from '../../utils/logger'
+import { getUserEmail } from '../../utils/user-roles'
+import { shortLinkUrl } from '../../utils/short-link-url'
 
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event)
-    
-    // Validate required fields
-    if (!body.originalUrl || !body.pagePath || !body.configData) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Missing required fields: originalUrl, pagePath, or configData'
-      })
+
+    const invalid = validateShortLinkInput(body)
+    if (invalid) {
+      throw createError({ statusCode: 400, statusMessage: invalid })
     }
-    
-    // Create the short link
+
     const shortLink = await createShortLink({
       originalUrl: body.originalUrl,
       pagePath: body.pagePath,
       configData: body.configData,
       expiresInDays: body.expiresInDays || 365, // Default to 1 year expiry
-      createdBy: body.createdBy,
+      // The creator comes from the session, never the request body
+      createdBy: getUserEmail(event) || undefined,
       description: body.description
     })
-    
-    // Build the full short URL
-    const host = getHeader(event, 'host') || 'localhost:3000'
-    const protocol = getHeader(event, 'x-forwarded-proto') || 'http'
-    const shortUrl = `${protocol}://${host}/s/${shortLink.shortCode}`
-    
+
     return {
       success: true,
       data: {
         ...shortLink,
-        shortUrl
+        shortUrl: shortLinkUrl(event, shortLink.shortCode)
       }
     }
   } catch (error: any) {
-    logger.error('Error creating short link:', error)
+    if (!error.statusCode) logger.error('Error creating short link:', error)
     throw createError({
       statusCode: error.statusCode || 500,
       statusMessage: error.statusMessage || 'Failed to create short link'

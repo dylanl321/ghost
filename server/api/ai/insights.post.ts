@@ -3,11 +3,12 @@
  * Generate AI-powered static insights for dashboard cards
  */
 
+import { createHash } from 'node:crypto'
 import { defineEventHandler, readBody } from 'h3'
 import { invokeBedrock } from '../../utils/bedrock-client'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { insightPrompts } from '../../utils/ai-insight-prompts'
-import { insightCache, CacheManager } from '../../utils/cache-manager'
+import { insightCache } from '../../utils/cache-manager'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 
@@ -38,6 +39,9 @@ registerEndpoint('/api/ai/insights', 'POST', {
   }
 })
 
+// The cards send a few summary numbers; anything far larger is not a real request.
+const MAX_CONTEXT_BYTES = 16 * 1024
+
 interface InsightRequest {
   type: string
   context: Record<string, any>
@@ -51,13 +55,30 @@ export default handleAsync(defineEventHandler(async (event) => {
     return errors.badRequest(event, 'Missing required field: type')
   }
 
-  const promptConfig = insightPrompts[body.type]
+  const promptConfig = Object.hasOwn(insightPrompts, body.type) ? insightPrompts[body.type] : undefined
   if (!promptConfig) {
     return errors.badRequest(event, `Unknown insight type: ${body.type}. Available: ${Object.keys(insightPrompts).join(', ')}`)
   }
 
-  const context = body.context || {}
-  const cacheKey = CacheManager.generateKey(`insight:${body.type}`, context)
+  const context = body.context ?? {}
+  if (typeof context !== 'object' || Array.isArray(context)) {
+    return errors.badRequest(event, 'context must be an object')
+  }
+  const contextJson = JSON.stringify(context)
+  if (Buffer.byteLength(contextJson) > MAX_CONTEXT_BYTES) {
+    return errors.badRequest(event, `context must be under ${MAX_CONTEXT_BYTES} bytes`)
+  }
+
+  // Build the prompt first: the builders format numbers, so a malformed context fails here as a 400
+  let prompt: string
+  try {
+    prompt = promptConfig.buildPrompt(context)
+  } catch (error) {
+    logger.warn(`[AI Insights] Invalid context for "${body.type}": ${error instanceof Error ? error.message : String(error)}`)
+    return errors.badRequest(event, `Invalid context for insight type ${body.type}`)
+  }
+
+  const cacheKey = `insight:${body.type}:${createHash('sha256').update(contextJson).digest('hex')}`
   const ttl = promptConfig.ttl || 1800
 
   // Check cache unless refresh requested
@@ -71,9 +92,6 @@ export default handleAsync(defineEventHandler(async (event) => {
       })
     }
   }
-
-  // Build prompt and call Bedrock
-  const prompt = promptConfig.buildPrompt(context)
 
   logger.info(`[AI Insights] Generating "${body.type}" insight (${prompt.length} chars)`)
 

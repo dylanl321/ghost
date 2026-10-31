@@ -7,7 +7,9 @@ import { updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
-import { getDatasetReportConfigErrors, getScheduleErrors } from '../../utils/dataset-report-validation'
+import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
+import { getScheduleErrors } from '../../../shared/utils/report-schedule'
+import { assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -37,7 +39,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    await requireDatasetReportAccess(event, reportId)
+    const existing = await requireDatasetReportAccess(event, reportId)
 
     // Parse request body
     const body = await readBody(event)
@@ -69,11 +71,12 @@ export default defineEventHandler(async (event) => {
           message: `Invalid email addresses: ${emailValidation.errors.join(', ')}`
         })
       }
+      await assertSelfOnlyRecipients(event, updates.recipients)
     }
 
     // Validate datasets if reportConfig is being updated
     if (updates.reportConfig) {
-      const configErrors = getDatasetReportConfigErrors(updates.reportConfig)
+      const configErrors = getScheduledDatasetReportErrors(updates.reportConfig)
       if (configErrors.length > 0) {
         throw createError({
           statusCode: 400,
@@ -83,7 +86,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (updates.schedule) {
-      const scheduleErrors = getScheduleErrors(updates.schedule)
+      const scheduleErrors = getScheduleErrors({ ...existing.schedule, ...updates.schedule })
       if (scheduleErrors.length > 0) {
         throw createError({ statusCode: 400, message: scheduleErrors.join('; ') })
       }

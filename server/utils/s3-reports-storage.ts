@@ -3,7 +3,7 @@
  * Wrapper around generic s3-storage.ts for report-specific operations
  */
 
-import { uploadToS3, getPresignedDownloadUrl, deleteFromS3, listObjectsByPrefix, type S3UploadResult } from './s3-storage'
+import { uploadToS3, getPresignedDownloadUrl, deleteFromS3, type S3UploadResult } from './s3-storage'
 import type { ReportFormat } from '../../shared/types/scheduled-reports'
 import { logger } from './logger'
 
@@ -140,6 +140,15 @@ export async function uploadReportToS3(
 }
 
 /**
+ * Whether a key is a stored report. The admin stored-reports routes take a key
+ * from the request; without this they could sign or delete any object in the
+ * bucket, including dataset exports and MCP evidence.
+ */
+export function isStoredReportKey(key: unknown): key is string {
+  return typeof key === 'string' && key.startsWith('reports/') && !key.split('/').includes('..')
+}
+
+/**
  * Get download URL for a report
  */
 export async function getReportDownloadUrl(s3Key: string, expiresInDays?: number): Promise<string> {
@@ -158,33 +167,4 @@ export async function getReportDownloadUrl(s3Key: string, expiresInDays?: number
  */
 export async function deleteReportFromS3(s3Key: string): Promise<{ success: boolean; error?: string }> {
   return await deleteFromS3(s3Key)
-}
-
-/**
- * List all report files for a user from S3 storage
- */
-export async function listUserReportFiles(
-  userId: string,
-  type: ReportStorageType = 'shared',
-  maxKeys: number = 100
-): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
-  const prefix = `reports/${type}/${userId}/`
-
-  const result = await listObjectsByPrefix(prefix, maxKeys)
-
-  return result.objects
-}
-
-/**
- * List all scheduled report executions for a report
- */
-export async function listScheduledReportExecutions(
-  reportId: string,
-  maxKeys: number = 100
-): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
-  const prefix = `reports/scheduled/${reportId}/`
-
-  const result = await listObjectsByPrefix(prefix, maxKeys)
-
-  return result.objects
 }

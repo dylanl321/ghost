@@ -52,10 +52,11 @@ export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const period = (query.period as '7d' | '30d') || '7d'
-    const limit = query.limit ? Math.min(100, parseInt(query.limit as string)) : 50
+    const limit = Math.min(Math.max(parseInt(query.limit as string) || 50, 1), 1000)
 
     const durationSeconds = period === '30d' ? 30 * 86400 : 7 * 86400
-    const logs = await getLogs(durationSeconds)
+    // Only navigation and action events, so other log lines don't use up the event cap
+    const logs = await getLogs(durationSeconds, '?"Navigation - USER:" ?"Action - USER:"', 200_000)
 
     const navEntries: NavEntry[] = []
     const actionEntries: ActionEntry[] = []
@@ -88,7 +89,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    const global = aggregateGlobal(byUser)
+    const global = aggregateGlobal(byUser, navEntries)
     const globalActions = aggregateGlobalActions(actionEntries)
 
     const byUserList = Object.entries(byUser)
@@ -194,7 +195,7 @@ function aggregateGlobalActions(entries: ActionEntry[]): { totalActions: number;
   return { totalActions: entries.length, actionsByType }
 }
 
-function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): GlobalMetrics {
+function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>, navEntries: NavEntry[]): GlobalMetrics {
   let totalSessions = 0
   let weightedSumMs = 0
   const pathCounts: Record<string, number> = {}
@@ -202,9 +203,12 @@ function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): G
   for (const m of Object.values(byUser)) {
     totalSessions += m.sessionCount
     weightedSumMs += m.avgSessionLengthMs * m.sessionCount
-    for (const { path, count } of m.topPages) {
-      pathCounts[path] = (pathCounts[path] || 0) + count
-    }
+  }
+
+  // Count every visit, not just each user's top ten pages
+  for (const e of navEntries) {
+    const p = simplifyPath(e.path)
+    pathCounts[p] = (pathCounts[p] || 0) + 1
   }
 
   const avgSessionLengthMs = totalSessions > 0 ? weightedSumMs / totalSessions : 0
@@ -217,7 +221,7 @@ function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): G
 }
 
 function simplifyPath(path: string): string {
-  const p = path.replace(/^\//, '').split('/')[0] || 'home'
+  const p = path.split(/[?#]/)[0]!.replace(/^\//, '').split('/')[0] || 'home'
   const labels: Record<string, string> = {
     '': 'Dashboard',
     home: 'Dashboard',

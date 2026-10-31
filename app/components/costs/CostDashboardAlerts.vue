@@ -42,7 +42,7 @@
     >
       <!-- Date Column -->
       <template #created_at-data="{ row }">
-        <span class="text-sm">{{ formatDate(row.created_at) }}</span>
+        <span class="text-sm">{{ formatShortDateTime(row.created_at) }}</span>
       </template>
 
       <!-- Account Column -->
@@ -186,16 +186,7 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-// Format date as "Jan 15, 2:30 PM"
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatShortDateTime } = useDateFormatter()
 
 // Truncate account name for compact display
 function truncateName(name: string): string {
@@ -265,7 +256,7 @@ async function viewEmail(alert: BudgetAlert) {
       emailHtml.value = res.data.html
       emailSubject.value = res.data.subject || alert.email_subject || 'Budget Alert'
     } else {
-      throw new Error(res.error || 'Failed to load email content')
+      throw new Error(apiErrorMessage(res, 'Failed to load email content'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch email content:', err)
@@ -289,7 +280,8 @@ async function fetchAlerts() {
 
     // Always query by month (uses efficient GSI), then filter client-side by accounts
     const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-      query: { month: currentMonth, limit: 50 }
+      // Filter server-side too: the 50-alert limit would otherwise be spent on other accounts
+      query: { month: currentMonth, limit: 50, ...(props.accountIds.length > 0 && props.accountIds.length <= 100 ? { accountIds: props.accountIds.join(',') } : {}) }
     })
 
     if (res.success && res.data) {

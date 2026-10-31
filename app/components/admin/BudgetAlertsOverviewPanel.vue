@@ -10,7 +10,7 @@
           </div>
           <div>
             <p class="text-sm text-gray-400">Month-to-Date Spend</p>
-            <p class="text-2xl font-semibold">{{ formatCurrency(overview.summary.totalSpend) }}</p>
+            <p class="text-2xl font-semibold">{{ formatCurrency(overview.summary.totalSpend, 0) }}</p>
           </div>
         </div>
       </UCard>
@@ -23,7 +23,7 @@
           </div>
           <div>
             <p class="text-sm text-gray-400">Total Budget</p>
-            <p class="text-2xl font-semibold">{{ formatCurrency(overview.summary.totalBudget) }}</p>
+            <p class="text-2xl font-semibold">{{ formatCurrency(overview.summary.totalBudget, 0) }}</p>
             <p v-if="overview.summary.budgetUtilization" class="text-xs text-gray-500">
               {{ overview.summary.budgetUtilization.toFixed(1) }}% utilized
             </p>
@@ -186,7 +186,7 @@
                       <span class="text-xs text-gray-600 dark:text-gray-400">{{ formatAlertDate(alert.createdAt) }}</span>
                     </div>
                     <div class="text-xs text-gray-700 dark:text-gray-300">
-                      {{ alert.type }} - {{ formatCurrency(alert.actualSpend) }} / {{ formatCurrency(alert.budget) }}
+                      {{ alert.type }} - {{ formatCurrency(alert.actualSpend, 0) }} / {{ formatCurrency(alert.budget, 0) }}
                     </div>
                   </div>
                 </div>
@@ -222,18 +222,18 @@
 
         <!-- Budget Column -->
         <template #budget-data="{ row }">
-          <span v-if="row.budget">{{ formatCurrency(row.budget) }}</span>
+          <span v-if="row.budget">{{ formatCurrency(row.budget, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
         <!-- Current Spend Column -->
         <template #currentSpend-data="{ row }">
-          <span>{{ formatCurrency(row.currentSpend) }}</span>
+          <span>{{ formatCurrency(row.currentSpend, 0) }}</span>
         </template>
 
         <!-- Forecast Column -->
         <template #forecastedSpend-data="{ row }">
-          <span v-if="row.forecastedSpend">{{ formatCurrency(row.forecastedSpend) }}</span>
+          <span v-if="row.forecastedSpend">{{ formatCurrency(row.forecastedSpend, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
@@ -349,15 +349,6 @@ const paginatedAccounts = computed(() => {
 function getCurrentMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function getStatusColor(status: string): string {

@@ -22,6 +22,15 @@ export interface ActivityMetricsData {
   global: GlobalActivityMetric
 }
 
+/**
+ * Activity logs identify users by the part of their email before the @, while
+ * preferences use the full email. Match on that local part.
+ */
+export function findUserActivity(byUser: UserActivityMetric[] | undefined, email: string): UserActivityMetric | undefined {
+  const key = (email.split('@')[0] || email).toLowerCase()
+  return byUser?.find(u => u.userId.toLowerCase() === key)
+}
+
 // Shared formatting helpers
 
 export function formatSessionDuration(ms: number): string {
@@ -99,7 +108,7 @@ export function formatActionType(type: string): string {
 export function useAdminUserDetail() {
   const toast = useToast()
 
-  async function fetchAllPreferences(limit = 100): Promise<UserPreferences[]> {
+  async function fetchAllPreferences(limit = 5000): Promise<UserPreferences[]> {
     const response = await $fetch<{ data: { preferences: UserPreferences[]; total: number } }>('/api/admin/user-preferences', {
       query: { limit }
     })
@@ -111,7 +120,7 @@ export function useAdminUserDetail() {
       const res = await $fetch<{
         success: boolean
         data: ActivityMetricsData
-      }>('/api/admin/user-activity-metrics', { query: { period } })
+      }>('/api/admin/user-activity-metrics', { query: { period, limit: 1000 } })
       if (res.success && res.data) {
         return {
           byUser: res.data.byUser ?? [],

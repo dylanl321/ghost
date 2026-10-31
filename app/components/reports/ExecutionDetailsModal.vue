@@ -70,7 +70,7 @@
             {{ formatDateTime(execution.executionTime) }}
           </div>
           <div class="text-xs text-gray-500 mt-1">
-            {{ formatRelativeTime(execution.executionTime) }}
+            {{ formatTimeAgo(execution.executionTime) }}
           </div>
         </div>
 
@@ -283,27 +283,6 @@ function formatDateTime(value?: string) {
     }).format(new Date(value))
   } catch {
     return value
-  }
-}
-
-function formatRelativeTime(value?: string) {
-  if (!value) return ''
-  try {
-    const date = new Date(value)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins} minutes ago`
-    if (diffHours < 24) return `${diffHours} hours ago`
-    if (diffDays < 7) return `${diffDays} days ago`
-
-    return formatDateTime(value)
-  } catch {
-    return ''
   }
 }
 

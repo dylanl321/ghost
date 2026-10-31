@@ -111,9 +111,9 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
 
       accounts.value = accountsMap
       lastFetched.value = new Date()
-    } catch (error: any) {
-      error.value = error.message || 'Failed to fetch AWS accounts'
-      logger.error('Error fetching AWS accounts:', error)
+    } catch (err: any) {
+      error.value = err?.message || 'Failed to fetch AWS accounts'
+      logger.error('Error fetching AWS accounts:', err)
     } finally {
       loading.value = false
     }
@@ -136,7 +136,8 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
   }
 
   const removeAccount = (accountId: string) => {
-    delete accounts.value[accountId]
+    const { [accountId]: _removed, ...rest } = accounts.value
+    accounts.value = rest
   }
 
   const clearAccounts = () => {

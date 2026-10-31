@@ -78,3 +78,52 @@ export function formatNumber(value: number, decimalPlaces: number): string {
     maximumFractionDigits: decimalPlaces
   }).format(value)
 }
+
+/**
+ * Format a duration given in milliseconds ("850ms", "42s", "3m 5s").
+ * Returns 'N/A' when the value is missing.
+ */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || isNaN(ms)) return 'N/A'
+  if (ms < 1000) return `${ms}ms`
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+export interface FormatTimeAgoOptions {
+  /** Returned when the value is missing or not a valid date (default: '') */
+  empty?: string
+}
+
+/**
+ * Canonical relative-time formatting ("just now", "5m ago", "3h ago", "2d ago", "in 4h").
+ * Anything a week or more away falls back to a short date such as "Mar 4" (with the year
+ * when it is not the current year).
+ */
+export function formatTimeAgo(
+  value: string | number | Date | null | undefined,
+  options: FormatTimeAgoOptions = {}
+): string {
+  const empty = options.empty ?? ''
+  if (value === null || value === undefined || value === '') return empty
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (isNaN(date.getTime())) return empty
+
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  const abs = Math.abs(seconds)
+
+  if (abs < 60) return 'just now'
+  if (abs < 604800) {
+    const amount = abs < 3600 ? `${Math.floor(abs / 60)}m` : abs < 86400 ? `${Math.floor(abs / 3600)}h` : `${Math.floor(abs / 86400)}d`
+    return seconds < 0 ? `in ${amount}` : `${amount} ago`
+  }
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+  })
+}

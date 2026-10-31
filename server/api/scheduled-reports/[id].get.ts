@@ -3,8 +3,7 @@
  * GET /api/scheduled-reports/:id
  */
 
-import { getReport } from '../../utils/scheduled-reports'
-import { isUserAdmin } from '../../utils/user-roles'
+import { requireScheduledReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -19,8 +18,6 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = user.claims?.email || user.claims?.preferred_username
-
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
     if (!reportId) {
@@ -30,17 +27,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get the report
-    const report = await getReport(reportId)
-
-    if (!report) {
-      throw createError({
-        statusCode: 404,
-        message: 'Report not found'
-      })
-    }
-
-    // Allow all authenticated users to view any report
+    const report = await requireScheduledReportAccess(event, reportId)
 
     return {
       success: true,

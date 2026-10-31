@@ -3,10 +3,9 @@
  * Generates PDF reports for AWS datasets with AI-powered insights
  */
 
-import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
+import { invokeBedrock } from './bedrock-client'
 import { logger } from './logger'
 import {
   CONFIG_COLUMNS,
@@ -36,35 +35,14 @@ export async function analyzeDatasetReport(
     // Build analysis prompt
     const prompt = buildAnalysisPrompt(reportData)
 
-    // Call Bedrock (Claude)
-    // Default to govcloud environment (can be overridden by env var if needed)
-    const environment = (process.env.AWS_BEDROCK_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-    const bedrockClient = await getBedrockRuntimeClient(environment, 'us-east-1')
-
-    const requestBody = {
-      anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7
-    }
-
-    const command = new InvokeModelCommand({
-      modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify(requestBody)
-    })
-
-    logger.debug('[Dataset AI] Invoking Bedrock model')
-    const response = await bedrockClient.send(command, { abortSignal: signal })
-
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body))
-    const analysisText = responseBody.content[0].text
+    // Same Bedrock path as the other AI features (environment, region and
+    // model fallbacks from configuration); this used to build its own client
+    // with a GovCloud environment in a commercial region and a fixed model ID.
+    if (signal?.aborted) throw signal.reason || new Error('Export canceled')
+    const response = await invokeBedrock({ model: 'claude-sonnet', prompt, maxTokens: 2000, temperature: 0.7 })
+    if (signal?.aborted) throw signal.reason || new Error('Export canceled')
+    if (!response.success || !response.content) throw new Error(response.error?.message || 'No response from Bedrock')
+    const analysisText = response.content
 
     logger.info('[Dataset AI] AI analysis completed successfully')
 
@@ -73,7 +51,7 @@ export async function analyzeDatasetReport(
 
   } catch (error: any) {
     logger.error('[Dataset AI] AI analysis failed:', error)
-    throw new Error(`AI analysis failed: ${error.message}`)
+    throw new Error(`AI analysis failed: ${error.message}`, { cause: error })
   }
 }
 
@@ -389,185 +367,4 @@ function formatPdfValue(value: unknown): string {
 
 function cleanPdfText(value: string): string {
   return value.replace(/[^\x20-\x7E\n\r\t]/g, '')
-}
-
-/**
- * Build HTML for dataset report
- */
-function _buildDatasetReportHTML(
-  reportData: DatasetReportData,
-  _config: DatasetReportConfig
-): string {
-  const sections: string[] = []
-
-  sections.push('<!DOCTYPE html>')
-  sections.push('<html>')
-  sections.push('<head>')
-  sections.push('<meta charset="UTF-8">')
-  sections.push('<title>AWS Dataset Report</title>')
-  sections.push('<style>')
-  sections.push(`
-    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-    h1 { color: #232F3E; border-bottom: 3px solid #FF9900; padding-bottom: 10px; }
-    h2 { color: #232F3E; margin-top: 30px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-    h3 { color: #555; margin-top: 20px; }
-    table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }
-    th { background-color: #232F3E; color: white; padding: 10px; text-align: left; }
-    td { border: 1px solid #ddd; padding: 8px; }
-    tr:nth-child(even) { background-color: #f9f9f9; }
-    .summary-box { background-color: #f0f8ff; border-left: 4px solid #0073bb; padding: 15px; margin: 20px 0; }
-    .critical { color: #d13212; font-weight: bold; }
-    .high { color: #ff9900; font-weight: bold; }
-    .medium { color: #ffa500; }
-    .low { color: #2ea043; }
-    .metadata { color: #666; font-size: 12px; margin-bottom: 30px; }
-    ul { line-height: 1.8; }
-  `)
-  sections.push('</style>')
-  sections.push('</head>')
-  sections.push('<body>')
-
-  // Header
-  sections.push('<h1>AWS Dataset Report</h1>')
-  sections.push('<div class="metadata">')
-  sections.push(`<p><strong>Generated:</strong> ${new Date(reportData.metadata.generatedAt).toLocaleString()}</p>`)
-  sections.push(`<p><strong>Accounts:</strong> ${reportData.metadata.accounts.map(a => a.accountName).join(', ')}</p>`)
-  if (reportData.metadata.timeRange) {
-    sections.push(`<p><strong>Time Range:</strong> ${reportData.metadata.timeRange.startDate} to ${reportData.metadata.timeRange.endDate}</p>`)
-  }
-  sections.push('</div>')
-
-  // AI Insights (if available)
-  if (reportData.aiInsights) {
-    sections.push('<h2>Executive Summary</h2>')
-    sections.push('<div class="summary-box">')
-    sections.push(`<p>${reportData.aiInsights.executiveSummary}</p>`)
-    sections.push('</div>')
-
-    if (reportData.aiInsights.keyFindings.length > 0) {
-      sections.push('<h3>Key Findings</h3>')
-      sections.push('<ul>')
-      for (const finding of reportData.aiInsights.keyFindings) {
-        sections.push(`<li>${finding}</li>`)
-      }
-      sections.push('</ul>')
-    }
-
-    if (reportData.aiInsights.recommendations && reportData.aiInsights.recommendations.length > 0) {
-      sections.push('<h3>Recommendations</h3>')
-      sections.push('<ul>')
-      for (const rec of reportData.aiInsights.recommendations) {
-        sections.push(`<li>${rec}</li>`)
-      }
-      sections.push('</ul>')
-    }
-  }
-
-  // Config Resources
-  if (reportData.config) {
-    sections.push('<h2>AWS Config Resources</h2>')
-    sections.push(`<p><strong>Total Resources:</strong> ${reportData.config.totalResources}</p>`)
-    sections.push('<h3>Compliance Summary</h3>')
-    sections.push('<ul>')
-    sections.push(`<li>Compliant: ${reportData.config.complianceSummary.compliant}</li>`)
-    sections.push(`<li class="critical">Non-Compliant: ${reportData.config.complianceSummary.nonCompliant}</li>`)
-    sections.push(`<li>Not Applicable: ${reportData.config.complianceSummary.notApplicable}</li>`)
-    sections.push(`<li>Insufficient Data: ${reportData.config.complianceSummary.insufficientData}</li>`)
-    sections.push('</ul>')
-
-    // Top 50 resources table
-    if (reportData.config.records.length > 0) {
-      sections.push('<h3>Resources (Top 50)</h3>')
-      sections.push('<table>')
-      sections.push('<tr><th>Account</th><th>Region</th><th>Type</th><th>Resource ID</th><th>Compliance</th></tr>')
-      for (const record of reportData.config.records.slice(0, 50)) {
-        sections.push('<tr>')
-        sections.push(`<td>${record.accountName}</td>`)
-        sections.push(`<td>${record.region}</td>`)
-        sections.push(`<td>${record.resourceType}</td>`)
-        sections.push(`<td>${record.resourceId}</td>`)
-        sections.push(`<td>${record.complianceStatus || 'N/A'}</td>`)
-        sections.push('</tr>')
-      }
-      sections.push('</table>')
-    }
-  }
-
-  // Security Hub Findings
-  if (reportData.securityHub) {
-    sections.push('<h2>AWS Security Hub Findings</h2>')
-    sections.push(`<p><strong>Total Findings:</strong> ${reportData.securityHub.totalFindings}</p>`)
-    sections.push('<h3>Findings by Severity</h3>')
-    sections.push('<ul>')
-    sections.push(`<li class="critical">Critical: ${reportData.securityHub.findingsBySeverity.critical}</li>`)
-    sections.push(`<li class="high">High: ${reportData.securityHub.findingsBySeverity.high}</li>`)
-    sections.push(`<li class="medium">Medium: ${reportData.securityHub.findingsBySeverity.medium}</li>`)
-    sections.push(`<li class="low">Low: ${reportData.securityHub.findingsBySeverity.low}</li>`)
-    sections.push(`<li>Informational: ${reportData.securityHub.findingsBySeverity.informational}</li>`)
-    sections.push('</ul>')
-
-    // Top 50 findings table
-    if (reportData.securityHub.records.length > 0) {
-      sections.push('<h3>Top Findings (By Severity)</h3>')
-      sections.push('<table>')
-      sections.push('<tr><th>Severity</th><th>Title</th><th>Account</th><th>Product</th><th>Status</th></tr>')
-      for (const record of reportData.securityHub.records.slice(0, 50)) {
-        sections.push('<tr>')
-        sections.push(`<td class="${record.severity.toLowerCase()}">${record.severity}</td>`)
-        sections.push(`<td>${record.title}</td>`)
-        sections.push(`<td>${record.accountName}</td>`)
-        sections.push(`<td>${record.productName}</td>`)
-        sections.push(`<td>${record.workflowStatus}</td>`)
-        sections.push('</tr>')
-      }
-      sections.push('</table>')
-    }
-  }
-
-  // CloudTrail Events
-  if (reportData.cloudtrail) {
-    sections.push('<h2>AWS CloudTrail Events</h2>')
-    sections.push(`<p><strong>Total Events:</strong> ${reportData.cloudtrail.totalEvents}</p>`)
-    sections.push('<ul>')
-    sections.push(`<li>Write Events: ${reportData.cloudtrail.writeEvents}</li>`)
-    sections.push(`<li>Read Events: ${reportData.cloudtrail.readEvents}</li>`)
-    sections.push(`<li class="high">Error Events: ${reportData.cloudtrail.errorEvents}</li>`)
-    sections.push('</ul>')
-
-    // Top users
-    if (reportData.cloudtrail.topUsers.length > 0) {
-      sections.push('<h3>Top Users</h3>')
-      sections.push('<table>')
-      sections.push('<tr><th>User</th><th>Event Count</th></tr>')
-      for (const user of reportData.cloudtrail.topUsers.slice(0, 10)) {
-        sections.push('<tr>')
-        sections.push(`<td>${user.userName}</td>`)
-        sections.push(`<td>${user.eventCount}</td>`)
-        sections.push('</tr>')
-      }
-      sections.push('</table>')
-    }
-
-    // Recent events (top 50)
-    if (reportData.cloudtrail.records.length > 0) {
-      sections.push('<h3>Recent Events (Top 50)</h3>')
-      sections.push('<table>')
-      sections.push('<tr><th>Time</th><th>Event</th><th>User</th><th>Service</th><th>Account</th></tr>')
-      for (const record of reportData.cloudtrail.records.slice(0, 50)) {
-        sections.push('<tr>')
-        sections.push(`<td>${new Date(record.eventTime).toLocaleString()}</td>`)
-        sections.push(`<td>${record.eventName}</td>`)
-        sections.push(`<td>${record.userIdentityUserName || 'N/A'}</td>`)
-        sections.push(`<td>${record.eventSource}</td>`)
-        sections.push(`<td>${record.accountName}</td>`)
-        sections.push('</tr>')
-      }
-      sections.push('</table>')
-    }
-  }
-
-  sections.push('</body>')
-  sections.push('</html>')
-
-  return sections.join('\n')
 }

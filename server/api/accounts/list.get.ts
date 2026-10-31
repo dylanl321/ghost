@@ -16,9 +16,10 @@ import {
 } from '../../utils/account-enrichment'
 import {
   parseAndValidateAccountFilters,
-  filterAccounts
+  filterAccounts,
+  hasActiveFilters
 } from '../../utils/account-filters'
-import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
 
@@ -204,7 +205,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const metadata: any = { 
     source,
     enrichment: enrichmentLevel,
-    filtersApplied: Object.keys(accountFilters).length,
+    filtersApplied: hasActiveFilters(accountFilters),
     sortBy,
     order
   }
@@ -230,16 +231,20 @@ export default defineEventHandler(handleAsync(async (event) => {
         return errors.badRequest(event, 'Invalid source parameter')
     }
     
-    // Check if any accounts were found
+    // Nothing is filtered yet, so an empty list means neither DynamoDB nor
+    // Organizations answered (both log the cause), not an empty organization.
     if (!accounts || accounts.length === 0) {
-      return errors.notFound(event, 'No accounts found matching the specified criteria')
+      return sendApiError(event, 'SERVICE_UNAVAILABLE', 'Account data is unavailable: the account registry and AWS Organizations returned no accounts', 503)
     }
     
     // Only apply advanced filtering to unified accounts
     if (source === 'full') {
       // Apply new filtering system
-      if (Object.keys(accountFilters).length > 0) {
-        accounts = await filterAccounts(accountFilters)
+      // Filter the list already fetched above rather than reading every
+      // account again. includeDecommissioned is always set, so only report
+      // filters when an actual filter was given.
+      accounts = await filterAccounts(accountFilters, accounts)
+      if (hasActiveFilters(accountFilters)) {
         metadata.filters = accountFilters
       }
       

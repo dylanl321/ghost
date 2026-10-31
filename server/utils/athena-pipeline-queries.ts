@@ -8,6 +8,7 @@
  * - Parallel query execution for fetching multiple related datasets
  */
 
+import type { ColumnInfo, Row } from '@aws-sdk/client-athena'
 import { getAthenaClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
@@ -46,8 +47,72 @@ const DEFAULT_TIMEOUT_SECONDS = 60
 const POLL_INTERVAL_MS = 2000
 const ATHENA_RESULT_REUSE_MAX_AGE_MINUTES = 60 // Reuse Athena query results up to 60 minutes old
 
+/**
+ * Error for caller-supplied values that cannot be used in a pipeline query.
+ * Routes map it to a 400 instead of a 500.
+ */
+export class PipelineQueryInputError extends Error {
+  statusCode = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'PipelineQueryInputError'
+  }
+}
+
+/** Account IDs are interpolated into SQL, so only exact 12-digit IDs are accepted. */
+export function assertPipelineAccountId(accountId: string): string {
+  if (typeof accountId !== 'string' || !/^\d{12}$/.test(accountId)) {
+    throw new PipelineQueryInputError('account_id must be a 12-digit AWS account ID')
+  }
+  return accountId
+}
+
+/** GitLab job IDs are numeric. */
+export function assertPipelineJobId(jobId: string): string {
+  if (typeof jobId !== 'string' || !/^\d+$/.test(jobId)) {
+    throw new PipelineQueryInputError('job_id must contain only digits')
+  }
+  return jobId
+}
+
+/**
+ * Parse an integer query parameter and clamp it. Missing or non-numeric input
+ * falls back to the default instead of producing NaN inside the SQL.
+ */
+export function clampIntParam(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(Math.max(Math.trunc(parsed), min), max)
+}
+
+/**
+ * Time window filter for the telemetry tables. The year/month partition
+ * predicate keeps the scan small but is month-granular, so a 7 day request
+ * would otherwise return everything since the start of last month. The second
+ * predicate trims rows to the exact window. It accepts ISO-8601 strings and
+ * plain timestamps; try() drops a row whose timestamp cannot be parsed instead
+ * of failing the whole query.
+ */
+export function timeWindowPredicate(days: number, timestampColumn: string, alias = ''): string {
+  const safeDays = clampIntParam(days, 30, 1, 3650)
+  const prefix = alias ? `${alias}.` : ''
+  const ts = `CAST(${prefix}${timestampColumn} AS varchar)`
+  return `CONCAT(${prefix}year, LPAD(${prefix}month, 2, '0')) >= date_format(date_add('day', -${safeDays}, current_date), '%Y%m')
+      AND coalesce(try(from_iso8601_timestamp(${ts})), try(CAST(${ts} AS timestamp))) >= date_add('day', -${safeDays}, current_timestamp)`
+}
+
+/**
+ * Match one commit author by email. commit_author is either "Name <email>" or
+ * a bare email, so the match is exact on either form rather than a LIKE
+ * substring that would also match "jimbob@x.com" for "bob@x.com".
+ */
+export function authorEmailPredicate(authorEmail: string): string {
+  const email = sanitizeSqlString(authorEmail.trim().toLowerCase())
+  return `(LOWER(TRIM(commit_author)) = '${email}' OR strpos(LOWER(commit_author), '<${email}>') > 0)`
+}
+
 export function pipelineIdPredicate(column: 'pipeline_id' | 'plan_pipeline_id', pipelineId: string): string {
-  if (!/^\d+$/.test(pipelineId)) throw new Error('Pipeline ID must contain only digits')
+  if (!/^\d+$/.test(pipelineId)) throw new PipelineQueryInputError('Pipeline ID must contain only digits')
   // Telemetry table revisions disagree on numeric vs varchar IDs; varchar casting works for both.
   return `CAST(${column} AS varchar) = '${pipelineId}'`
 }
@@ -128,6 +193,45 @@ function sanitizeSqlString(input: string): string {
   return input.replace(/'/g, "''")
 }
 
+const ATHENA_NUMERIC_TYPES = new Set(['tinyint', 'smallint', 'integer', 'int', 'bigint', 'float', 'real', 'double', 'decimal'])
+
+/**
+ * Convert one Athena cell using the column's declared type. Only numeric
+ * columns become numbers, so string IDs keep leading zeros (account
+ * 012345678901 stayed a number and lost its zero before), and booleans become
+ * real booleans so `applied === true` filters work.
+ */
+export function parseAthenaValue(value: string | undefined, type: string | undefined): unknown {
+  if (value === undefined || value === null) return null
+  const t = (type || '').toLowerCase()
+  if (ATHENA_NUMERIC_TYPES.has(t)) {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : value
+  }
+  if (t === 'boolean') {
+    if (value === 'true') return true
+    if (value === 'false') return false
+    return null
+  }
+  if (t === 'array') {
+    // Athena renders arrays as "[a, b, c]"
+    const inner = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1).trim() : value
+    return inner ? inner.split(',').map(item => item.trim()) : []
+  }
+  return value
+}
+
+export function parsePipelineAthenaRows(rows: Row[], columnInfo: ColumnInfo[]): Record<string, any>[] {
+  return rows.map(row => {
+    const record: Record<string, any> = {}
+    row.Data?.forEach((cell, index) => {
+      const column = columnInfo[index]
+      record[column?.Name || String(index)] = parseAthenaValue(cell.VarCharValue, column?.Type)
+    })
+    return record
+  })
+}
+
 /**
  * Execute an Athena SQL query and return results
  */
@@ -155,21 +259,22 @@ async function executeAthenaQuery(
   // Cache hits above bypass this entirely - only real Athena queries are counted.
   return athenaSemaphore.run(async () => {
   try {
-    // Get Athena client
-    const athenaClient = await getAthenaClient(environment, config.region, config.accountId)
+    // Pipeline telemetry only exists in GovCloud. Building the client from the
+    // caller's environment paired a commercial client with a GovCloud region,
+    // which the client factory rejects.
+    const athenaClient = await getAthenaClient('govcloud', config.region, config.accountId)
 
-    logger.info(`[Pipeline Queries] Executing query '${queryName}' in ${environment}`)
+    logger.info(`[Pipeline Queries] Executing query '${queryName}' in govcloud`)
     logger.debug(`[Pipeline Queries] SQL: ${sql}`)
 
     // Start query execution with exponential-backoff retry for throttle errors
-    const { GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
+    const { StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand, StopQueryExecutionCommand } = await import('@aws-sdk/client-athena')
 
     // Retry loop for TooManyRequestsException / ThrottlingException
     let startAttempt = 0
     let startResponse: import('@aws-sdk/client-athena').StartQueryExecutionCommandOutput | undefined
     while (true) {
       try {
-        const { StartQueryExecutionCommand } = await import('@aws-sdk/client-athena')
         startResponse = await athenaClient.send(new StartQueryExecutionCommand({
           QueryString: sql,
           QueryExecutionContext: {
@@ -235,50 +340,35 @@ async function executeAthenaQuery(
     }
 
     if (attempts >= maxAttempts) {
+      // Stop the query so it does not keep scanning (and billing) after we give up
+      await athenaClient.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => {})
       throw new Error(`Query timeout after ${DEFAULT_TIMEOUT_SECONDS} seconds`)
     }
 
-    // Get results
-    const resultsResponse = await athenaClient.send(new GetQueryResultsCommand({
-      QueryExecutionId: queryExecutionId
-    }))
+    // Get results. GetQueryResults returns at most 1000 rows per page, so
+    // follow NextToken or larger LIMITs are silently truncated.
+    const rows: Row[] = []
+    let columnInfo: ColumnInfo[] = []
+    let nextToken: string | undefined
+    let firstPage = true
+    do {
+      const resultsResponse = await athenaClient.send(new GetQueryResultsCommand({
+        QueryExecutionId: queryExecutionId,
+        NextToken: nextToken
+      }))
+      const pageRows = resultsResponse.ResultSet?.Rows || []
+      if (firstPage) {
+        columnInfo = resultsResponse.ResultSet?.ResultSetMetadata?.ColumnInfo || []
+        // The first row of the first page is the header row
+        rows.push(...pageRows.slice(1))
+        firstPage = false
+      } else {
+        rows.push(...pageRows)
+      }
+      nextToken = resultsResponse.NextToken
+    } while (nextToken)
 
-    // Parse results
-    const rows = resultsResponse.ResultSet?.Rows || []
-    if (rows.length === 0) {
-      return []
-    }
-
-    const columns = rows[0]?.Data || []
-    const columnNames = columns.map(col => col.VarCharValue || '')
-
-    const data = rows.slice(1).map(row => {
-      const record: Record<string, any> = {}
-      row.Data?.forEach((cell, index) => {
-        const columnName = columnNames[index]
-        const value = cell.VarCharValue || null
-
-        // Try to parse numbers
-        if (value !== null && !isNaN(Number(value)) && value !== '') {
-          record[columnName] = Number(value)
-        } else if (value !== null && value.startsWith('[') && value.endsWith(']')) {
-          // Parse Athena array format: [item1, item2, item3]
-          try {
-            const arrayContent = value.slice(1, -1).trim()
-            if (arrayContent) {
-              record[columnName] = arrayContent.split(',').map(item => item.trim())
-            } else {
-              record[columnName] = []
-            }
-          } catch {
-            record[columnName] = value
-          }
-        } else {
-          record[columnName] = value
-        }
-      })
-      return record
-    })
+    const data = parsePipelineAthenaRows(rows, columnInfo)
 
     const executionTimeMs = Date.now() - startTime
     logger.info(`[Pipeline Queries] Query completed in ${executionTimeMs}ms, returned ${data.length} rows`)
@@ -306,6 +396,7 @@ export async function getPipelineRunsForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial',
   maxRows: number = 1000
 ): Promise<PipelineRun[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:runs:${accountId}:${days}:${maxRows}`
 
   const config = getPipelineEnvironmentConfig(environment)
@@ -326,7 +417,7 @@ export async function getPipelineRunsForAccount(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
       AND contains(accounts_processed, '${accountId}')
     ORDER BY timestamp_start DESC
     LIMIT ${maxRows}
@@ -344,6 +435,7 @@ export async function getAccountPlansForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial',
   maxRows: number = 500
 ): Promise<AccountPlan[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:plans:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -360,7 +452,7 @@ export async function getAccountPlansForAccount(
       plan_status,
       applied_at
     FROM ${config.database}.account_plans
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'plan_created_at')}
       AND account_id = '${accountId}'
     ORDER BY plan_created_at DESC
     LIMIT ${maxRows}
@@ -378,6 +470,7 @@ export async function getResourceChangesForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial',
   maxRows: number = 2000
 ): Promise<ResourceChange[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:resources:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -392,7 +485,7 @@ export async function getResourceChangesForAccount(
       apply_success,
       timestamp
     FROM ${config.database}.resource_changes
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
     LIMIT ${maxRows}
@@ -410,6 +503,7 @@ export async function getErrorDetailsForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial',
   maxRows: number = 500
 ): Promise<ErrorDetail[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:errors:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -424,7 +518,7 @@ export async function getErrorDetailsForAccount(
       error_message,
       error_resource_type
     FROM ${config.database}.error_details
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
     LIMIT ${maxRows}
@@ -493,11 +587,10 @@ export async function getPipelineSummary(
   // Count unique resource types for totals
   const uniqueResourceTypes = new Set(resources.map(r => r.resource_type))
 
-  // Account-level metrics from plans: a plan with applied_at set counts as successful
-  const successfulAccounts = plans.filter(p => p.applied_at).length
-  const failedAccounts = plans.filter(p =>
-    p.plan_status === 'failed' || p.plan_status === 'error'
-  ).length
+  // Account-level metrics from plan_status, the same definition the
+  // organization summary and health score use
+  const successfulAccounts = plans.filter(p => p.plan_status === 'applied').length
+  const failedAccounts = plans.filter(p => p.plan_status === 'failed').length
   const totalAccountPlans = plans.length
   const accountSuccessRate = totalAccountPlans > 0
     ? Math.round((successfulAccounts / totalAccountPlans) * 1000) / 10
@@ -530,6 +623,7 @@ export async function getDailyPipelineMetrics(
   days: number = 7,
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<Array<{ date: string, total: number, successful: number, failed: number }>> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:daily-metrics:${accountId}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -540,7 +634,7 @@ export async function getDailyPipelineMetrics(
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
       AND contains(accounts_processed, '${accountId}')
     GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC
@@ -562,6 +656,8 @@ export async function getPipelineRunDetails(
   resourceChanges: ResourceChange[]
   errors: ErrorDetail[]
 }> {
+  assertPipelineAccountId(accountId)
+  assertPipelineJobId(jobId)
   const cacheKey = `pipelines:details:${pipelineId}:${jobId}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -636,7 +732,7 @@ export async function getOrganizationSummary(
         AVG(duration_total_seconds) as avg_duration,
         COUNT(DISTINCT pipeline_id) as unique_pipelines
       FROM ${config.database}.pipeline_runs
-      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      WHERE ${timeWindowPredicate(days, 'timestamp_start')}
     ),
     plan_stats AS (
       SELECT
@@ -647,7 +743,7 @@ export async function getOrganizationSummary(
         SUM(changes_total) as total_changes,
         COUNT(DISTINCT account_id) as unique_accounts
       FROM ${config.database}.account_plans
-      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      WHERE ${timeWindowPredicate(days, 'plan_created_at')}
     )
     SELECT
       r.total_runs,
@@ -667,7 +763,7 @@ export async function getOrganizationSummary(
   `
 
   const results = await executeAthenaQuery(sql, 'org-summary', environment, cacheKey)
-  return results.length > 0 ? results[0] : null
+  return results[0] ?? null
 }
 
 /**
@@ -697,7 +793,7 @@ export async function getOrganizationTimeline(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
     ORDER BY timestamp_start DESC
     LIMIT ${limit}
   `
@@ -735,8 +831,8 @@ export async function getPipelineById(
     LIMIT 1
   `
 
-  const results = await executeAthenaQuery(sql, `pipeline-${pipelineId}`, environment, cacheKey) as Promise<PipelineRun[]>
-  return results.length > 0 ? results[0] : null
+  const results = await executeAthenaQuery(sql, `pipeline-${pipelineId}`, environment, cacheKey) as PipelineRun[]
+  return results[0] ?? null
 }
 
 /**
@@ -775,7 +871,8 @@ export async function getPipelineByIdWithDetails(
     const [pipeline, accountPlans, resourceChanges, errorDetails] = await Promise.all([
       getPipelineById(pipelineId, environment),
       getAccountPlansForPipeline(pipelineId, environment),
-      getResourceChangesForPipeline(pipelineId, environment),
+      // Second argument is the row limit; passing environment here produced `LIMIT govcloud`
+      getResourceChangesForPipeline(pipelineId, 500, environment),
       getErrorDetailsForPipeline(pipelineId, environment)
     ])
 
@@ -847,7 +944,7 @@ export async function getAccountPlansForPipeline(
   pipelineId: string,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<AccountPlan[]> {
-  const cacheKey = `pipelines:plans:${pipelineId}`
+  const cacheKey = `pipelines:plans-pipeline:${pipelineId}`
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
@@ -884,7 +981,7 @@ export async function getResourceChangesForPipeline(
   limit: number = 500,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<ResourceChange[]> {
-  const cacheKey = `pipelines:resources:${pipelineId}`
+  const cacheKey = `pipelines:resources-pipeline:${pipelineId}:${limit}`
 
   try {
     // First, get the account plans for this pipeline to get the list of accounts
@@ -917,7 +1014,7 @@ export async function getResourceChangesForPipeline(
       WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
         AND ${pipelineIdPredicate('plan_pipeline_id', pipelineId)}
-      LIMIT ${limit}
+      LIMIT ${clampIntParam(limit, 500, 1, 5000)}
     `
 
     logger.info(`[Pipeline Queries] Querying resources for pipeline ${pipelineId} with ${accountIds.length} accounts`)
@@ -938,7 +1035,7 @@ export async function getErrorDetailsForPipeline(
   pipelineId: string,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<ErrorDetail[]> {
-  const cacheKey = `pipelines:errors:${pipelineId}`
+  const cacheKey = `pipelines:errors-pipeline:${pipelineId}`
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
@@ -1045,7 +1142,7 @@ export async function getAccountBreakdown(
       CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
       MAX(plan_created_at) as last_run
     FROM ${config.database}.account_plans
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'plan_created_at')}
     GROUP BY account_id, account_name
     ORDER BY total_runs DESC
     LIMIT ${maxRows}
@@ -1073,7 +1170,7 @@ export async function getOrganizationResourceBreakdown(
       change_action,
       COUNT(*) as count
     FROM ${config.database}.resource_changes
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
     GROUP BY resource_address, resource_type, change_action
     ORDER BY count DESC
     LIMIT ${maxRows}
@@ -1097,7 +1194,7 @@ export async function getOrganizationErrorBreakdown(
       error_category,
       COUNT(*) as count
     FROM ${config.database}.error_details
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
     GROUP BY error_category
     ORDER BY count DESC
   `
@@ -1122,69 +1219,12 @@ export async function getOrganizationDailyMetrics(
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
     GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC
   `
 
   return executeAthenaQuery(sql, 'org-daily-metrics', environment, cacheKey) as Promise<Array<{ date: string, total: number, successful: number, failed: number }>>
-}
-
-/**
- * Get activity heat map data (hour-by-hour or day-by-day)
- */
-export async function getActivityHeatMap(
-  days: number = 30,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
-): Promise<any[]> {
-  const cacheKey = `pipelines:heatmap:${days}`
-  const config = getPipelineEnvironmentConfig(environment)
-
-  const sql = `
-    SELECT
-      DATE(from_iso8601_timestamp(timestamp_start)) as date,
-      HOUR(from_iso8601_timestamp(timestamp_start)) as hour,
-      DAY_OF_WEEK(from_iso8601_timestamp(timestamp_start)) as day_of_week,
-      COUNT(*) as count,
-      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
-      SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failure_count
-    FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-    GROUP BY DATE(from_iso8601_timestamp(timestamp_start)), HOUR(from_iso8601_timestamp(timestamp_start)), DAY_OF_WEEK(from_iso8601_timestamp(timestamp_start))
-    ORDER BY date DESC, hour DESC
-  `
-
-  return executeAthenaQuery(sql, 'heatmap', environment, cacheKey)
-}
-
-/**
- * Get repository breakdown with account-level success/failure metrics
- * Returns aggregated stats by repository, tracking account success/failure rather than pipeline status
- */
-export async function getRepositoryBreakdownWithAccounts(
-  days: number = 30,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
-): Promise<any[]> {
-  const cacheKey = `pipelines:repo-breakdown-accounts:${days}`
-  const config = getPipelineEnvironmentConfig(environment)
-
-  const sql = `
-    SELECT
-      plan_pipeline_id,
-      COUNT(DISTINCT account_id) as total_accounts,
-      SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) as successful_accounts,
-      SUM(CASE WHEN plan_status = 'failed' THEN 1 ELSE 0 END) as failed_accounts,
-      SUM(CASE WHEN plan_status = 'pending' THEN 1 ELSE 0 END) as pending_accounts,
-      CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as account_success_rate,
-      MAX(plan_created_at) as last_run
-    FROM ${config.database}.account_plans
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-    GROUP BY plan_pipeline_id
-    ORDER BY COUNT(DISTINCT account_id) DESC
-    LIMIT 100
-  `
-
-  return executeAthenaQuery(sql, 'repo-breakdown-accounts', environment, cacheKey)
 }
 
 /**
@@ -1215,7 +1255,7 @@ export async function getAllPipelineAuthors(
       SUM(account_count) as total_accounts,
       MAX(timestamp_start) as last_run
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
       AND commit_author IS NOT NULL
       AND commit_author != ''
     GROUP BY commit_author
@@ -1242,10 +1282,9 @@ export async function getPipelineRunsByAuthor(
   limit: number = 200,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<PipelineRun[]> {
-  const cacheKey = `pipelines:author-runs:${authorEmail}:${days}:${limit}`
+  const cacheKey = `pipelines:author-runs:${authorEmail.toLowerCase()}:${days}:${limit}`
   const config = getPipelineEnvironmentConfig(environment)
 
-  // Use LOWER() for case-insensitive matching since email addresses should be case-insensitive
   const sql = `
     SELECT
       pipeline_id,
@@ -1262,8 +1301,8 @@ export async function getPipelineRunsByAuthor(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-      AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
+      AND ${authorEmailPredicate(authorEmail)}
     ORDER BY timestamp_start DESC
     LIMIT ${limit}
   `
@@ -1288,7 +1327,7 @@ export async function getAuthorSummary(
   unique_accounts: number
   repositories: string[]
 } | null> {
-  const cacheKey = `pipelines:author-summary:${authorEmail}:${days}`
+  const cacheKey = `pipelines:author-summary:${authorEmail.toLowerCase()}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -1301,12 +1340,12 @@ export async function getAuthorSummary(
       SUM(account_count) as total_accounts,
       COUNT(DISTINCT pipeline_id) as unique_pipelines
     FROM ${config.database}.pipeline_runs
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-      AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
+    WHERE ${timeWindowPredicate(days, 'timestamp_start')}
+      AND ${authorEmailPredicate(authorEmail)}
   `
 
   const results = await executeAthenaQuery(sql, `author-summary-${authorEmail}`, environment, cacheKey)
-  return results.length > 0 ? results[0] : null
+  return results[0] ?? null
 }
 
 // --- New query functions for pipeline analytics enhancements ---
@@ -1321,7 +1360,7 @@ export async function searchResourceAcrossAccounts(
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<ResourceSearchResult[]> {
   const sanitized = sanitizeSqlString(search)
-  const accountFilter = accountId ? `AND account_id = '${sanitizeSqlString(accountId)}'` : ''
+  const accountFilter = accountId ? `AND account_id = '${assertPipelineAccountId(accountId)}'` : ''
   const cacheKey = `pipelines:resource-search:${search}:${accountId || 'all'}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -1337,7 +1376,7 @@ export async function searchResourceAcrossAccounts(
       timestamp,
       plan_pipeline_id
     FROM ${config.database}.resource_changes
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
       AND (LOWER(resource_address) LIKE LOWER('%${sanitized}%') OR LOWER(resource_type) LIKE LOWER('%${sanitized}%'))
       ${accountFilter}
     ORDER BY timestamp DESC
@@ -1374,7 +1413,7 @@ export async function getResourceDeploymentStatus(
         COUNT(*) OVER (PARTITION BY account_id) as total_attempts,
         ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY timestamp DESC) as rn
       FROM ${config.database}.resource_changes
-      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      WHERE ${timeWindowPredicate(days, 'timestamp')}
         AND LOWER(resource_type) LIKE LOWER('%${sanitized}%')
     )
     WHERE rn = 1
@@ -1393,6 +1432,7 @@ export async function getUnappliedResources(
   days: number = 30,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<UnappliedResource[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:unapplied:${accountId}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -1406,8 +1446,8 @@ export async function getUnappliedResources(
       MAX(timestamp) as latest_timestamp,
       COUNT(*) as occurrence_count
     FROM ${config.database}.resource_changes
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-      AND account_id = '${sanitizeSqlString(accountId)}'
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
+      AND account_id = '${accountId}'
       AND (applied = false OR applied IS NULL)
     GROUP BY resource_address, resource_type, module_name, change_action
     ORDER BY occurrence_count DESC
@@ -1425,6 +1465,7 @@ export async function getPlannedVsAppliedSummary(
   days: number = 30,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<PlannedVsAppliedSummary> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:drift-summary:${accountId}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -1436,8 +1477,8 @@ export async function getPlannedVsAppliedSummary(
       SUM(CASE WHEN applied = true AND (apply_success = false OR apply_success IS NULL) THEN 1 ELSE 0 END) as total_failed,
       SUM(CASE WHEN applied = false OR applied IS NULL THEN 1 ELSE 0 END) as total_pending
     FROM ${config.database}.resource_changes
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-      AND account_id = '${sanitizeSqlString(accountId)}'
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
+      AND account_id = '${accountId}'
     GROUP BY resource_type
     ORDER BY total_planned DESC
   `
@@ -1479,6 +1520,7 @@ export async function getRecurringErrors(
   days: number = 30,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<RecurringErrorPattern[]> {
+  assertPipelineAccountId(accountId)
   const cacheKey = `pipelines:recurring-errors:${accountId}:${days}`
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -1492,8 +1534,8 @@ export async function getRecurringErrors(
       MAX(timestamp) as last_seen,
       COUNT(DISTINCT pipeline_id) as affected_pipelines
     FROM ${config.database}.error_details
-    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
-      AND account_id = '${sanitizeSqlString(accountId)}'
+    WHERE ${timeWindowPredicate(days, 'timestamp')}
+      AND account_id = '${accountId}'
     GROUP BY error_category, error_message, error_severity
     HAVING COUNT(*) > 1
     ORDER BY occurrence_count DESC
@@ -1527,9 +1569,9 @@ export async function getCrossAccountErrorComparison(
     LEFT JOIN (
       SELECT DISTINCT account_id, account_name
       FROM ${config.database}.account_plans
-      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      WHERE ${timeWindowPredicate(days, 'plan_created_at')}
     ) ap ON e.account_id = ap.account_id
-    WHERE CONCAT(e.year, LPAD(e.month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    WHERE ${timeWindowPredicate(days, 'timestamp', 'e')}
       AND e.error_category = '${sanitizedCategory}'
       AND LOWER(e.error_message) LIKE LOWER('%${sanitizedMessage}%')
     GROUP BY e.account_id, ap.account_name

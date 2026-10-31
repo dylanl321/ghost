@@ -454,9 +454,9 @@ const SYSTEM_PROMPT = `You are a GDMS Finance executive analyst writing a varian
 
 Write one or two short sentences, 45 words maximum. State the variance direction and magnitude, then name the single strongest root cause. Mention a recent shift only when material. Do not list evidence, recommend actions, or add caveats.
 
-Your audience is GDMS Finance staff and IT leadership. Write 2–3 sentences of plain prose — no bullet points, no headers, no lists.
+Your audience is GDMS Finance staff and IT leadership. Write plain prose — no bullet points, no headers, no lists.
 
-Cover:
+To find the root cause, weigh:
 1. The primary driver(s) of the variance — name specific AWS services, usage types, or accounts.
 2. Any notable shift in the most recent 1–2 months (inflection points, new spend, spend dropping off).
 3. YoY context if meaningful ("new this year" or continuing a prior-year trend).
@@ -466,7 +466,7 @@ For special categories use the methodology note to accurately frame what the num
 
 Rules:
 - Bold (**) dollar amounts, service names, account names, and usage types.
-- 2–3 sentences maximum. Every sentence must carry new information — no filler.
+- One or two sentences, 45 words maximum. Every sentence must carry new information — no filler.
 - Do NOT speculate beyond the data. Do NOT recommend actions.
 - Plain prose only. No bullets, no headers, no markdown formatting beyond bold.`
 
@@ -488,7 +488,16 @@ export default handleAsync(defineEventHandler(async (event) => {
     return errors.badRequest(event, 'Missing required fields: category, department, year')
   }
 
-  const { category, department, year, refresh } = body
+  const { category, department, refresh } = body
+  const year = Number(body.year)
+  const now = new Date()
+  const currentYear = now.getUTCFullYear()
+  if (!Number.isInteger(year) || year < 2000 || year > currentYear) {
+    return errors.badRequest(event, `year must be a fiscal year no later than ${currentYear}`)
+  }
+  if (!Array.isArray(category.accounts) || category.accounts.some(a => typeof a?.accountId !== 'string' || !/^(\d{12}|classified)$/.test(a.accountId))) {
+    return errors.badRequest(event, 'category.accounts must list 12-digit account IDs')
+  }
 
   const cacheKey = CacheManager.generateKey('finance-variance-insight-v4', {
     dept: department,
@@ -505,18 +514,20 @@ export default handleAsync(defineEventHandler(async (event) => {
     }
   }
 
-  const now = new Date()
-  const ytdCutoff = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  // Months are keyed by invoicing month (CE TimePeriod.End). A past year runs
+  // through December; the current year runs through this month.
+  const cutoffMonth = String(year < currentYear ? 12 : now.getUTCMonth() + 1).padStart(2, '0')
+  const ytdCutoff = `${year}-${cutoffMonth}-01`
   const startDate = `${year - 1}-12-01`
-  const endDate = ytdCutoff <= `${year}-12-01` ? ytdCutoff : `${year + 1}-01-01`
+  const endDate = ytdCutoff
   const priorStartDate = `${year - 2}-12-01`
-  const priorEndDate = `${year - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const priorEndDate = `${year - 1}-${cutoffMonth}-01`
 
   logger.info(`[FinanceVarianceInsight] Fetching breakdown for ${department}:${category.name}`)
 
   const [{ current, note }, priorRaw] = await Promise.all([
     fetchBreakdown(category, startDate, endDate, ytdCutoff),
-    fetchBreakdown(category, priorStartDate, priorEndDate, `${year - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
+    fetchBreakdown(category, priorStartDate, priorEndDate, priorEndDate)
   ])
 
   const prompt = buildPrompt(category, department, ytdCutoff, current, priorRaw.current, note)

@@ -174,7 +174,7 @@ const calculateUnusedVolumeCost = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         volumes: volumesForPricing,
-        environment: 'govcloud'
+        environment: props.environment
       })
     })
 

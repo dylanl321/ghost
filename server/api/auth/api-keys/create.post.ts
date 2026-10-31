@@ -9,7 +9,7 @@ import {
   INTEGRATION_API_KEY_SCOPES,
   validateIntegrationApiKeyRequest
 } from '../../../utils/api-keys'
-import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
+import { requireApiKeyOwner } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { CreateApiKeyRequest, CreateApiKeyResponse, EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
@@ -104,14 +104,8 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<CreateApiKeyResponse>> => {
   try {
-    requireOIDCAuth(event)
     
-    // Get authenticated user context
-    const authContext = getAuthContext(event)
-    const createdByValue = authContext.user?.email || authContext.user?.preferred_username ||
-      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
-    if (!createdByValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
-    const createdBy = String(createdByValue).toLowerCase()
+    const createdBy = requireApiKeyOwner(event)
     
     // Parse request body
     const body = await readBody<CreateApiKeyRequest>(event)

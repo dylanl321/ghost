@@ -629,40 +629,30 @@ export async function revokeLegacyIntegrationKeys(dryRun = true): Promise<string
   return legacyKeyIds
 }
 
+export interface ApiKeyStats {
+  total: number
+  active: number
+  /** Revoked or past expiry. */
+  expired: number
+  byScope: Record<string, number>
+}
+
+export function summarizeApiKeys(apiKeys: Array<Pick<ApiKey, 'isActive' | 'expiresAt' | 'scopes'>>, now = new Date()): ApiKeyStats {
+  const stats: ApiKeyStats = { total: apiKeys.length, active: 0, expired: 0, byScope: {} }
+  for (const key of apiKeys) {
+    if (key.isActive && (!key.expiresAt || key.expiresAt > now)) stats.active++
+    else stats.expired++
+    for (const scope of key.scopes) stats.byScope[scope] = (stats.byScope[scope] || 0) + 1
+  }
+  return stats
+}
+
 /**
  * Get API key usage statistics
  */
-export async function getApiKeyStats(): Promise<{
-  total: number
-  active: number
-  expired: number
-  byScope: Record<string, number>
-}> {
+export async function getApiKeyStats(): Promise<ApiKeyStats> {
   try {
-    const apiKeys = await loadApiKeys()
-    const now = new Date()
-
-    const stats = {
-      total: apiKeys.length,
-      active: 0,
-      expired: 0,
-      byScope: {} as Record<string, number>
-    }
-
-    for (const key of apiKeys) {
-      if (key.isActive && (!key.expiresAt || key.expiresAt > now)) {
-        stats.active++
-      } else {
-        stats.expired++
-      }
-
-      // Count scopes
-      for (const scope of key.scopes) {
-        stats.byScope[scope] = (stats.byScope[scope] || 0) + 1
-      }
-    }
-
-    return stats
+    return summarizeApiKeys(await loadApiKeys())
   } catch (error) {
     logger.error('Failed to get API key stats:', error)
     return { total: 0, active: 0, expired: 0, byScope: {} }

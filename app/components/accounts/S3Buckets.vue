@@ -92,7 +92,7 @@
                 </UBadge>
                 <span class="text-xs text-gray-500">{{ row.region }}</span>
                 <span class="text-xs text-gray-500">•</span>
-                <span class="text-xs text-gray-500">{{ formatDate(row.configuration?.creationDate || row.creationTime) }}</span>
+                <span class="text-xs text-gray-500">{{ formatDateOnly(row.configuration?.creationDate || row.creationTime) }}</span>
               </div>
 
               <!-- Bottom Row: All Badges Horizontally -->
@@ -488,11 +488,7 @@ const getLandingZoneBucketType = (bucketName: string): string | null => {
   return null
 }
 
-const formatDate = (dateString: string) => {
-  if (!dateString) return 'Unknown'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
+const { formatDateOnly } = useDateFormatter()
 
 // Analyze bucket policies from Config data (client-side, instant, no API calls)
 const analyzePolicies = async () => {

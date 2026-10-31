@@ -441,6 +441,7 @@ import type { UserPreferences } from '#shared/types/user-preferences'
 import { SECTION_LABELS, ALL_METRIC_CARD_IDS, METRIC_CARD_LABELS, layoutsAreEqual, DEFAULT_DASHBOARD_LAYOUT } from '#shared/types/dashboard-layout'
 import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
 import {
+  findUserActivity,
   formatSessionDuration,
   formatRelativeDate,
   formatAbsoluteDate,
@@ -567,8 +568,7 @@ const unknownPreferences = computed(() => {
 
 const userActivity = computed(() => {
   if (!activityData.value) return null
-  const id = userId.value.toLowerCase()
-  return activityData.value.byUser.find(u => u.userId.toLowerCase() === id) ?? null
+  return findUserActivity(activityData.value.byUser, userId.value) ?? null
 })
 
 

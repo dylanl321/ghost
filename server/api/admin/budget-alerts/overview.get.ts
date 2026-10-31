@@ -12,7 +12,7 @@
 
 import { getAlertsByMonth, getAllAlerts, type BudgetAlertQueryOptions } from '../../../utils/budget-alerts'
 import { getAllAccountsUnified, type UnifiedAccount } from '../../../utils/accounts-consolidated'
-import { getCostAndUsage, getCostForecast } from '../../../utils/cost-explorer'
+import { getCostAndUsage } from '../../../utils/cost-explorer'
 import { requireAdmin } from '../../../utils/user-roles'
 import type { BudgetAlert, BudgetAlertLevel } from '#shared/types/budget-alerts'
 import { getMonthlyBudget } from '../../../../shared/utils/budget-utils'
@@ -73,6 +73,9 @@ export default defineEventHandler(async (event) => {
 
   // Parse query parameters
   const month = (query.month as string) || getCurrentMonth()
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw createError({ statusCode: 400, statusMessage: 'month must be YYYY-MM' })
+  }
   const includeDecommissioned = query.includeDecommissioned === 'true'
   const includeForecasts = query.includeForecasts !== 'false' // Default true
   const includeCosts = query.includeCosts !== 'false' // Default true
@@ -80,23 +83,24 @@ export default defineEventHandler(async (event) => {
   try {
     logger.info(`[Budget Alerts Overview] Fetching overview for month: ${month}`)
 
+    const costWindow = getMonthCostWindow(month)
+
     // Fetch data in parallel
-    const [accounts, alertsResult, costData, forecastData] = await Promise.all([
+    const [accounts, alertsResult, costData] = await Promise.all([
       getAllAccountsUnified(includeDecommissioned),
       getAlertsByMonth(month, { limit: 1000, sortOrder: 'desc' }),
-      includeCosts ? getCurrentMonthCosts() : null,
-      includeForecasts ? getCurrentMonthForecast() : null,
+      includeCosts ? getMonthCosts(costWindow) : null,
     ])
 
     // Create lookup maps for efficient processing
     const alertsByAccount = groupAlertsByAccount(alertsResult.alerts)
     const costsByAccount = costData ? createCostLookup(costData) : new Map()
 
-    // Calculate forecast multiplier based on days in month
-    const now = new Date()
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-    const dayOfMonth = now.getDate()
-    const forecastMultiplier = dayOfMonth > 0 ? daysInMonth / dayOfMonth : 1
+    // Run-rate projection: spend covers the days before today, so scale by the
+    // days with data, not today's date. A finished month needs no projection.
+    const forecastMultiplier = includeForecasts && costWindow.daysWithData > 0
+      ? costWindow.daysInMonth / costWindow.daysWithData
+      : 1
 
     // Build account summaries
     const accountSummaries: AccountBudgetSummary[] = []
@@ -227,7 +231,7 @@ export default defineEventHandler(async (event) => {
  */
 function getCurrentMonth(): string {
   const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 /**
@@ -303,45 +307,42 @@ function determineAccountStatus(
 }
 
 /**
- * Fetch current month costs by account
+ * Cost Explorer window for the selected month: the whole month once it has
+ * ended, otherwise the first of the month up to today (exclusive). Months that
+ * have not started, or today being the 1st, leave an empty window.
  */
-async function getCurrentMonthCosts(): Promise<any> {
+function getMonthCostWindow(month: string) {
+  const year = Number(month.slice(0, 4))
+  const monthIndex = Number(month.slice(5, 7))
+  const monthStart = new Date(Date.UTC(year, monthIndex - 1, 1))
+  const nextMonthStart = new Date(Date.UTC(year, monthIndex, 1))
   const now = new Date()
-  const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const endDate = now.toISOString().split('T')[0]
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const end = today < nextMonthStart ? today : nextMonthStart
+  const dayMs = 24 * 60 * 60 * 1000
+  return {
+    startDate: monthStart.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+    daysInMonth: Math.round((nextMonthStart.getTime() - monthStart.getTime()) / dayMs),
+    daysWithData: Math.max(0, Math.round((end.getTime() - monthStart.getTime()) / dayMs))
+  }
+}
 
+/**
+ * Fetch costs by account for the selected month
+ */
+async function getMonthCosts(window: { startDate: string; endDate: string }): Promise<any> {
+  if (window.startDate >= window.endDate) return null
   try {
     return await getCostAndUsage({
-      startDate,
-      endDate,
+      startDate: window.startDate,
+      endDate: window.endDate,
       granularity: 'MONTHLY',
       metrics: ['UnblendedCost'],
       groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }],
     }, 'commercial')
   } catch (error) {
     logger.error('[Budget Alerts Overview] Error fetching costs:', error)
-    return null
-  }
-}
-
-/**
- * Fetch current month forecast
- */
-async function getCurrentMonthForecast(): Promise<any> {
-  try {
-    const now = new Date()
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-
-    // Only fetch forecast if we're not at end of month
-    if (now.getDate() < endOfMonth.getDate()) {
-      const startDate = now.toISOString().split('T')[0]
-      const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
-
-      return await getCostForecast(startDate, endDate, 'UNBLENDED_COST', 'MONTHLY', undefined, 'commercial')
-    }
-    return null
-  } catch (error) {
-    logger.error('[Budget Alerts Overview] Error fetching forecast:', error)
     return null
   }
 }

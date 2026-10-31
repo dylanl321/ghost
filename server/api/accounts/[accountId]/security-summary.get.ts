@@ -7,6 +7,15 @@
 import { defineEventHandler, getRouterParam, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { lookupAccountUnified } from '../../../utils/accounts-consolidated'
+import { organizationCache, CacheTags } from '../../../utils/cache-manager'
+import {
+  buildAccountSecurityViaAthena,
+  buildAccountRecommendations,
+  computeRiskScore,
+  getRiskLevel,
+  getSecurityHubEnvironment
+} from '../../../utils/security-hub-athena'
+import { getSecurityHubFindings } from '../../../utils/security-hub-data'
 import { logger } from '../../../utils/logger'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { AccountSecuritySummary, SecurityFindingSummary, SecuritySourceFilter } from '../../../../shared/types/security-dashboard'
@@ -53,11 +62,13 @@ registerEndpoint('/api/accounts/{accountId}/security-summary', 'GET', {
   }
 })
 
+const CACHE_TTL_SECONDS = 300
+
 export default defineEventHandler(handleAsync(async (event) => {
   const accountId = getRouterParam(event, 'accountId')
 
-  if (!accountId) {
-    return errors.badRequest(event, 'Account ID is required')
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'A 12-digit account ID is required')
   }
 
   const query = getQuery(event)
@@ -65,108 +76,86 @@ export default defineEventHandler(handleAsync(async (event) => {
     ? query.source
     : 'all') as SecuritySourceFilter
 
-  // Lookup account to get name and environment
   const account = await lookupAccountUnified({ accountId })
   if (!account) {
     return errors.notFound(event, `Account ${accountId} not found`)
   }
 
   const accountName = account.name || account.projectName || accountId
-  const environment = (account as any).environment || 'govcloud'
 
-  logger.info(`[Security Summary] Fetching security data for account ${accountId}, source: ${sourceFilter}`)
+  // Six Athena queries per load: share one result per account and source
+  const summary = await organizationCache.getOrSet(
+    `security:account-summary:${accountId}:${sourceFilter}`,
+    () => buildAccountSummary(accountId, accountName, sourceFilter),
+    { ttl: CACHE_TTL_SECONDS, tags: [CacheTags.SECURITY] }
+  )
+  return sendSuccess(event, summary)
+}))
 
-  // Try Athena first, fall back to Security Hub API
+async function buildAccountSummary(
+  accountId: string,
+  accountName: string,
+  sourceFilter: SecuritySourceFilter
+): Promise<AccountSecuritySummary> {
   try {
-    const { buildAccountSecurityViaAthena } = await import('../../../utils/security-hub-athena')
-    const summary = await buildAccountSecurityViaAthena(accountId, accountName, sourceFilter)
-    return sendSuccess(event, summary)
+    return await buildAccountSecurityViaAthena(accountId, accountName, sourceFilter)
   } catch (athenaErr: any) {
     logger.warn(`[Security Summary] Athena failed for ${accountId}, falling back to Security Hub API: ${athenaErr.message}`)
   }
 
-  // Fallback: use Security Hub API (no grouping fields)
-  const { getSecurityHubFindings } = await import('../../../utils/security-hub-data')
+  // Fallback: Security Hub API (no grouping fields, no source filter)
   const findings = await getSecurityHubFindings([accountId], { activeOnly: true, lookbackDays: 90 })
 
   const severityBreakdown: Record<FindingSeverity, number> = {
     CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFORMATIONAL: 0
   }
   const findingsByProduct: Record<string, number> = {}
-  const complianceCounts = { passed: 0, failed: 0, warning: 0, notAvailable: 0 }
+  const complianceCounts = { passed: 0, failed: 0, warning: 0, notAvailable: 0, total: 0 }
 
   for (const f of findings) {
     const sev = f.severity as FindingSeverity
     if (sev in severityBreakdown) severityBreakdown[sev]++
     findingsByProduct[f.productName] = (findingsByProduct[f.productName] || 0) + 1
-    if (f.complianceStatus) {
-      switch (f.complianceStatus) {
-        case 'PASSED': complianceCounts.passed++; break
-        case 'FAILED': complianceCounts.failed++; break
-        case 'WARNING': complianceCounts.warning++; break
-        case 'NOT_AVAILABLE': complianceCounts.notAvailable++; break
-      }
+    switch (f.complianceStatus) {
+      case 'PASSED': complianceCounts.passed++; complianceCounts.total++; break
+      case 'FAILED': complianceCounts.failed++; complianceCounts.total++; break
+      case 'WARNING': complianceCounts.warning++; complianceCounts.total++; break
+      case 'NOT_AVAILABLE': complianceCounts.notAvailable++; complianceCounts.total++; break
     }
   }
 
-  const riskScore = Math.min(100,
-    severityBreakdown.CRITICAL * 20 +
-    severityBreakdown.HIGH * 10 +
-    severityBreakdown.MEDIUM * 3 +
-    severityBreakdown.LOW * 1
-  )
+  // Same scoring as the Athena path, so the level does not change with the source
+  const riskScore = computeRiskScore(severityBreakdown.CRITICAL, severityBreakdown.HIGH, severityBreakdown.MEDIUM, severityBreakdown.LOW)
+  const riskLevel = getRiskLevel(riskScore)
+  const passRate = complianceCounts.total > 0 ? Math.round((complianceCounts.passed / complianceCounts.total) * 100) : 100
 
-  let riskLevel: AccountSecuritySummary['riskLevel'] = 'MINIMAL'
-  if (severityBreakdown.CRITICAL > 0) riskLevel = 'CRITICAL'
-  else if (severityBreakdown.HIGH > 0) riskLevel = 'HIGH'
-  else if (severityBreakdown.MEDIUM > 5) riskLevel = 'MEDIUM'
-  else if (severityBreakdown.MEDIUM > 0 || severityBreakdown.LOW > 10) riskLevel = 'LOW'
+  const topFindings: SecurityFindingSummary[] = findings
+    .filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH')
+    .slice(0, 25)
+    .map(f => ({
+      id: f.findingId,
+      title: f.title,
+      severity: f.severity as FindingSeverity,
+      workflowStatus: f.workflowStatus as any,
+      productName: f.productName,
+      resourceType: f.resourceType,
+      resourceId: f.resourceId,
+      accountId: f.accountId,
+      accountName: f.accountName,
+      region: f.region,
+      complianceStatus: f.complianceStatus as any,
+      recommendation: f.remediationRecommendation,
+      remediationUrl: f.remediationUrl,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt
+    }))
 
-  const totalCompliance = complianceCounts.passed + complianceCounts.failed + complianceCounts.warning + complianceCounts.notAvailable
-  const passRate = totalCompliance > 0 ? Math.round((complianceCounts.passed / totalCompliance) * 100) : 100
+  logger.info(`[Security Summary] Account ${accountId} (fallback): ${findings.length} findings, risk ${riskLevel} (${riskScore})`)
 
-  const topFindings: SecurityFindingSummary[] = findings.slice(0, 25).map(f => ({
-    id: f.findingId,
-    title: f.title,
-    severity: f.severity as FindingSeverity,
-    workflowStatus: f.workflowStatus as any,
-    productName: f.productName,
-    resourceType: f.resourceType,
-    resourceId: f.resourceId,
-    accountId: f.accountId,
-    accountName: f.accountName,
-    region: f.region,
-    complianceStatus: f.complianceStatus as any,
-    recommendation: f.remediationRecommendation,
-    remediationUrl: f.remediationUrl,
-    createdAt: f.createdAt,
-    updatedAt: f.updatedAt
-  }))
-
-  const recommendations: string[] = []
-  if (severityBreakdown.CRITICAL > 0) {
-    recommendations.push(`Address ${severityBreakdown.CRITICAL} critical finding(s) immediately - these represent severe security risks`)
-  }
-  if (severityBreakdown.HIGH > 0) {
-    recommendations.push(`Review and remediate ${severityBreakdown.HIGH} high severity finding(s) as soon as possible`)
-  }
-  if (findingsByProduct['Inspector']) {
-    recommendations.push('Review Inspector vulnerability findings for outdated packages or known CVEs')
-  }
-  if (findingsByProduct['Security Hub']) {
-    recommendations.push('Check Security Hub for compliance standard violations and misconfigurations')
-  }
-  if (passRate < 70 && totalCompliance > 0) {
-    recommendations.push(`Compliance pass rate is ${passRate}% - review failed controls to improve posture`)
-  }
-  if (recommendations.length === 0) {
-    recommendations.push('Security posture is healthy - continue monitoring for new findings')
-  }
-
-  const summary: AccountSecuritySummary = {
+  return {
     accountId,
     accountName,
-    environment,
+    environment: getSecurityHubEnvironment(),
     riskScore,
     riskLevel,
     totalFindings: findings.length,
@@ -174,11 +163,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     findingsByProduct,
     compliance: { ...complianceCounts, passRate },
     topFindings,
-    recommendations,
+    recommendations: buildAccountRecommendations(severityBreakdown, findingsByProduct, passRate, complianceCounts.total),
     lastUpdated: new Date().toISOString()
-    // findingsByResource, findingsByTitle, findingsByCve intentionally omitted in fallback
+    // findingsByResource, findingsByTitle, findingsByCve are Athena-only
   }
-
-  logger.info(`[Security Summary] Account ${accountId} (fallback): ${findings.length} findings, risk ${riskLevel} (${riskScore})`)
-  return sendSuccess(event, summary)
-}))
+}

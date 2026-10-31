@@ -1,7 +1,7 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { getResourceChangesForAccount } from '../../utils/athena-pipeline-queries'
+import { getResourceChangesForAccount, clampIntParam, assertPipelineAccountId } from '../../utils/athena-pipeline-queries'
 import { fetchStateFile, parseStateResources, compareStateToPlanned } from '../../utils/terraform-state-parser'
 
 // Register OpenAPI documentation
@@ -123,10 +123,18 @@ export default defineEventHandler(handleAsync(async (event) => {
       statusMessage: 'account_id and repo_name parameters are required'
     })
   }
+  assertPipelineAccountId(accountId)
+  // repo_name becomes the prefix of an S3 key; allow GitLab-style path
+  // segments but no empty, '.' or '..' segments
+  if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(repoName) || repoName.split('/').some(seg => seg === '.' || seg === '..')) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'repo_name may only contain letters, digits, dot, dash, underscore and slash-separated path segments'
+    })
+  }
 
   // Parse optional parameters
-  const daysParam = query.days ? parseInt(query.days as string, 10) : 30
-  const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
+  const days = clampIntParam(query.days, 30, 1, 90)
   // Pipeline data is ALWAYS stored in GovCloud
   const environment = 'govcloud' as const
 

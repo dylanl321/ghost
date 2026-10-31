@@ -22,8 +22,8 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, message: 'Title and body are required' })
     }
 
-    if (!body.targetAudience) {
-      throw createError({ statusCode: 400, message: 'Target audience is required' })
+    if (body.targetAudience !== 'all' && body.targetAudience !== 'list') {
+      throw createError({ statusCode: 400, message: 'Target audience must be all or list' })
     }
 
     if (body.targetAudience === 'list' && (!body.targetUserIds || body.targetUserIds.length === 0)) {

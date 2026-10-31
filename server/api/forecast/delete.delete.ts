@@ -5,6 +5,7 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { deleteItem } from '../../utils/dynamodb'
+import { findForecastItemById, FORECAST_TABLE, FORECAST_ENVIRONMENT } from '../../utils/forecast-data'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
@@ -69,8 +70,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Require admin scope for delete operations
   await requireScope(event, 'admin')
 
-  // Forecast table is in GovCloud
-  const environment = 'govcloud'
   const body = await readBody(event)
   
   if (!body || !body.ids || !Array.isArray(body.ids)) {
@@ -89,27 +88,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Delete items one by one
     for (const id of ids) {
       try {
-        // First, we need to get the item to find its PK and SK
-        // For now, we'll use a scan to find the item by ID
-        const scanResult = await scanItems(
-          'ghost-dashboard-forecast-data',
-          'id = :id',
-          1,
-          undefined,
-          environment,
-          { ':id': id }
-        )
-
-        if (scanResult.items.length > 0) {
-          const item = scanResult.items[0]
-          await deleteItem(
-            'ghost-dashboard-forecast-data',
-            {
-              PK: item.PK,
-              SK: item.SK
-            },
-            environment
-          )
+        const item = await findForecastItemById(id)
+        if (item) {
+          await deleteItem(FORECAST_TABLE, { PK: item.PK, SK: item.SK }, FORECAST_ENVIRONMENT)
           deletedIds.push(id)
         } else {
           deleteErrors.push(`Item with ID ${id} not found`)

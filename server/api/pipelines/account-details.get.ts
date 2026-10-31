@@ -1,7 +1,7 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { getPipelineRunDetails } from '../../utils/athena-pipeline-queries'
+import { getPipelineRunDetails, assertPipelineAccountId, assertPipelineJobId } from '../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/account-details', 'GET', {
@@ -121,7 +121,15 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   }
 
-  const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
+  assertPipelineAccountId(accountId)
+  assertPipelineJobId(jobId)
+  if (!/^\d+$/.test(pipelineId)) {
+    return errors.badRequest(event, 'pipeline_id must contain only digits')
+  }
+
+  // Pipeline data is ALWAYS stored in GovCloud. This used to default to
+  // commercial, which paired a commercial client with the GovCloud region.
+  const environment = 'govcloud' as const
 
   logger.info(`[Pipelines API] Fetching details for pipeline ${pipelineId}, job ${jobId}, account ${accountId}`)
 

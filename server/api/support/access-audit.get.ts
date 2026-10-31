@@ -153,9 +153,17 @@ registerEndpoint('/api/support/access-audit', 'GET', {
  * Parse CloudTrail event to simplified format
  */
 function parseEvent(event: Event): AccessEvent {
-  const userIdentity = event.CloudTrailEvent
-    ? JSON.parse(event.CloudTrailEvent).userIdentity
-    : undefined
+  // Parse the raw CloudTrail record once. A malformed record must not fail
+  // the whole lookup.
+  let record: Record<string, any> = {}
+  if (event.CloudTrailEvent) {
+    try {
+      record = JSON.parse(event.CloudTrailEvent)
+    } catch {
+      record = {}
+    }
+  }
+  const userIdentity = record.userIdentity
 
   return {
     eventId: event.EventId || '',
@@ -166,16 +174,12 @@ function parseEvent(event: Event): AccessEvent {
     userType: userIdentity?.type,
     userArn: userIdentity?.arn,
     accessKeyId: event.AccessKeyId,
-    sourceIpAddress: userIdentity?.sourceIdentity,
-    awsRegion: event.CloudTrailEvent
-      ? JSON.parse(event.CloudTrailEvent).awsRegion
-      : undefined,
-    errorCode: event.CloudTrailEvent
-      ? JSON.parse(event.CloudTrailEvent).errorCode
-      : undefined,
-    errorMessage: event.CloudTrailEvent
-      ? JSON.parse(event.CloudTrailEvent).errorMessage
-      : undefined,
+    // The caller's IP is the record's top-level sourceIPAddress.
+    // userIdentity.sourceIdentity is an STS source identity string, not an IP.
+    sourceIpAddress: record.sourceIPAddress,
+    awsRegion: record.awsRegion,
+    errorCode: record.errorCode,
+    errorMessage: record.errorMessage,
     resourceType: event.Resources?.[0]?.ResourceType,
     resourceName: event.Resources?.[0]?.ResourceName,
     readOnly: event.ReadOnly === 'true' || event.ReadOnly === true
@@ -194,8 +198,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   const nextToken = queryParams.nextToken as string | undefined
 
   // Validate required parameters
-  if (!accountId) {
-    return errors.badRequest(event, 'accountId is required')
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
   }
 
   // At least one filter should be provided for meaningful results
@@ -327,13 +331,14 @@ export default defineEventHandler(handleAsync(async (event) => {
       anomalies.push(`High failure rate: ${summary.failedEvents} out of ${summary.totalEvents} events failed`)
     }
 
-    // Check for unusual hours (assuming business hours are 6am-8pm)
+    // Check for unusual hours (business hours taken as 6am-8pm UTC; the
+    // server clock is UTC, so getHours() silently meant UTC already)
     const unusualHourEvents = events.filter(e => {
-      const hour = new Date(e.eventTime).getHours()
-      return hour < 6 || hour > 20
+      const hour = new Date(e.eventTime).getUTCHours()
+      return hour < 6 || hour >= 20
     })
-    if (unusualHourEvents.length > events.length * 0.3) {
-      anomalies.push(`${unusualHourEvents.length} events occurred outside business hours (6am-8pm)`)
+    if (events.length > 0 && unusualHourEvents.length > events.length * 0.3) {
+      anomalies.push(`${unusualHourEvents.length} events occurred outside business hours (6am-8pm UTC)`)
     }
 
     // Check for root account usage

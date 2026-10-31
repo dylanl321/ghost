@@ -61,7 +61,7 @@
         </div>
         <div class="space-y-2">
           <div v-for="user in data.topUsers.slice(0, 10)" :key="user.user" class="flex items-center justify-between text-sm">
-            <span class="text-gray-600 dark:text-gray-400 truncate font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(user.user)">
+            <span class="text-gray-600 dark:text-gray-400 truncate font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(user.user)">
               {{ user.user }}
               <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-0.5 opacity-50" />
             </span>
@@ -88,13 +88,6 @@
 <script setup lang="ts">
 const toast = useToast()
 const supportContext = useSupportContext()
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { /* silent */ }
-}
 
 const hoursBackOptions = [
   { label: 'Last 1 hour', value: 1 },

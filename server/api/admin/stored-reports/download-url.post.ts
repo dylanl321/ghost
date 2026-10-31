@@ -3,7 +3,7 @@
  * POST /api/admin/stored-reports/download-url
  */
 
-import { getReportDownloadUrl } from '../../../utils/s3-reports-storage'
+import { getReportDownloadUrl, isStoredReportKey } from '../../../utils/s3-reports-storage'
 import { logger } from '../../../utils/logger'
 import { requireAdmin } from '../../../utils/user-roles'
 
@@ -12,12 +12,12 @@ export default defineEventHandler(async (event) => {
 
   try {
     const body = await readBody(event)
-    const { s3Key } = body
+    const s3Key = body?.s3Key
 
-    if (!s3Key) {
+    if (!isStoredReportKey(s3Key)) {
       throw createError({
         statusCode: 400,
-        message: 'S3 key is required'
+        message: 'A stored report key under reports/ is required'
       })
     }
 
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     logger.error('Error generating download URL:', error)
 
     throw createError({
-      statusCode: 500,
+      statusCode: error.statusCode || 500,
       message: error.message || 'Failed to generate download URL'
     })
   }

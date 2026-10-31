@@ -8,11 +8,11 @@
 
 import { getNotificationsForDigest, markNotificationsAsEmailed } from './notification-service'
 import { getUserPreferences } from './user-preferences'
-import { sendEmail } from './email-service'
+import { sendEmail, escapeHtml } from './email-service'
 import { getConfigValue } from './site-config'
 import { logger } from './logger'
 import type { UserNotification, NotificationCategory } from '#shared/types/notifications'
-import { CATEGORY_DISPLAY } from '#shared/types/notifications'
+import { CATEGORY_DISPLAY, DEFAULT_NOTIFICATION_PREFERENCES } from '#shared/types/notifications'
 
 const SITE_URL = process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost.gd-ms.com'
 
@@ -37,7 +37,7 @@ export async function processDigestDeliveries(): Promise<DigestResult> {
 
   try {
     // Get all pending digest notifications grouped by user
-    const pendingByUser = await getNotificationsForDigest(500)
+    const pendingByUser = await getNotificationsForDigest()
 
     if (pendingByUser.size === 0) {
       return result
@@ -59,21 +59,27 @@ export async function processDigestDeliveries(): Promise<DigestResult> {
           continue
         }
 
-        if (!shouldDeliverDigestNow(notifPrefs, userPrefs.timezone || 'America/New_York')) {
+        const timeZone = userPrefs.timezone || 'America/New_York'
+        if (!shouldDeliverDigestNow(notifPrefs, timeZone)) {
           result.skipped++
           continue
         }
 
         // Build and send digest email
-        const html = buildDigestEmailHtml(userId, notifications)
+        const html = buildDigestEmailHtml(notifications, timeZone)
         const text = buildDigestEmailText(notifications)
 
-        await sendEmail({
+        const sent = await sendEmail({
           to: [userId],
           subject: `[GHOST] Your notification digest — ${notifications.length} update${notifications.length > 1 ? 's' : ''}`,
           html,
           text
         })
+        // sendEmail reports failure in its result; without this check a failed
+        // send still marked every notification as emailed and they were lost.
+        if (!sent.success) {
+          throw new Error(sent.error || 'Failed to send digest email')
+        }
 
         // Mark all as emailed
         const notifIds = notifications.map(n => n.notificationId)
@@ -100,9 +106,9 @@ function shouldDeliverDigestNow(
   notifPrefs: Record<string, any>,
   userTimezone: string
 ): boolean {
-  const frequency = notifPrefs.emailDigestFrequency || 'daily'
-  const preferredHour = notifPrefs.emailDigestTime ?? 8 // Default 8 AM
-  const preferredDay = notifPrefs.emailDigestDay || 'monday'
+  const frequency = notifPrefs.emailDigestFrequency || DEFAULT_NOTIFICATION_PREFERENCES.emailDigestFrequency
+  const preferredHour = notifPrefs.emailDigestTime ?? DEFAULT_NOTIFICATION_PREFERENCES.emailDigestTime
+  const preferredDay = notifPrefs.emailDigestDay || DEFAULT_NOTIFICATION_PREFERENCES.emailDigestDay
 
   // Get current time in user's timezone
   let now: Date
@@ -140,7 +146,7 @@ function shouldDeliverDigestNow(
 /**
  * Build digest email HTML — grouped by category
  */
-function buildDigestEmailHtml(userId: string, notifications: UserNotification[]): string {
+function buildDigestEmailHtml(notifications: UserNotification[], timeZone: string): string {
   // Group by category
   const grouped = new Map<NotificationCategory, UserNotification[]>()
   for (const n of notifications) {
@@ -152,17 +158,17 @@ function buildDigestEmailHtml(userId: string, notifications: UserNotification[])
   // Build category sections
   let categorySections = ''
   for (const [category, items] of grouped) {
-    const display = CATEGORY_DISPLAY[category]
+    const display = CATEGORY_DISPLAY[category] || { label: category }
     const rows = items.map(n => {
       const severityBadge = n.severity === 'critical'
         ? '<span style="color:#dc2626; font-weight:600;">Critical</span>'
         : n.severity === 'warning'
           ? '<span style="color:#d97706; font-weight:600;">Warning</span>'
           : ''
-      const time = new Date(n.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })
+      const time = formatDigestTime(n.createdAt, timeZone)
       return `<tr>
-        <td style="padding:8px 12px; border-top:1px solid #e5e7eb; font-size:14px; color:#111827;">${n.title} ${severityBadge}</td>
-        <td style="padding:8px 12px; border-top:1px solid #e5e7eb; font-size:13px; color:#6b7280;">${n.body.substring(0, 100)}${n.body.length > 100 ? '...' : ''}</td>
+        <td style="padding:8px 12px; border-top:1px solid #e5e7eb; font-size:14px; color:#111827;">${escapeHtml(n.title)} ${severityBadge}</td>
+        <td style="padding:8px 12px; border-top:1px solid #e5e7eb; font-size:13px; color:#6b7280;">${escapeHtml(n.body.substring(0, 100))}${n.body.length > 100 ? '...' : ''}</td>
         <td style="padding:8px 12px; border-top:1px solid #e5e7eb; font-size:12px; color:#9ca3af; white-space:nowrap;">${time}</td>
       </tr>`
     }).join('')
@@ -170,7 +176,7 @@ function buildDigestEmailHtml(userId: string, notifications: UserNotification[])
     categorySections += `
       <tr>
         <td style="padding:16px 32px 8px;">
-          <h2 style="margin:0; font-size:15px; font-weight:600; color:#374151;">${display.label} <span style="font-weight:400; color:#9ca3af;">(${items.length})</span></h2>
+          <h2 style="margin:0; font-size:15px; font-weight:600; color:#374151;">${escapeHtml(display.label)} <span style="font-weight:400; color:#9ca3af;">(${items.length})</span></h2>
         </td>
       </tr>
       <tr>
@@ -225,6 +231,16 @@ function buildDigestEmailHtml(userId: string, notifications: UserNotification[])
   </table>
 </body>
 </html>`.trim()
+}
+
+/** Notification time in the recipient's timezone (the server runs in UTC) */
+function formatDigestTime(createdAt: string, timeZone: string): string {
+  const options: Intl.DateTimeFormatOptions = { dateStyle: 'short', timeStyle: 'short' }
+  try {
+    return new Date(createdAt).toLocaleString('en-US', { ...options, timeZone })
+  } catch {
+    return new Date(createdAt).toLocaleString('en-US', { ...options, timeZone: 'UTC' })
+  }
 }
 
 /**

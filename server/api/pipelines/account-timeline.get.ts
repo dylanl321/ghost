@@ -1,7 +1,7 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { getPipelineRunsForAccount } from '../../utils/athena-pipeline-queries'
+import { getPipelineRunsForAccount, clampIntParam } from '../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/account-timeline', 'GET', {
@@ -94,8 +94,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Parse optional parameters
-  const daysParam = query.days ? parseInt(query.days as string, 10) : 7
-  const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
+  const days = clampIntParam(query.days, 7, 1, 90)
   // Pipeline data is ALWAYS stored in GovCloud - ignore environment parameter
   const environment = 'govcloud' as const
 

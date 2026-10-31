@@ -6,111 +6,86 @@
  */
 
 import { defineEventHandler, readBody } from 'h3';
-import { requireAdmin } from '../../../utils/user-roles';
-import { getSiteConfig, updateSiteConfig } from '../../../utils/site-config';
+import { requireAdmin, getUserEmail } from '../../../utils/user-roles';
+import { updateSiteConfigWithHistory } from '../../../utils/site-config';
 import type { Announcement } from '../../../../shared/types/site-config';
 
 interface UpdateAnnouncementsBody {
   announcements: Announcement[];
 }
 
+const SEVERITIES = new Set(['info', 'warning', 'critical']);
+const MAX_ANNOUNCEMENTS = 20;
+const MAX_MESSAGE_LENGTH = 1000;
+
+function isValidDate(value: unknown): boolean {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function validateAnnouncement(value: any, index: number): Announcement {
+  const where = `announcements[${index}]`;
+  if (!value || typeof value !== 'object') {
+    throw createError({ statusCode: 400, message: `${where} must be an object` });
+  }
+  if (typeof value.id !== 'string' || !value.id.trim()) {
+    throw createError({ statusCode: 400, message: `${where}.id is required` });
+  }
+  if (typeof value.message !== 'string' || !value.message.trim() || value.message.length > MAX_MESSAGE_LENGTH) {
+    throw createError({ statusCode: 400, message: `${where}.message must be 1-${MAX_MESSAGE_LENGTH} characters` });
+  }
+  if (!SEVERITIES.has(value.severity)) {
+    throw createError({ statusCode: 400, message: `${where}.severity must be info, warning or critical` });
+  }
+  if (typeof value.active !== 'boolean') {
+    throw createError({ statusCode: 400, message: `${where}.active must be true or false` });
+  }
+  if (!isValidDate(value.createdAt)) {
+    throw createError({ statusCode: 400, message: `${where}.createdAt must be an ISO date` });
+  }
+  if (value.expiresAt !== undefined && value.expiresAt !== null && !isValidDate(value.expiresAt)) {
+    throw createError({ statusCode: 400, message: `${where}.expiresAt must be an ISO date` });
+  }
+
+  return {
+    id: value.id.trim(),
+    message: value.message.trim(),
+    severity: value.severity,
+    active: value.active,
+    createdAt: value.createdAt,
+    ...(value.expiresAt ? { expiresAt: value.expiresAt } : {}),
+  };
+}
+
 export default defineEventHandler(async (event) => {
   await requireAdmin(event);
 
+  const body = await readBody<UpdateAnnouncementsBody>(event);
+
+  if (!Array.isArray(body?.announcements)) {
+    throw createError({ statusCode: 400, message: 'announcements must be an array' });
+  }
+  if (body.announcements.length > MAX_ANNOUNCEMENTS) {
+    throw createError({ statusCode: 400, message: `At most ${MAX_ANNOUNCEMENTS} announcements are allowed` });
+  }
+
+  const announcements = body.announcements.map(validateAnnouncement);
+  if (new Set(announcements.map(a => a.id)).size !== announcements.length) {
+    throw createError({ statusCode: 400, message: 'Announcement ids must be unique' });
+  }
+
   try {
-    const body = await readBody<UpdateAnnouncementsBody>(event);
-
-    if (!Array.isArray(body?.announcements)) {
-      throw createError({
-        statusCode: 400,
-        message: 'announcements must be an array',
-      });
-    }
-
-    const auth = event.context.auth;
-    const user = auth?.user;
-    const username = user?.email || user?.preferred_username || 'unknown';
-
-    const ANNOUNCEMENTS_KEY = 'announcements.list';
-
-    // Ensure the config key exists in DynamoDB; if not, we need to upsert it.
-    // updateSiteConfig requires the key to exist — so we check and handle a missing key.
-    const existing = await getSiteConfig(ANNOUNCEMENTS_KEY, false);
-
-    if (!existing) {
-      // Key not in DynamoDB or defaults — write it directly via the DynamoDB client.
-      // We use updateSiteConfig with a synthesized item by first creating it via a direct put.
-      // Since updateSiteConfig checks DEFAULT_SITE_CONFIG, we fall back to a raw DynamoDB write.
-      const { DynamoDBClient, PutItemCommand } = await import('@aws-sdk/client-dynamodb');
-      const { STSClient, AssumeRoleCommand } = await import('@aws-sdk/client-sts');
-      const { marshall } = await import('@aws-sdk/util-dynamodb');
-
-      const TABLE_NAME = process.env.SITE_CONFIG_TABLE || 'ghost-site-config';
-      const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1';
-      const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232';
-      const roleName = process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole';
-
-      const stsClient = new STSClient({
-        region,
-        credentials: {
-          accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
-        },
-      });
-
-      const assumeRoleResponse = await stsClient.send(new AssumeRoleCommand({
-        RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
-        RoleSessionName: `announcements-update-${Date.now()}`,
-        DurationSeconds: 900,
-      }));
-
-      if (!assumeRoleResponse.Credentials) {
-        throw new Error('Failed to assume role for announcements update');
-      }
-
-      const dynamoClient = new DynamoDBClient({
-        region,
-        credentials: {
-          accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
-          secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
-          sessionToken: assumeRoleResponse.Credentials.SessionToken!,
-        },
-      });
-
-      const timestamp = new Date().toISOString();
-      const item = {
-        key: ANNOUNCEMENTS_KEY,
-        value: body.announcements,
-        type: 'array',
-        category: 'ui',
-        label: 'Announcements',
-        description: 'Active announcements displayed as banners to all users',
-        defaultValue: [],
-        isPublic: true,
-        isEditable: true,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        updatedBy: username,
-      };
-
-      await dynamoClient.send(new PutItemCommand({
-        TableName: TABLE_NAME,
-        Item: marshall(item, { removeUndefinedValues: true }),
-      }));
-    } else {
-      await updateSiteConfig(ANNOUNCEMENTS_KEY, body.announcements, username);
-    }
-
-    return {
-      success: true,
-      announcements: body.announcements,
-      message: 'Announcements updated successfully',
-    };
+    await updateSiteConfigWithHistory('announcements.list', announcements, getUserEmail(event) || 'unknown', 'Announcements updated');
   } catch (error: any) {
     logger.error('Error updating announcements:', error);
     throw createError({
       statusCode: error.statusCode || 500,
-      message: error.message || 'Failed to update announcements',
+      message: error.statusCode ? error.message : 'Failed to update announcements',
     });
   }
+
+  return {
+    success: true,
+    announcements,
+    message: 'Announcements updated successfully',
+  };
 });

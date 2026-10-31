@@ -5,6 +5,7 @@
 
 import { listUserReports } from '../../utils/scheduled-reports'
 import { getUserEmail } from '../../utils/user-roles'
+import { isDatasetReport } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -40,12 +41,10 @@ export default defineEventHandler(async (event) => {
     const status = query.status as string | undefined
 
     // List reports for user, filtering by type='dataset'
-    const { reports } = await listUserReports(userEmail, status)
+    const { reports } = await listUserReports(userEmail, status, 500)
 
     // Filter to only dataset reports
-    const datasetReports = reports.filter(r =>
-      r.reportType === 'dataset' || (!r.reportType && Boolean((r.reportConfig as any)?.datasets))
-    )
+    const datasetReports = reports.filter(isDatasetReport)
 
     return {
       success: true,

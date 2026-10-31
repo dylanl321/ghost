@@ -60,17 +60,31 @@ function resolveLevel(logObj: LogObject): string {
   return LEVEL_NAMES[logObj.level] ?? 'info'
 }
 
-// Safely serialize a value, handling Error objects and circular references
-function safeSerialize(value: unknown): unknown {
-  if (value instanceof Error) {
-    return {
-      message: value.message,
-      stack: value.stack,
-      name: value.name,
-      ...(value as any).code ? { code: (value as any).code } : {},
-    }
+// Serialize a log argument to JSON. Errors (including ones nested in objects,
+// such as logger.error('...', { error })) keep their message and stack,
+// circular references become "[Circular]", and serialization never throws.
+export function serializeLogArg(value: unknown): string {
+  const seen = new WeakSet<object>()
+  try {
+    return JSON.stringify(value, (_key, item) => {
+      if (item instanceof Error) {
+        return {
+          message: item.message,
+          stack: item.stack,
+          name: item.name,
+          ...((item as any).code ? { code: (item as any).code } : {}),
+        }
+      }
+      if (typeof item === 'bigint') return item.toString()
+      if (item && typeof item === 'object') {
+        if (seen.has(item)) return '[Circular]'
+        seen.add(item)
+      }
+      return item
+    }) ?? String(value)
+  } catch {
+    return String(value)
   }
-  return value
 }
 
 // JSON reporter for production — writes one JSON line per log entry to stdout
@@ -78,7 +92,7 @@ const jsonReporter = {
   log(logObj: LogObject) {
     const level = resolveLevel(logObj)
     const message = logObj.args
-      .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
+      .map(arg => (typeof arg === 'string' ? arg : serializeLogArg(arg)))
       .join(' ')
 
     const entry: Record<string, unknown> = {

@@ -4,7 +4,7 @@
  */
 
 import { defineEventHandler, getQuery } from 'h3'
-import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../../utils/api-response'
+import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { getInstanceClassifications } from '../../../utils/utilization-persistence'
 import { lookupAccountOptimized } from '../../../utils/account-lookup-optimized'
@@ -27,7 +27,8 @@ registerEndpoint('/api/instances/utilization/results', 'GET', {
   }
 })
 
-const VALID_CLASSIFICATIONS = ['unused', 'patching-only', 'underutilized', 'right-sized', 'insufficient-data']
+// Must match UtilizationClassification in instance-utilization-classifier
+const VALID_CLASSIFICATIONS = ['over-provisioned', 'under-provisioned', 'optimized', 'no-data']
 
 export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
@@ -44,7 +45,6 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Verify the caller has access to this account by extracting accountId from jobId
   const jobAccountId = jobId.split('-')[0]
-  const { environment } = parseQueryParams(event)
   try {
     await lookupAccountOptimized(event, jobAccountId, { includeDecommissioned: false })
   } catch {
@@ -58,6 +58,9 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const limit = Math.min(Math.max(parseInt(query.limit as string) || 50, 1), 200)
   const nextToken = query.nextToken as string | undefined
+  if (nextToken && !isTokenForJob(nextToken, jobId)) {
+    return errors.badRequest(event, 'Invalid nextToken')
+  }
 
   const result = await getInstanceClassifications(jobId, { classification, limit, nextToken })
 
@@ -67,3 +70,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     count: result.items.length
   })
 }))
+
+/** A pagination token is a base64 DynamoDB key; it must belong to this job's partition. */
+function isTokenForJob(token: string, jobId: string): boolean {
+  try {
+    const key = JSON.parse(Buffer.from(token, 'base64').toString())
+    return key?.PK?.S === `JOB#${jobId}`
+  } catch {
+    return false
+  }
+}

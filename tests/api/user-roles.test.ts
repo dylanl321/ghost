@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { H3Event } from 'h3'
 import { userRoleGroups } from '../../server/utils/entra/graph-client'
-import { clearAllAdminCache, isUserAdmin } from '../../server/utils/user-roles'
+import { clearAllAdminCache, getUserPermissions, isUserAdmin } from '../../server/utils/user-roles'
 
 function oidcEvent(user: Record<string, any>): H3Event {
   return {
@@ -30,6 +30,35 @@ test('admin check resolves Entra group IDs before denying access', async () => {
 
   assert.equal(allowed, true)
   assert.equal(graphCalls, 1)
+})
+
+test('permission checks resolve Entra group IDs the same way the admin check does', async () => {
+  let graphCalls = 0
+  const permissions = await getUserPermissions(oidcEvent({
+    id: 'group-id-permission-test',
+    email: 'power.user@example.test',
+    claims: { groups: ['5b3b3f60-e52f-4e42-b080-570c5f1fe4d8'] }
+  }), async () => {
+    graphCalls += 1
+    return [{ displayName: 'AWS-Product-Team' }] as any
+  })
+
+  assert.equal(graphCalls, 1)
+  assert.equal(permissions.has('accounts.edit'), true)
+  assert.equal(permissions.has('oauth.applications.manage'), true)
+})
+
+test('permission checks fall back to viewer when Graph is unavailable', async () => {
+  const permissions = await getUserPermissions(oidcEvent({
+    id: 'graph-down-permission-test',
+    email: 'someone@example.test',
+    claims: { groups: ['5b3b3f60-e52f-4e42-b080-570c5f1fe4d8'] }
+  }), async () => {
+    throw new Error('Graph unavailable')
+  })
+
+  assert.equal(permissions.has('costs.view'), true)
+  assert.equal(permissions.has('accounts.edit'), false)
 })
 
 test('Graph role resolution retains non-account administrator groups', () => {

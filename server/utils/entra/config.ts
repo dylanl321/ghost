@@ -69,10 +69,10 @@ export function buildGroupFilter(accountId?: string, _environment?: 'commercial'
   // If accountId is specified, look for all groups for that account
   if (accountId) {
     return `(${[
-      `startsWith(displayName, 'AWS-${accountId}_')`,
-      `startsWith(displayName, 'AWS-${accountId}-')`,
-      `startsWith(displayName, 'AWS_${accountId}_')`,
-      `startsWith(displayName, 'AWS_${accountId}-')`
+      `startsWith(displayName, ${odataString(`AWS-${accountId}_`)})`,
+      `startsWith(displayName, ${odataString(`AWS-${accountId}-`)})`,
+      `startsWith(displayName, ${odataString(`AWS_${accountId}_`)})`,
+      `startsWith(displayName, ${odataString(`AWS_${accountId}-`)})`
     ].join(' or ')})`
   }
   
@@ -85,6 +85,14 @@ export function isAwsAuthorizationGroupName(displayName: string): boolean {
 }
 
 /**
+ * Quote a value for an OData string literal. A single quote ends the literal,
+ * so values taken from requests or account records must have it doubled.
+ */
+export function odataString(value: string): string {
+  return `'${String(value).replace(/'/g, "''")}'`
+}
+
+/**
  * Build filter for distribution groups
  */
 export function buildDistributionGroupFilter(accountName?: string): string {
@@ -92,7 +100,7 @@ export function buildDistributionGroupFilter(accountName?: string): string {
   const suffix = config.search.distributionSuffix
   
   if (accountName) {
-    return `displayName eq '${accountName}${suffix}'`
+    return `displayName eq ${odataString(`${accountName}${suffix}`)}`
   }
   
   return `endsWith(displayName, '${suffix}')`

@@ -5,9 +5,11 @@
  * Creates a copy of an existing scheduled report with the same settings
  */
 
-import { getUserEmail } from '../../../utils/user-roles'
-import { getReport, createReport } from '../../../utils/scheduled-reports'
+import { getUserEmail, isUserAdmin } from '../../../utils/user-roles'
+import { createReport } from '../../../utils/scheduled-reports'
+import { requireScheduledReportAccess } from '../../../utils/dataset-report-access'
 import { logger } from '../../../utils/logger'
+import { assertCanCreateReport, assertSelfOnlyRecipients } from '../../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -38,7 +40,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Get report ID from route params
-    const reportId = event.context.params?.id
+    const reportId = getRouterParam(event, 'id')
 
     if (!reportId) {
       throw createError({
@@ -47,23 +49,10 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get the existing report
-    const existingReport = await getReport(reportId)
-
-    if (!existingReport) {
-      throw createError({
-        statusCode: 404,
-        message: 'Report not found'
-      })
-    }
-
-    // Check permissions: user can only duplicate their own reports (unless admin)
-    if (existingReport.createdBy !== userEmail && !existingReport.isAdmin) {
-      throw createError({
-        statusCode: 403,
-        message: 'You can only duplicate your own reports'
-      })
-    }
+    // Users can only duplicate their own reports (admins can duplicate any)
+    const existingReport = await requireScheduledReportAccess(event, reportId)
+    await assertSelfOnlyRecipients(event, existingReport.recipients)
+    await assertCanCreateReport(event)
 
     // Create new report with copied settings
     const newReportName = `Copy of ${existingReport.reportName}`
@@ -72,13 +61,15 @@ export default defineEventHandler(async (event) => {
       {
         reportName: newReportName,
         description: existingReport.description,
+        // Keep the type, or a dataset report's copy would run as a cost report
+        reportType: existingReport.reportType,
         reportConfig: existingReport.reportConfig,
         schedule: existingReport.schedule,
         recipients: existingReport.recipients,
         emailTemplate: existingReport.emailTemplate
       },
       userEmail,
-      existingReport.isAdmin
+      await isUserAdmin(event)
     )
 
     logger.info(`Report duplicated: ${reportId} → ${newReport.reportId}`)

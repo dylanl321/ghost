@@ -210,10 +210,13 @@ export function hasCredentials(environment: AWSEnvironmentType): boolean {
  */
 async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string> {
   const configKey = environment === 'commercial' ? 'aws.commercial.region' : 'aws.govcloud.region'
-  const envVar = environment === 'commercial' ? 'COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
   const fallbackDefault = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
 
-  const defaultRegion = getConfigValue<string>(configKey, envVar, fallbackDefault)
+  // The deployment sets AWS_COMMERCIAL_REGION, like every other reader of the
+  // commercial region; COMMERCIAL_REGION is kept as a legacy alias.
+  const defaultRegion = environment === 'commercial'
+    ? getConfigValue<string>(configKey, 'AWS_COMMERCIAL_REGION', getConfigValue<string>(configKey, 'COMMERCIAL_REGION', fallbackDefault))
+    : getConfigValue<string>(configKey, 'AWS_GOVCLOUD_REGION', fallbackDefault)
 
   // Validate the default region
   try {
@@ -404,6 +407,8 @@ export async function getAssumedRoleCredentials(
   options: { region?: string, sessionName?: string } = {}
 ): Promise<AWSCredentials> {
   const key = `${environment}:${accountId}:${options.sessionName ?? ''}`
+  // Breaker state is per partition, like the credential cache.
+  const breakerKey = `${environment}:${accountId}`
 
   const cached = assumedCredentialCache.get(key)
   if (cached && credentialsAreFresh(cached)) {
@@ -416,7 +421,7 @@ export async function getAssumedRoleCredentials(
   }
 
   // Circuit breaker: skip STS call if account is known-unreachable
-  if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
+  if (!assumeRoleCircuitBreaker.canAttempt(breakerKey)) {
     throw new Error(
       `Circuit breaker OPEN for account ${accountId} in ${environment} environment. ` +
       `Assume-role has failed repeatedly. Will retry after cooldown period.`
@@ -430,12 +435,12 @@ export async function getAssumedRoleCredentials(
     return assumeRoleImpl(accountId, region, environment, options.sessionName)
   })()
     .then((credentials) => {
-      assumeRoleCircuitBreaker.recordSuccess(accountId)
+      assumeRoleCircuitBreaker.recordSuccess(breakerKey)
       assumedCredentialCache.set(key, credentials)
       return credentials
     })
     .catch((error) => {
-      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
+      assumeRoleCircuitBreaker.recordFailure(breakerKey, error as Error)
       throw error
     })
     .finally(() => {
@@ -479,10 +484,13 @@ function getCacheKey(
   environment: AWSEnvironmentType,
   service: AWSServiceType,
   region: string,
-  accountId?: string
+  accountId?: string,
+  sessionName?: string
 ): string {
-  return accountId 
-    ? `${environment}-${service}-${region}-${accountId}`
+  // The session name selects different assumed-role credentials, so it must
+  // be part of the key or a caller gets another session's client.
+  return accountId
+    ? `${environment}-${service}-${region}-${accountId}${sessionName ? `-${sessionName}` : ''}`
     : `${environment}-${service}-${region}`
 }
 
@@ -508,7 +516,7 @@ export async function getClient<T = any>(
   validateRegionForPartition(targetRegion, environment)
 
   // Check cache first
-  const cacheKey = getCacheKey(environment, service, targetRegion, accountId)
+  const cacheKey = getCacheKey(environment, service, targetRegion, accountId, sessionName)
   const cachedEntry = clientCache.get(cacheKey)
 
   // Return cached client if it exists and credentials haven't expired
@@ -831,7 +839,7 @@ export function validateAWSConfiguration(): void {
   }
   
   // Check for cross-partition misconfigurations
-  const commercialKey = process.env.AWS_COMMERCIAL_ACCESS_KEY_ID
+  const commercialKey = process.env.COMMERCIAL_AWS_ACCESS_KEY_ID || process.env.AWS_COMMERCIAL_ACCESS_KEY_ID
   const govcloudKey = process.env.AWS_GOVCLOUD_ACCESS_KEY_ID
   
   if (commercialKey && govcloudKey && commercialKey === govcloudKey) {

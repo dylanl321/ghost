@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { toCostTagFilterValues } from '~~/shared/utils/cost-tag-identities'
 import VChart from 'vue-echarts'
 
 const logger = createLogger('TagValueTrend')
@@ -45,20 +46,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const rawData = ref<any>(null)
 
-function stripTagPrefix(rawValue: string, tagKey: string): string {
-  const idx = rawValue.indexOf('$')
-  if (idx !== -1) {
-    const prefix = rawValue.substring(0, idx)
-    if (prefix === tagKey || prefix === '') {
-      return rawValue.substring(idx + 1)
-    }
-  }
-  return rawValue
-}
-
-const effectiveTagValues = computed(() => props.tagValues.length > 0
-  ? props.tagValues
-  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+const effectiveTagValues = computed(() => toCostTagFilterValues(props.tagKey, props.tagValues, props.tagValue))
 
 // Periods that benefit from daily granularity
 const dailyPeriods = new Set(['last7days', 'last30days', 'thisMonth', 'lastMonth'])
@@ -141,12 +129,6 @@ const chartOption = computed(() => {
 
   const { timeKeys, isDaily, top, rest } = processedData.value
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
-    return `$${value.toFixed(0)}`
-  }
-
   const series: any[] = top.map((item, i) => ({
     name: item.key,
     type: 'line',
@@ -184,7 +166,7 @@ const chartOption = computed(() => {
           .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
           .forEach((item: any) => {
             if (item.value > 0) {
-              result += `${item.marker} ${item.seriesName}: ${formatCurrency(item.value)}<br/>`
+              result += `${item.marker} ${item.seriesName}: ${formatCostValue(item.value)}<br/>`
             }
           })
         return result
@@ -213,7 +195,7 @@ const chartOption = computed(() => {
     },
     yAxis: {
       type: 'value',
-      axisLabel: { color: '#9ca3af', fontSize: 10, formatter: (v: number) => formatCurrency(v) },
+      axisLabel: { color: '#9ca3af', fontSize: 10, formatter: (v: number) => formatCostValue(v) },
       axisLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.2)' } },
       splitLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.05)' } }
     },

@@ -60,7 +60,7 @@
     >
       <!-- Date Column -->
       <template #created_at-data="{ row }">
-        {{ formatDate(row.created_at) }}
+        {{ formatDateTime(row.created_at) }}
       </template>
 
       <!-- Level Column -->
@@ -163,7 +163,7 @@
                 <div class="min-w-0">
                   <div class="truncate font-medium text-gray-900 dark:text-white">{{ recipient.email }}</div>
                   <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">
-                    <template v-if="recipient.auditable">Added by {{ recipient.addedBy }} on {{ formatDate(recipient.addedAt) }}</template>
+                    <template v-if="recipient.auditable">Added by {{ recipient.addedBy }} on {{ formatDateTime(recipient.addedAt) }}</template>
                     <template v-else>Existing account configuration; detailed add history was not recorded.</template>
                   </div>
                 </div>
@@ -244,7 +244,7 @@ const props = defineProps<{
 }>()
 
 const toast = useToast()
-const loading = ref(false)
+const loading = ref(true) // true until the first fetch, so the empty state never flashes (and SSR matches)
 const alerts = ref<BudgetAlert[]>([])
 const selectedMonth = ref<string>('')
 
@@ -330,17 +330,7 @@ const filteredAlerts = computed(() => {
   return filtered
 })
 
-// Format date as "Jan 15, 2026 2:30 PM"
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatDateTime } = useDateFormatter()
 
 // Get color for alert level badge
 function getLevelColor(level: string): string {
@@ -439,7 +429,10 @@ async function removeRecipient(email: string) {
 
 // Fetch alerts from API
 async function fetchAlerts() {
-  if (!props.accountId) return
+  if (!props.accountId) {
+    loading.value = false
+    return
+  }
 
   try {
     loading.value = true
@@ -452,7 +445,7 @@ async function fetchAlerts() {
       // Always default to current month (it's always in the dropdown now)
       selectedMonth.value = getCurrentMonthKey()
     } else {
-      throw new Error(data.error || 'Failed to fetch alerts')
+      throw new Error(apiErrorMessage(data, 'Failed to fetch alerts'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch budget alerts:', err)
@@ -484,7 +477,7 @@ async function viewEmail(alert: BudgetAlert) {
       emailHtml.value = data.data.html
       emailSubject.value = data.data.subject || alert.email_subject || 'Budget Alert'
     } else {
-      throw new Error(data.error || 'Failed to load email content')
+      throw new Error(apiErrorMessage(data, 'Failed to load email content'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch email content:', err)

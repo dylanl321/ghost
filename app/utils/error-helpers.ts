@@ -78,3 +78,16 @@ export async function retryWithBackoff<T>(
   }
   throw lastError
 }
+
+/**
+ * Read the message out of an API error body. Routes answer either `{ error: 'text' }` or the
+ * standard envelope `{ error: { code, message } }`; passing the envelope straight to
+ * `new Error()` shows "[object Object]".
+ */
+export function apiErrorMessage(body: any, fallback: string): string {
+  const error = body?.error
+  if (typeof error === 'string' && error) return error
+  if (typeof error?.message === 'string' && error.message) return error.message
+  if (typeof body?.message === 'string' && body.message) return body.message
+  return fallback
+}

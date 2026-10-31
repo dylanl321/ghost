@@ -400,6 +400,12 @@ export default defineEventHandler(handleAsync(async (event) => {
     ? await getAccountIdsFromCriteria(accountFilters)
     : undefined
   
+  // Check if any accounts were found when filters are applied
+  // If filters were applied but no accounts found, return before querying Cost Explorer org-wide
+  if (filteredAccountIds !== undefined && filteredAccountIds.length === 0) {
+    return errors.notFound(event, 'No accounts found matching the specified filters')
+  }
+  
   // Build cost parameters
   const costParams = {
     startDate,
@@ -441,6 +447,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   const accountDataCacheKey = `accounts:unified:${includeDecommissioned}`
 
   // Fetch cost data and account metadata in parallel with caching
+  // Read before fetching: afterwards both entries always exist.
+  const costCacheHit = costCache.isFresh(costDataCacheKey)
+  const accountCacheHit = includeBudget && accountCache.isFresh(accountDataCacheKey)
   const [costData, accountsData] = await Promise.all([
     // Get cost data using appropriate method based on proforma flag
     costCache.getOrSet(
@@ -500,12 +509,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Check if we have any cost data to analyze
   if ((!resultsByTime || resultsByTime.length === 0) && !dateRange.empty) {
     return errors.notFound(event, 'No cost data found for the specified date range and filters')
-  }
-  
-  // Check if any accounts were found when filters are applied
-  // If filters were applied but no accounts found, return early with a clear message
-  if (filteredAccountIds !== undefined && filteredAccountIds.length === 0) {
-    return errors.notFound(event, 'No accounts found matching the specified filters')
   }
   
   // ================================
@@ -765,13 +768,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   const metadata = {
     cache: {
       costData: {
-        hit: !!costCacheInfo,
+        hit: costCacheHit,
         age: costCacheInfo?.age || null,
         ttl: costCacheInfo?.ttl || null,
         hitRate: `${costCacheStats.hitRate.toFixed(1)}%`
       },
       accountData: includeBudget ? {
-        hit: !!accountCacheInfo,
+        hit: accountCacheHit,
         age: accountCacheInfo?.age || null,
         ttl: accountCacheInfo?.ttl || null,
         hitRate: `${accountCacheStats.hitRate.toFixed(1)}%`

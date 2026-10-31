@@ -3,11 +3,10 @@
  * Invalidate Entra ID cache entries
  */
 
-import { defineEventHandler, readBody } from 'h3'
-import { createError } from 'h3'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { clearEntraCache } from '../../../utils/entra/graph-client'
 import { clearUserCache } from '../../../utils/entra/user-cache'
-import { accountCache, CacheTags } from '../../../utils/cache-manager'
+import { accountCache } from '../../../utils/cache-manager'
 import { validateEntraConfig } from '../../../utils/entra/config'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { requireScope } from '../../../middleware/entra-auth'
@@ -104,7 +103,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
     
     // Parse request body
     const body = await readBody<InvalidateRequest>(event)
-    const { pattern = 'all', accountId, groupId } = body
+    // The body is optional; an empty POST clears everything.
+    const { pattern = 'all', accountId, groupId } = body || {}
     
     logger.info(`Invalidating Entra cache with pattern: ${pattern}`)
     
@@ -129,6 +129,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
       // Invalidate specific account cache
       const cacheKeys = [
         `entra:groups:${accountId}`,
+        `entra:groups:${accountId}:no-dist`,
         `entra:groups:dist-${accountId}`,
         `entra:owners:${accountId}`
       ]

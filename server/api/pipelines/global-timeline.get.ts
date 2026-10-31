@@ -1,7 +1,8 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { requirePermission } from '../../utils/user-roles'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { getOrganizationTimeline } from '../../utils/athena-pipeline-queries'
+import { getOrganizationTimeline, clampIntParam } from '../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/global-timeline', 'GET', {
@@ -74,15 +75,17 @@ registerEndpoint('/api/pipelines/global-timeline', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const query = getQuery(event)
 
   // Parse optional parameters
-  const daysParam = query.days ? parseInt(query.days as string, 10) : 30
-  const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
+  const days = clampIntParam(query.days, 30, 1, 90)
 
-  const limitParam = query.limit ? parseInt(query.limit as string, 10) : 200
-  const limit = Math.min(Math.max(limitParam, 10), 500) // Clamp between 10 and 500
+  // The repository pages request 2000 runs and group them client-side, so the
+  // cap has to cover that or repositories silently drop out of the list
+  const limit = clampIntParam(query.limit, 200, 10, 2000)
 
   // Pipeline data is ALWAYS stored in GovCloud
   const environment = 'govcloud' as const

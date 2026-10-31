@@ -150,7 +150,7 @@ registerEndpoint('/api/costs/historical', 'GET', {
       schema: { type: 'array', items: { type: 'string' } },
       style: 'form',
       explode: true,
-      description: 'One or more tag values matched with OR semantics.'
+      description: 'One or more tag values matched with OR semantics. Use __untagged__ to include costs without the tag.'
     }
   ],
   responses: {
@@ -326,6 +326,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Generate cache key for historical data
   const cacheKey = `costs:historical:${JSON.stringify({
     period,
+    // Relative periods move with the clock; key on the resolved window too.
+    startDate,
+    endDate,
     granularity,
     environment,
     groupByParam,
@@ -401,6 +404,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Get historical cost data with caching
+  // Read before getOrSet: afterwards the entry always exists.
+  const cacheHit = costCache.isFresh(cacheKey)
   const historicalData = await costCache.getOrSet(
     cacheKey,
     async () => {
@@ -533,7 +538,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const metadata = {
     cache: {
-      hit: !!cacheInfo,
+      hit: cacheHit,
       age: cacheInfo?.age || null,
       ttl: cacheInfo?.ttl || null,
       key: cacheKey,

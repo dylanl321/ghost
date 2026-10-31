@@ -37,16 +37,6 @@ definePageMeta({
   description: 'View all users with access to this AWS account'
 })
 
-// Breadcrumb items
-const breadcrumbItems = computed(() => [
-  { label: 'Accounts', to: '/account/explorer' },
-  { 
-    label: enhancedAccountInfo.value?.displayName || `Account ${accountId.value}`, 
-    to: `/account/${accountId.value}` 
-  },
-  { label: 'Users', current: true, icon: 'i-heroicons-users' }
-])
-
 // Fetch users for the account
 const fetchUsers = async () => {
   if (!accountId.value) return
@@ -119,7 +109,7 @@ function buildExportConfig(): DataExportConfig {
     title: `${accountName} - User Access List`,
     subtitle: `AWS Account ${accountId.value}`,
     metadata: {
-      generatedBy: user.value?.claims?.name || user.value?.claims?.email || 'GHOST',
+      generatedBy: String(user.value?.claims?.name || user.value?.claims?.email || 'GHOST'),
       timestamp: new Date().toISOString(),
       scope: 'single-account' as const,
       selectedAccounts: [accountId.value],
@@ -201,7 +191,10 @@ const exportMenuItems = computed(() => [
 
 // Initialize data
 onMounted(async () => {
-  await enclaveStore.initialize()
+  // Enclave data only labels accounts; the user list still loads without it
+  await enclaveStore.initialize().catch((err) => {
+    logger.error('Failed to load enclave data:', err)
+  })
   await initialize()
   await fetchUsers()
   // Fetch IDC sessions in parallel (don't block on this)
@@ -213,13 +206,11 @@ onMounted(async () => {
   <div class="space-y-6">
     <!-- Enhanced Header with Two-Column Layout -->
     <div class="space-y-4">
-      <Breadcrumb :items="breadcrumbItems" />
-      
       <!-- Compact Account Header Card -->
       <UCard v-if="enhancedAccountInfo">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
           <!-- Left Column: Account Info -->
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-4 min-w-0">
             <div class="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
               <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-primary-400" />
             </div>
@@ -259,7 +250,7 @@ onMounted(async () => {
           </div>
           
           <!-- Right Column: Navigation Actions -->
-          <div class="flex items-center justify-end gap-3">
+          <div class="flex flex-wrap items-center justify-start lg:justify-end gap-3 min-w-0">
             <UDropdown
               :items="exportMenuItems"
               :popper="{ placement: 'bottom-end' }"

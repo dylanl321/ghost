@@ -7,11 +7,8 @@
  */
 
 import { defineEventHandler, setResponseHeaders, getQuery } from 'h3'
-import { organizationCache, CacheKeys, CacheTags } from '../../utils/cache-manager'
-import { loadSecuritySummary, saveSecuritySummary } from '../../utils/security-summary-store'
-import { buildSecuritySummaryViaAthena } from '../../utils/security-hub-athena'
+import { getOrgSecuritySummary } from '../../utils/security-summary-store'
 import { logger } from '../../utils/logger'
-import type { OrgSecuritySummary } from '../../../shared/types/security-dashboard'
 
 export default defineEventHandler(async (event) => {
   setResponseHeaders(event, {
@@ -28,46 +25,29 @@ export default defineEventHandler(async (event) => {
     res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`)
   }
 
+  // The client may close the page mid-refresh; the refresh still finishes
+  // and is saved, but nothing more is written to the closed socket.
+  let closed = false
+  event.node.req.on('close', () => { closed = true })
+  const sendIfOpen = (eventType: string, data: any) => {
+    if (!closed) send(eventType, data)
+  }
+
   try {
-    const cacheKey = CacheKeys.securityOrgSummary()
-
-    if (!forceRefresh) {
-      // Check in-memory cache first
-      const cached = await organizationCache.get<OrgSecuritySummary>(cacheKey)
-      if (cached) {
-        send('progress', { stage: 'cache_hit', message: 'Loading cached results...', percent: 100 })
-        send('complete', { success: true, data: cached })
-        res.end()
-        return
-      }
-
-      // Check DynamoDB store
-      const stored = await loadSecuritySummary()
-      if (stored) {
-        await organizationCache.set(cacheKey, stored, { ttl: 300, tags: [CacheTags.SECURITY] })
-        send('progress', { stage: 'cache_hit', message: 'Loading pre-computed results...', percent: 100 })
-        send('complete', { success: true, data: stored })
-        res.end()
-        return
-      }
-    }
-
-    // Run Athena with progress streaming
-    const start = Date.now()
-    const result = await buildSecuritySummaryViaAthena((progress) => {
-      send('progress', progress)
+    const { summary, source } = await getOrgSecuritySummary({
+      forceRefresh,
+      onProgress: progress => sendIfOpen('progress', progress)
     })
 
-    // Save to DynamoDB and in-memory cache
-    send('progress', { stage: 'saving', message: 'Saving results...', percent: 95 })
-    await saveSecuritySummary(result, { durationMs: Date.now() - start })
-    await organizationCache.set(cacheKey, result, { ttl: 300, tags: [CacheTags.SECURITY] })
-
-    send('progress', { stage: 'complete', message: 'Security data loaded', percent: 100 })
-    send('complete', { success: true, data: result })
+    if (source !== 'computed') {
+      sendIfOpen('progress', { stage: 'cache_hit', message: 'Loading cached results...', percent: 100 })
+    } else {
+      sendIfOpen('progress', { stage: 'complete', message: 'Security data loaded', percent: 100 })
+    }
+    sendIfOpen('complete', { success: true, data: summary })
   } catch (err: any) {
     logger.error('[SecurityHub Stream] Fatal error', { error: err.message })
-    send('error', { message: err.message || 'Failed to load security data' })
+    sendIfOpen('error', { message: err.message || 'Failed to load security data' })
   }
 
   res.end()

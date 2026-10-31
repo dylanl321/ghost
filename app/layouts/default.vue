@@ -152,7 +152,7 @@ const handleMobileMenuToggle = () => {
 }
 
 const breadcrumbs = computed(() => {
-  const segments = route.path.split('/').filter(Boolean)
+  const segments = breadcrumbSegments(route.path)
 
   const crumbs = [{ label: 'Dashboard', to: '/' }]
 
@@ -180,7 +180,7 @@ const breadcrumbs = computed(() => {
 
     crumbs.push({
       label: seg.charAt(0).toUpperCase() + seg.slice(1),
-      to: '/' + segments.slice(0, i + 1).join('/'),
+      to: breadcrumbPath(segments, i + 1),
     })
   }
 

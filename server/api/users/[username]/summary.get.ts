@@ -7,6 +7,7 @@
 
 import { defineEventHandler } from 'h3'
 import { graphRequest } from '../../../utils/entra/graph-client'
+import { odataString } from '../../../utils/entra/config'
 import type { EntraUser } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
 
@@ -34,12 +35,16 @@ export default defineEventHandler(async (event) => {
         )
       } else {
         // Search for user by display name or UPN starting with username
-        const searchResponse = await graphRequest<{ value: EntraUser[] }>(
-          event,
-          `/users?$filter=startsWith(userPrincipalName,'${username}')&$select=id,displayName,mail,userPrincipalName&$top=1`
-        )
+        // The username comes from the URL: quote it for OData and encode the
+        // query so a quote or ampersand cannot change the Graph request.
+        const query = new URLSearchParams({
+          $filter: `startsWith(userPrincipalName,${odataString(username)})`,
+          $select: 'id,displayName,mail,userPrincipalName',
+          $top: '1'
+        })
+        const searchResponse = await graphRequest<{ value: EntraUser[] }>(event, `/users?${query}`)
         if (searchResponse.value && searchResponse.value.length > 0) {
-          graphUser = searchResponse.value[0]
+          graphUser = searchResponse.value[0] ?? null
         }
       }
     } catch (graphError: any) {

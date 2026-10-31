@@ -67,7 +67,7 @@
               </p>
               <div class="mt-3 flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
                 <UIcon name="i-heroicons-moon" class="w-4 h-4" />
-                <span>Theme: {{ currentTheme }}</span>
+                <span>Theme: <ClientOnly fallback="...">{{ currentTheme }}</ClientOnly></span>
               </div>
             </div>
           </div>
@@ -183,11 +183,11 @@ const { recentAccounts } = useRecentAccounts()
 const favoriteCount = computed(() => favorites.value?.length || 0)
 const recentCount = computed(() => recentAccounts.value?.length || 0)
 
+// The theme choice lives in the browser, so the label renders client-only (see template)
+const colorMode = useColorMode()
 const currentTheme = computed(() => {
-  if (import.meta.client) {
-    return document.documentElement.classList.contains('dark') ? 'Dark' : 'Light'
-  }
-  return 'System'
+  if (colorMode.preference === 'system') return 'System'
+  return colorMode.value === 'dark' ? 'Dark' : 'Light'
 })
 
 const lastLoginFormatted = computed(() => {

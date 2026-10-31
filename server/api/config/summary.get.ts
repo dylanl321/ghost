@@ -16,8 +16,14 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
-import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
+import { filterAccounts } from '../../utils/account-filters'
+import {
+  configAggregatorRegion,
+  hasAccountCriteria,
+  parseConfigEnvironment,
+  partitionAccountId,
+  resolveConfigAccountFilters
+} from '../../utils/config-request'
 import { getAggregatorName } from '../../utils/config-service'
 import {
   listAggregateResources,
@@ -352,8 +358,7 @@ async function queryResourceType(
             resourceType: r.ResourceType!.split('::').pop()!, // Simplify type name (AWS::EC2::Instance -> Instance)
             accountId: r.SourceAccountId!,
             region: r.SourceRegion!,
-            resourceName: r.ResourceName,
-            creationTime: r.ResourceCreationTime ? new Date(r.ResourceCreationTime) : undefined
+            resourceName: r.ResourceName
           }))
           
           allResources.push(...resourceDetails)
@@ -543,10 +548,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     const query = getQuery(event)
     
     // Parse environment first
-    const environment = (query.environment as AWSEnvironmentType) || 'commercial'
+    const environment = parseConfigEnvironment(query.environment)
+    if (!environment) {
+      return errors.badRequest(event, 'environment must be commercial or govcloud')
+    }
     const includeDetails = query.includeDetails === 'true'
     const scanMode = (query.scanMode as 'quick' | 'standard' | 'full') || 'standard'
-    const maxResourcesPerType = parseInt(query.maxResourcesPerType as string) || 1000
+    const maxResourcesPerType = Math.min(Math.max(parseInt(query.maxResourcesPerType as string) || 1000, 1), 10000)
     const region = query.region as string | undefined
     
     // Create cache key for this specific query
@@ -561,59 +569,13 @@ export default defineEventHandler(handleAsync(async (event) => {
       return sendSuccess(event, cached, { message: 'Resource summary (cached)', fromCache: true })
     }
     
-    // Parse account filters
-    const { parseAccountFilters } = await import('../../utils/account-filters')
-    const accountFilters = parseAccountFilters(query)
-    
-    // Store resolved account objects for name mapping
-    const resolvedAccountObjects: any[] = []
-    
-    // Resolve account identifiers if provided
-    if (accountFilters.accountIds && accountFilters.accountIds.length > 0) {
-      const resolvedAccountIds: string[] = []
-      const resolveErrors: string[] = []
-      
-      for (const identifier of accountFilters.accountIds) {
-        try {
-          const lookupResult = await lookupAccountOptimized(event, identifier, {
-            includeDecommissioned: accountFilters.includeDecommissioned || false
-          })
-          
-          resolvedAccountObjects.push(lookupResult.account)
-          
-          // Choose the appropriate account ID based on the environment
-          let fullAccountId: string | undefined
-          if (environment === 'govcloud') {
-            fullAccountId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-          } else {
-            fullAccountId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-          }
-          
-          if (fullAccountId) {
-            resolvedAccountIds.push(fullAccountId)
-          } else {
-            resolveErrors.push(`Account found for identifier ${identifier} but missing ${environment} account ID`)
-          }
-        } catch (error) {
-          resolveErrors.push(`No account found for identifier: ${identifier}`)
-        }
-      }
-      
-      if (resolveErrors.length > 0) {
-        return errors.validationError(event, resolveErrors)
-      }
-      
-      accountFilters.accountIds = resolvedAccountIds
-    }
-    
-    // Validate filters
-    const { validateAccountFilters } = await import('../../utils/account-filters')
-    const filterErrors = validateAccountFilters(accountFilters)
-    
+    // Resolve account identifiers (request IDs, emails, names) to partition account IDs
+    const { filters: accountFilters, resolvedAccounts: resolvedAccountObjects, errors: filterErrors } =
+      await resolveConfigAccountFilters(event, query, environment)
     if (filterErrors.length > 0) {
       return errors.validationError(event, filterErrors)
     }
-    
+
     // Get aggregator name
     const aggregatorName = getAggregatorName(environment)
     
@@ -622,22 +584,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Filter accounts if needed
     const filteredAccounts = await filterAccounts(accountFilters)
     
-    // Extract the appropriate account IDs based on the environment
-    const targetAccountIds = filteredAccounts.map(acc => {
-      if (environment === 'govcloud') {
-        return acc.govCloudAccountId || acc.awsGovCloudAccountID || acc.govId
-      } else {
-        return acc.accountId || acc.awsStandardAccountID || acc.id
-      }
-    }).filter(Boolean)
-    
+    const targetAccountIds = filteredAccounts
+      .map(acc => partitionAccountId(acc, environment))
+      .filter((id): id is string => Boolean(id))
+
     logger.debug(`[Config Summary API] Found ${targetAccountIds.length} accounts after filtering`)
     
-    // Get default region for environment
-    const targetRegion = region || 
-      (environment === 'commercial' 
-        ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
-        : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+    // The aggregator is called in its home region; `region` filters resources
+    const targetRegion = configAggregatorRegion(environment)
     
     // Determine which resource types to query based on scan mode
     let resourcesToQuery: string[] = []
@@ -695,7 +649,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     // Post-filter resources if we queried org-wide but need specific LOB/department filtering
     let filteredResources = allResources
-    if (!baseFilter.accountIds && targetAccountIds.length > 0) {
+    // A LOB/department filter that matches no accounts must return nothing, not the whole org
+    if (!baseFilter.accountIds && hasAccountCriteria(accountFilters)) {
       const targetAccountIdSet = new Set(targetAccountIds)
       filteredResources = allResources.filter(r => targetAccountIdSet.has(r.accountId))
       logger.info(`[Config Summary API] Post-filtered to ${filteredResources.length} resources for target accounts`)

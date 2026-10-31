@@ -24,6 +24,8 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const initialized = ref(false)
 const authError = ref(false)
+// The timezone auto-fix runs at most once per page load; forced reloads would otherwise repeat the PATCH
+let timezoneAutoFixAttempted = false
 
 /**
  * Cache preferences to localStorage for resilience
@@ -158,7 +160,8 @@ export function useUserPreferences() {
 
       // Auto-fix timezone if it's still the server default (EST) and doesn't match browser
       // This handles users who logged in before this fix was deployed
-      if (preferences.value.timezone === 'America/New_York' && browserTz !== 'America/New_York') {
+      if (import.meta.client && !timezoneAutoFixAttempted && preferences.value.timezone === 'America/New_York' && browserTz !== 'America/New_York') {
+        timezoneAutoFixAttempted = true
         logger.info('Auto-updating timezone from server default (EST) to browser timezone:', browserTz)
         // Update silently in background, don't wait for it
         updateTimezone(browserTz).catch(err => {

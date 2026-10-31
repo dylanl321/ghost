@@ -25,6 +25,10 @@ interface QueryTemplate {
   tags: string[]
 }
 
+const LARGE_INSTANCE_TYPES = ['m5', 'm6i', 'm7i', 'c5', 'c6i', 'c7i', 'r5', 'r6i', 'r7i']
+  .flatMap(family => ['4xlarge', '8xlarge', '12xlarge', '16xlarge', '24xlarge'].map(size => `'${family}.${size}'`))
+  .join(', ')
+
 // Pre-built query templates
 const QUERY_TEMPLATES: QueryTemplate[] = [
   // Security templates
@@ -84,9 +88,9 @@ WHERE
   {
     id: 'security-iam-inactive',
     category: 'security',
-    name: 'Inactive IAM Users',
-    description: 'Find IAM users who haven\'t logged in recently',
-    prompt: 'Find IAM users with old access keys',
+    name: 'IAM Users',
+    description: 'List IAM users to review for unused access (Config does not record last sign-in)',
+    prompt: 'List IAM users',
     queryType: 'config',
     generatedQuery: `SELECT
   resourceId,
@@ -104,7 +108,7 @@ WHERE
     category: 'cost',
     name: 'Stopped Instances',
     description: 'Find EC2 instances in stopped state (may be wasting money on EBS)',
-    prompt: 'Find stopped EC2 instances older than 30 days',
+    prompt: 'Find stopped EC2 instances',
     queryType: 'config',
     generatedQuery: `SELECT
   resourceId,
@@ -150,7 +154,7 @@ WHERE
   configuration.size
 WHERE
   resourceType = 'AWS::EC2::Volume'
-  AND configuration.attachments IS NULL`,
+  AND configuration.state.value = 'available'`,
     tags: ['cost', 'storage', 'cleanup']
   },
 
@@ -158,9 +162,9 @@ WHERE
   {
     id: 'compliance-no-tags',
     category: 'compliance',
-    name: 'Untagged Resources',
-    description: 'Find resources missing required tags',
-    prompt: 'Find EC2 instances without Environment tag',
+    name: 'Instance Tags',
+    description: 'List EC2 instances with their tags to review for missing required tags',
+    prompt: 'List EC2 instances with their tags',
     queryType: 'config',
     generatedQuery: `SELECT
   resourceId,
@@ -170,23 +174,14 @@ WHERE
   tags
 WHERE
   resourceType = 'AWS::EC2::Instance'`,
-    variables: [
-      {
-        name: 'tagKey',
-        description: 'Tag key to check for',
-        type: 'string',
-        required: false,
-        default: 'Environment'
-      }
-    ],
     tags: ['compliance', 'tagging', 'governance']
   },
   {
     id: 'compliance-default-vpc',
     category: 'compliance',
-    name: 'Default VPC Resources',
-    description: 'Find resources using the default VPC',
-    prompt: 'Find instances in default VPC',
+    name: 'Instance VPCs',
+    description: 'List EC2 instances with their VPC to spot default-VPC usage',
+    prompt: 'List EC2 instances with their VPC',
     queryType: 'config',
     generatedQuery: `SELECT
   resourceId,
@@ -204,9 +199,11 @@ WHERE
     id: 'perf-large-instances',
     category: 'performance',
     name: 'Large Instance Types',
-    description: 'Find instances that may be oversized',
+    description: 'Find instances in common 4xlarge and larger sizes that may be oversized',
     prompt: 'Find large EC2 instances (4xlarge or bigger)',
     queryType: 'config',
+    // AWS Config only allows a trailing wildcard, so the old LIKE '%4xlarge%'
+    // was rejected outright. List the common large sizes explicitly.
     generatedQuery: `SELECT
   resourceId,
   resourceName,
@@ -215,13 +212,7 @@ WHERE
   configuration.instanceType
 WHERE
   resourceType = 'AWS::EC2::Instance'
-  AND (
-    configuration.instanceType LIKE '%4xlarge%'
-    OR configuration.instanceType LIKE '%8xlarge%'
-    OR configuration.instanceType LIKE '%12xlarge%'
-    OR configuration.instanceType LIKE '%16xlarge%'
-    OR configuration.instanceType LIKE '%24xlarge%'
-  )`,
+  AND configuration.instanceType IN (${LARGE_INSTANCE_TYPES})`,
     tags: ['performance', 'rightsizing', 'cost']
   },
 

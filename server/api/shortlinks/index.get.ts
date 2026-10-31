@@ -1,32 +1,31 @@
 import { listShortLinks } from '../../lib/shortlinks'
 import { logger } from '../../utils/logger'
+import { requireAdmin } from '../../utils/user-roles'
+import { shortLinkUrl } from '../../utils/short-link-url'
 
+// Lists every user's share links with their saved page state: admin only
+// (used by the admin Share Links panel).
 export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
+
   try {
     const query = getQuery(event)
-    
+    const limit = Math.min(Math.max(parseInt(query.limit as string) || 50, 1), 500)
+    const offset = Math.max(parseInt(query.offset as string) || 0, 0)
+
     const { links, total } = await listShortLinks({
-      limit: query.limit ? parseInt(query.limit as string) : 50,
-      offset: query.offset ? parseInt(query.offset as string) : 0,
-      createdBy: query.createdBy as string
+      limit,
+      offset,
+      createdBy: typeof query.createdBy === 'string' && query.createdBy ? query.createdBy : undefined
     })
-    
-    // Build full URLs
-    const host = getHeader(event, 'host') || 'localhost:3000'
-    const protocol = getHeader(event, 'x-forwarded-proto') || 'http'
-    
-    const linksWithUrls = links.map(link => ({
-      ...link,
-      shortUrl: `${protocol}://${host}/s/${link.shortCode}`
-    }))
-    
+
     return {
       success: true,
       data: {
-        links: linksWithUrls,
+        links: links.map(link => ({ ...link, shortUrl: shortLinkUrl(event, link.shortCode) })),
         total,
-        limit: query.limit ? parseInt(query.limit as string) : 50,
-        offset: query.offset ? parseInt(query.offset as string) : 0
+        limit,
+        offset
       }
     }
   } catch (error: any) {

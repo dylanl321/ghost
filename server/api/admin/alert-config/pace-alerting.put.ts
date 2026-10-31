@@ -4,125 +4,56 @@
  * Update the pace alerting configuration (admin only).
  */
 
-import { defineEventHandler, readBody, createError } from 'h3'
-import { requireAdmin } from '../../../utils/user-roles'
-import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { PaceAlertingConfig } from '#shared/types/budget-alert-config'
+import { defineEventHandler } from 'h3'
+import { updateGlobalConfigSection } from '../../../utils/alert-config-sections'
 
-interface PaceAlertingUpdateRequest {
-  severity_thresholds?: {
-    INFO?: number
-    WARNING?: number
-    CRITICAL?: number
-    ESCALATION?: number
-  }
-  minimum_overspend?: {
-    dollars?: number
-    percent_of_budget?: number
-  }
-  milestones?: Array<{
-    threshold: number
-    pace_ratio: number
-    level: string
-  }>
-}
-
-export default defineEventHandler(async (event) => {
-  // Require admin access
-  await requireAdmin(event)
-
-  try {
-    // Parse request body
-    const body = await readBody<PaceAlertingUpdateRequest>(event)
-
-    // Validate severity_thresholds order
-    if (body.severity_thresholds) {
-      const thresholds = body.severity_thresholds
-      const info = thresholds.INFO ?? 0
-      const warning = thresholds.WARNING ?? 8
-      const critical = thresholds.CRITICAL ?? 20
-      const escalation = thresholds.ESCALATION ?? 40
-
-      if (!(info <= warning && warning <= critical && critical <= escalation)) {
-        throw createError({
-          statusCode: 400,
-          message: 'Severity thresholds must be in ascending order: INFO <= WARNING <= CRITICAL <= ESCALATION'
-        })
+export default defineEventHandler(event => updateGlobalConfigSection(event, {
+  section: 'pace_alerting#main',
+  section_type: 'pace_alerting',
+  label: 'Pace alerting configuration',
+  rules: {
+    severity_thresholds: {
+      kind: 'object',
+      fields: {
+        INFO: { kind: 'number', min: 0 },
+        WARNING: { kind: 'number', min: 0 },
+        CRITICAL: { kind: 'number', min: 0 },
+        ESCALATION: { kind: 'number', min: 0 }
       }
-    }
-
-    // Validate minimum_overspend
-    if (body.minimum_overspend) {
-      if (body.minimum_overspend.dollars !== undefined && body.minimum_overspend.dollars < 0) {
-        throw createError({
-          statusCode: 400,
-          message: 'Minimum overspend dollars must be non-negative'
-        })
+    },
+    minimum_overspend: {
+      kind: 'object',
+      fields: {
+        dollars: { kind: 'number', min: 0 },
+        percent_of_budget: { kind: 'number', min: 0 }
       }
-      if (body.minimum_overspend.percent_of_budget !== undefined && body.minimum_overspend.percent_of_budget < 0) {
-        throw createError({
-          statusCode: 400,
-          message: 'Minimum overspend percent must be non-negative'
-        })
-      }
-    }
-
-    // Validate milestones
-    if (body.milestones) {
-      const validLevels = ['INFO', 'WARNING', 'CRITICAL', 'ESCALATION']
-      for (const milestone of body.milestones) {
-        if (milestone.threshold < 0 || milestone.threshold > 100) {
-          throw createError({
-            statusCode: 400,
-            message: 'Milestone threshold must be between 0 and 100'
-          })
-        }
-        if (milestone.pace_ratio < 1) {
-          throw createError({
-            statusCode: 400,
-            message: 'Milestone pace ratio must be at least 1'
-          })
-        }
-        if (!validLevels.includes(milestone.level)) {
-          throw createError({
-            statusCode: 400,
-            message: `Invalid milestone level: ${milestone.level}. Must be one of: ${validLevels.join(', ')}`
-          })
+    },
+    milestones: {
+      kind: 'array',
+      maxItems: 20,
+      item: {
+        kind: 'object',
+        fields: {
+          threshold: { kind: 'number', min: 0, max: 100 },
+          pace_ratio: { kind: 'number', min: 1 },
+          level: { kind: 'string', pattern: /^(INFO|WARNING|CRITICAL|ESCALATION)$/ }
         }
       }
     }
-
-    // Get username for audit trail
-    const auth = event.context.auth
-    const user = auth?.user
-    const username = user?.email || user?.preferred_username || 'unknown'
-
-    // Get existing config
-    const existing = await getConfigItem('GLOBAL', 'pace_alerting#main') as PaceAlertingConfig | null
-
-    // Merge with existing
-    const updated: PaceAlertingConfig = {
-      ...existing,
-      ...body,
-      config_scope: 'GLOBAL',
-      config_section: 'pace_alerting#main',
-      section_type: 'pace_alerting'
+  },
+  // Ordered on the merged thresholds, so a partial update is checked against the stored ones
+  validate: merged => {
+    const t = merged.severity_thresholds || {}
+    const info = t.INFO ?? 0
+    const warning = t.WARNING ?? 8
+    const critical = t.CRITICAL ?? 20
+    const escalation = t.ESCALATION ?? 40
+    if (!(info <= warning && warning <= critical && critical <= escalation)) {
+      return 'Severity thresholds must be in ascending order: INFO <= WARNING <= CRITICAL <= ESCALATION'
     }
-
-    // Save the updated config
-    await updateConfigItem(updated, username)
-
-    return {
-      success: true,
-      data: updated,
-      message: 'Pace alerting configuration updated successfully'
+    if ((merged.milestones || []).some((m: any) => m.threshold === undefined || m.pace_ratio === undefined || m.level === undefined)) {
+      return 'Each milestone needs threshold, pace_ratio and level'
     }
-  } catch (error: any) {
-    logger.error('Error updating pace alerting config:', error)
-
-    throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.message || 'Failed to update pace alerting configuration'
-    })
+    return undefined
   }
-})
+}))

@@ -1,7 +1,7 @@
 import { sendPaginated, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { getErrorDetailsForAccount, paginateResults } from '../../utils/athena-pipeline-queries'
+import { getErrorDetailsForAccount, paginateResults, clampIntParam } from '../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/account-errors', 'GET', {
@@ -125,10 +125,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Parse optional parameters
-  const daysParam = query.days ? parseInt(query.days as string, 10) : 7
-  const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
-  const page = query.page ? parseInt(query.page as string, 10) : 1
-  const limit = query.limit ? parseInt(query.limit as string, 10) : 25
+  const days = clampIntParam(query.days, 7, 1, 90)
+  const page = clampIntParam(query.page, 1, 1, 100000)
+  const limit = clampIntParam(query.limit, 25, 1, 500)
   const category = query.category as string | undefined
   const severity = query.severity as string | undefined
   // Pipeline data is ALWAYS stored in GovCloud - ignore environment parameter

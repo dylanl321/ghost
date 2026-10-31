@@ -429,7 +429,7 @@
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Last Run</label>
               <div class="mt-1 text-sm text-gray-900 dark:text-white">
-                {{ selectedReport.lastRunTime ? formatDate(selectedReport.lastRunTime) : 'Never' }}
+                {{ selectedReport.lastRunTime ? formatShortDateTime(selectedReport.lastRunTime) : 'Never' }}
               </div>
             </div>
           </div>
@@ -898,17 +898,7 @@ async function resumeAllPaused() {
   resumingAll.value = false
 }
 
-// Date formatting helpers
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatShortDateTime } = useDateFormatter()
 
 function formatDateInTimezone(dateString: string, timezone: string): string {
   const date = new Date(dateString)
@@ -920,30 +910,6 @@ function formatDateInTimezone(dateString: string, timezone: string): string {
     hour12: true,
     timeZone: timezone,
     timeZoneName: 'short'
-  })
-}
-
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 0) {
-    const absSeconds = Math.abs(seconds)
-    if (absSeconds < 3600) return `in ${Math.floor(absSeconds / 60)}m`
-    if (absSeconds < 86400) return `in ${Math.floor(absSeconds / 3600)}h`
-    if (absSeconds < 604800) return `in ${Math.floor(absSeconds / 86400)}d`
-  }
-
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
   })
 }
 

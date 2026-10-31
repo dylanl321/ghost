@@ -224,7 +224,8 @@ export default defineEventHandler(handleAsync(async (event) => {
             break
           case 'count':
           default:
-            comparison = b.count - a.count // Default: sort by count descending
+            // Ascending here; the default order=desc below flips it to most-common first.
+            comparison = a.count - b.count
             break
         }
 

@@ -26,6 +26,7 @@ import process from 'process'
 import { getAccountsTableName } from '../../utils/accounts-consolidated'
 import { getDynamoDBConfigDiagnostic } from '../../lib/dynamodb-config'
 import { logger } from '../../utils/logger'
+import { requireAdmin } from '../../utils/user-roles'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/health/ready', 'GET', {
@@ -361,7 +362,7 @@ function evaluateDependencyHealth(
     healthData.warnings.push(...warnings)
     // Never downgrade an existing unhealthy status back to degraded.
     if (healthData.status !== 'unhealthy') {
-      healthData.status = 'degraded'
+      degrade(healthData, 'degraded')
     }
   }
 }
@@ -394,7 +395,17 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`
 }
 
+/** Lower the overall status, never raising it back (unhealthy stays unhealthy). */
+function degrade(healthData: any, status: 'degraded' | 'unhealthy'): void {
+  if (status === 'unhealthy' || healthData.status === 'healthy') {
+    healthData.status = status
+  }
+}
+
 export default defineEventHandler(handleAsync(async (event) => {
+  // Exposes caller ARNs, account IDs and AWS error text: admin only (the admin System page uses it)
+  await requireAdmin(event)
+
   const config = getAWSConfig()
   const uptime = process.uptime()
   const memUsage = process.memoryUsage()
@@ -441,12 +452,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Add warnings for system health
   if (healthData.system.memory.percentage > 80) {
     healthData.warnings.push(`High memory usage: ${healthData.system.memory.percentage}%`)
-    healthData.status = 'degraded'
+    degrade(healthData, 'degraded')
   }
 
   if (healthData.system.cpu.loadAverage[0] > healthData.system.cpu.cores) {
     healthData.warnings.push(`High CPU load: ${healthData.system.cpu.loadAverage[0].toFixed(2)}`)
-    healthData.status = 'degraded'
+    degrade(healthData, 'degraded')
   }
 
   // Always perform comprehensive AWS checks for this endpoint
@@ -459,10 +470,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     if (healthData.aws.commercial.identity?.status === 'expired') {
       healthData.warnings.push('Commercial AWS credentials expired')
-      healthData.status = 'unhealthy'
+      degrade(healthData, 'unhealthy')
     } else if (healthData.aws.commercial.identity?.status === 'error') {
       healthData.warnings.push('Commercial AWS credentials error')
-      healthData.status = 'degraded'
+      degrade(healthData, 'degraded')
     } else {
       evaluateDependencyHealth(healthData, 'commercial', healthData.aws.commercial)
     }
@@ -475,10 +486,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     if (healthData.aws.govcloud.identity?.status === 'expired') {
       healthData.warnings.push('GovCloud AWS credentials expired')
-      healthData.status = 'unhealthy'
+      degrade(healthData, 'unhealthy')
     } else if (healthData.aws.govcloud.identity?.status === 'error') {
       healthData.warnings.push('GovCloud AWS credentials error')
-      healthData.status = 'degraded'
+      degrade(healthData, 'degraded')
     } else {
       evaluateDependencyHealth(healthData, 'govcloud', healthData.aws.govcloud)
     }
@@ -518,9 +529,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       healthData.warnings.push(
         `DynamoDB config is using env defaults for ${dynamodbConfig.missingKeyCount} missing secret key(s): ${dynamodbConfig.missingKeys.join(', ')}`
       )
-      if (healthData.status === 'healthy') {
-        healthData.status = 'degraded'
-      }
+      degrade(healthData, 'degraded')
     }
   } catch (error) {
     logger.warn('Could not retrieve DynamoDB config diagnostic:', error)
@@ -529,7 +538,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Add warnings if no environments are configured
   if (!config.commercial && !config.govcloud) {
     healthData.warnings.push('No AWS environments configured')
-    healthData.status = 'unhealthy'
+    degrade(healthData, 'unhealthy')
   }
 
   return sendSuccess(event, healthData, {

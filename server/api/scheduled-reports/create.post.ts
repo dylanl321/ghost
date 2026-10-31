@@ -7,7 +7,9 @@ import type { CreateReportRequest } from '../../../shared/types/scheduled-report
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin, getUserEmail } from '../../utils/user-roles'
+import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 import { logger } from '../../utils/logger'
+import { assertCanCreateReport, assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -30,6 +32,9 @@ export default defineEventHandler(async (event) => {
 
     // Parse request body
     const body = await readBody<CreateReportRequest>(event)
+    if (!body || typeof body !== 'object') {
+      throw createError({ statusCode: 400, message: 'Request body is required' })
+    }
 
     // Validation
     if (!body.reportName || body.reportName.trim() === '') {
@@ -39,11 +44,16 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    if (!body.recipients || body.recipients.length === 0) {
+    if (!Array.isArray(body.recipients) || body.recipients.length === 0) {
       throw createError({
         statusCode: 400,
         message: 'At least one recipient is required'
       })
+    }
+
+    const scheduleErrors = getScheduleErrors(body.schedule)
+    if (scheduleErrors.length > 0) {
+      throw createError({ statusCode: 400, message: scheduleErrors.join('; ') })
     }
 
     // Validate email addresses
@@ -64,8 +74,9 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Allow all authenticated users to create reports with any recipients
-    const isAdmin = true
+    const isAdmin = await isUserAdmin(event)
+    await assertSelfOnlyRecipients(event, body.recipients)
+    await assertCanCreateReport(event)
 
     // Create the report
     const report = await createReport(body, userEmail, isAdmin)

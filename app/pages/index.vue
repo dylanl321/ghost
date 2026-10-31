@@ -676,7 +676,7 @@ async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
     const result = await response.json()
 
     if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch overview')
+      throw new Error(apiErrorMessage(result, 'Failed to fetch overview'))
     }
 
     orgOverview.value = result

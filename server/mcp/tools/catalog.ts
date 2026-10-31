@@ -20,8 +20,8 @@ import { queryEntraUsers } from '../../utils/entra-users-data'
 import { queryConfigResources } from '../../utils/aws-config-data'
 import { querySecurityHubFindings } from '../../utils/security-hub-data'
 import { queryCloudTrailEvents } from '../../utils/cloudtrail-data'
-import { buildAccountSecurityViaAthena, buildSecuritySummaryViaAthena } from '../../utils/security-hub-athena'
-import { loadSecuritySummary } from '../../utils/security-summary-store'
+import { buildAccountSecurityViaAthena } from '../../utils/security-hub-athena'
+import { getOrgSecuritySummary } from '../../utils/security-summary-store'
 import { getAccountPatchCompliance, getInstancePatchStatus } from '../../utils/ssm-patch-compliance'
 import { analyzeBucketPolicy } from '../../utils/s3-policy-analyzer'
 import {
@@ -545,7 +545,8 @@ export function registerCatalogTools(
         projectionReason,
         currentMonthRemainderForecast: projectionsAvailable ? forecastTotal(currentProjectionValue, args.mode) : undefined,
         futureMonthsForecast: projectionsAvailable ? futureProjectionValue ? forecastTotal(futureProjectionValue, args.mode) : 0 : undefined,
-        dayOfMonth: today.getUTCDate()
+        // Month-to-date spend ends before today, so it covers one day fewer than the date.
+        dayOfMonth: today.getUTCDate() - 1
       })
       return toolSuccess({ accounts: accounts.dataset, services: services.dataset, dashboard }, 'Cost dashboard data loaded.', 'AWS Cost Explorer and GHOST account budgets', {
         resolvedScope: costScopeMetadata(scope),
@@ -985,7 +986,7 @@ export function registerCatalogTools(
       if (account && !operationalId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
       const result = args.account_id
         ? await buildAccountSecurityViaAthena(operationalId!, accountDisplayName(account))
-        : await loadSecuritySummary() || await buildSecuritySummaryViaAthena()
+        : (await getOrgSecuritySummary()).summary
       return toolSuccess(result, args.account_id ? 'Account security summary loaded.' : 'Organization security summary loaded.', 'AWS Security Hub and Athena')
     }
   })

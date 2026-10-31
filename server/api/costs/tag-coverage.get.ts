@@ -116,7 +116,7 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                 type: 'object',
                 properties: {
                   tagKey: { type: 'string' },
-                  costMetric: { type: 'string', enum: ['NetUnblendedCost'] },
+                  costMetric: { type: 'string', enum: ['UnblendedCost'] },
                   accounts: {
                     type: 'array',
                     items: {
@@ -233,9 +233,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   const { startDate, endDate } = dateRange
-  // Match the Cost Explorer console's default net metric so discounts and
-  // credits stay attached to the same tag distribution users validate there.
-  const costMetric = 'NetUnblendedCost' as const
+  // UnblendedCost, the Cost Explorer console default and the metric every other
+  // cost view and drill-down uses, so a tag value totals the same everywhere.
+  const costMetric = 'UnblendedCost' as const
   const includeValues = query.includeValues === 'true' || query.includeValues === true
   const includeAccounts = query.includeAccounts !== 'false' && query.includeAccounts !== false
   const valueGroupKey = typeof query.valueGroupKey === 'string' ? query.valueGroupKey : undefined
@@ -287,6 +287,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
+  // Read before getOrSet: afterwards the entry always exists.
+  const cacheHit = costCache.isFresh(cacheKey)
   const result = await costCache.getOrSet(
     cacheKey,
     async () => {
@@ -298,7 +300,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         startDate,
         endDate,
         granularity: 'MONTHLY',
-        metrics: ['UnblendedCost', costMetric],
+        metrics: [costMetric],
         groupBy: [
           { type: 'DIMENSION', key: 'LINKED_ACCOUNT' },
           { type: 'TAG', key: tagKey }
@@ -311,7 +313,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             startDate,
             endDate,
             granularity: 'MONTHLY',
-            metrics: ['UnblendedCost', costMetric],
+            metrics: [costMetric],
             groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }],
             filter: accountFilter
           }, proformaAccountId, masterAccountId, costMetric)
@@ -367,7 +369,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   return sendSuccess(event, shapeTagCoverageData(result, { includeAccounts, valueGroupKey }), {
     cache: {
-      hit: !!cacheInfo,
+      hit: cacheHit,
       age: cacheInfo?.age || null,
       ttl: cacheInfo?.ttl || null,
       hitRate: `${cacheStats.hitRate.toFixed(1)}%`

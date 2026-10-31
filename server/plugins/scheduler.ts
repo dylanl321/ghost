@@ -70,8 +70,9 @@ export default defineNitroPlugin(async (nitroApp) => {
     mcpUsageAggregateJob = null
   }
 
-  // Run every minute to check for due reports
-  schedulerJob = new Cron('* * * * *', async () => {
+  // Run every minute to check for due reports. protect: a tick is skipped
+  // while the previous one is still sending, instead of running alongside it.
+  schedulerJob = new Cron('* * * * *', { protect: true }, async () => {
     const start = performance.now()
     markJobRunning('report-scheduler')
     try {
@@ -145,14 +146,13 @@ export default defineNitroPlugin(async (nitroApp) => {
   logger.info('Scheduled reports scheduler initialized (running every minute)')
 
   // Nightly security summary pre-computation via Athena (3 AM UTC)
-  securitySummaryJob = new Cron('0 3 * * *', async () => {
+  securitySummaryJob = new Cron('0 3 * * *', { protect: true }, async () => {
     const today = new Date().toISOString().split('T')[0]
     const start = performance.now()
     markJobRunning('security-summary-nightly')
     try {
       const locked = await claimExecutionLock('security-summary-nightly', today)
       if (!locked) {
-        markJobComplete('security-summary-nightly')
         return // Another container is handling it
       }
 
@@ -161,20 +161,17 @@ export default defineNitroPlugin(async (nitroApp) => {
       const meta = await getSecuritySummaryMetadata()
       if (meta && meta.ageMinutes < 20 * 60) {
         logger.info('[SecurityScheduler] Summary already fresh, skipping')
-        await releaseExecutionLock('security-summary-nightly', today)
         logJobCompletion('security-summary-nightly', 'success', performance.now() - start, { skipped: true })
-        markJobComplete('security-summary-nightly')
         return
       }
 
       logger.info('[SecurityScheduler] Starting nightly security summary computation...')
       const jobStart = Date.now()
-      const { buildSecuritySummaryViaAthena } = await import('../utils/security-hub-athena')
-      const { saveSecuritySummary } = await import('../utils/security-summary-store')
-      const result = await buildSecuritySummaryViaAthena()
-      await saveSecuritySummary(result, { durationMs: Date.now() - jobStart })
+      const { refreshSecuritySummary } = await import('../utils/security-summary-store')
+      await refreshSecuritySummary()
       logger.info(`[SecurityScheduler] Nightly summary complete in ${Date.now() - jobStart}ms`)
-      await releaseExecutionLock('security-summary-nightly', today)
+      // The lock is keyed by date, so it is left to expire: releasing it let a
+      // container whose cron fired a moment later claim it and run again.
       logJobCompletion('security-summary-nightly', 'success', performance.now() - start)
     } catch (error) {
       logger.error('[SecurityScheduler] Nightly security summary failed:', error)
@@ -188,23 +185,20 @@ export default defineNitroPlugin(async (nitroApp) => {
   logger.info('Nightly security summary scheduler initialized (3 AM UTC)')
 
   // Email digest delivery — every hour at :15
-  digestJob = new Cron('15 * * * *', async () => {
+  digestJob = new Cron('15 * * * *', { protect: true }, async () => {
     const hourKey = new Date().toISOString().substring(0, 13) // YYYY-MM-DDTHH
     const start = performance.now()
     markJobRunning('email-digest')
     try {
       const locked = await claimExecutionLock('email-digest', hourKey)
       if (!locked) {
-        markJobComplete('email-digest')
         return // Another container is handling it
       }
 
       const { getConfigValue } = await import('../utils/site-config')
       const digestEnabled = await getConfigValue<boolean>('notifications.digestEnabled')
       if (digestEnabled === false) {
-        await releaseExecutionLock('email-digest', hourKey)
         logJobCompletion('email-digest', 'success', performance.now() - start, { skipped: true })
-        markJobComplete('email-digest')
         return
       }
 
@@ -216,7 +210,8 @@ export default defineNitroPlugin(async (nitroApp) => {
         logger.info(`[Digest] Processed ${result.processed} user(s): ${result.successful} sent, ${result.failed} failed, ${result.skipped} skipped`)
       }
 
-      await releaseExecutionLock('email-digest', hourKey)
+      // Keyed by hour, so the lock is left to expire rather than released:
+      // a release let a container that fired a moment later send the hour again.
       logJobCompletion('email-digest', 'success', performance.now() - start, {
         processed: result.processed, successful: result.successful, failed: result.failed, skipped: result.skipped,
       })
@@ -234,14 +229,13 @@ export default defineNitroPlugin(async (nitroApp) => {
   logger.info('Email digest scheduler initialized (every hour at :15)')
 
   // Budget alert notifier — every 15 minutes at :05, :20, :35, :50
-  budgetAlertJob = new Cron('5,20,35,50 * * * *', async () => {
+  budgetAlertJob = new Cron('5,20,35,50 * * * *', { protect: true }, async () => {
     const windowKey = new Date().toISOString().substring(0, 16) // YYYY-MM-DDTHH:MM
     const start = performance.now()
     markJobRunning('budget-alert-notifier')
     try {
       const locked = await claimExecutionLock('budget-alert-notifier', windowKey)
       if (!locked) {
-        markJobComplete('budget-alert-notifier')
         return // Another container is handling it
       }
 
@@ -253,7 +247,7 @@ export default defineNitroPlugin(async (nitroApp) => {
         logger.info(`[BudgetAlertNotifier] Processed ${result.processed} alert(s): ${result.notified} notified, ${result.skipped} skipped`)
       }
 
-      await releaseExecutionLock('budget-alert-notifier', windowKey)
+      // Keyed by window: left to expire so a late-firing container cannot rerun it
       logJobCompletion('budget-alert-notifier', 'success', performance.now() - start, {
         processed: result.processed, notified: result.notified, skipped: result.skipped,
       })
@@ -271,7 +265,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   logger.info('Budget alert notifier initialized (every 15 minutes)')
 
   if (AI_USAGE_COLLECTION_ENABLED) {
-    aiUsageJob = new Cron('10 * * * *', async () => {
+    aiUsageJob = new Cron('10 * * * *', { protect: true }, async () => {
       const lockKey = 'active'
       const start = performance.now()
       markJobRunning('ai-usage-collector')
@@ -309,10 +303,11 @@ export default defineNitroPlugin(async (nitroApp) => {
     logger.info('AI usage collector initialized (hourly at :10)')
   }
 
-  mcpUsageAggregateJob = new Cron('25 0 * * *', async () => {
+  mcpUsageAggregateJob = new Cron('25 0 * * *', { protect: true }, async () => {
     const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
     const start = performance.now()
     let locked = false
+    let succeeded = false
     markJobRunning('mcp-usage-aggregate')
 
     try {
@@ -326,6 +321,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
       const { writeMcpDailyUsageAggregate } = await import('../mcp/usage')
       await writeMcpDailyUsageAggregate(day)
+      succeeded = true
       logJobCompletion('mcp-usage-aggregate', 'success', performance.now() - start)
       writeSourceHeartbeat('mcp-usage-aggregate', {
         lastRun: new Date().toISOString(),
@@ -342,8 +338,9 @@ export default defineNitroPlugin(async (nitroApp) => {
         error: String(error)
       })
     } finally {
-      if (locked) {
-        // Never let lock cleanup mask the aggregation result.
+      if (locked && !succeeded) {
+        // Release only on failure so another container can retry; a finished
+        // day keeps its lock until expiry. Never let cleanup mask the result.
         await releaseExecutionLock('mcp-usage-aggregate', day).catch(() => {})
       }
       markJobComplete('mcp-usage-aggregate')

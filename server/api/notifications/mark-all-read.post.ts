@@ -3,21 +3,12 @@
  * Mark all unread notifications as read for the current user
  */
 
-import { getUserSession } from '../../utils/entra/session'
-import { markAllNotificationsAsRead } from '../../utils/notification-service'
+import { markAllNotificationsAsRead, requireNotificationUserId } from '../../utils/notification-service'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
-    const session = await getUserSession(event)
-    if (!session?.user) {
-      throw createError({ statusCode: 401, message: 'Authentication required' })
-    }
-
-    const userId = session.user.email || session.user.id || session.user.sub
-    if (!userId) {
-      throw createError({ statusCode: 401, message: 'User identification failed' })
-    }
+    const userId = await requireNotificationUserId(event)
 
     const updated = await markAllNotificationsAsRead(userId)
 

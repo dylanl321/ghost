@@ -77,11 +77,19 @@ function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefresh
   process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
 }
 
+// The development key is generated once per process. Generating it per call
+// gave the admin signing-key projection a kid the provider never signs with.
+let ephemeralJwks: Promise<{ keys: JWK[] }> | undefined
+
 async function loadJwks(): Promise<{ keys: JWK[] }> {
   const configured = process.env.GHOST_OAUTH_JWKS_JSON
   if (configured) return JSON.parse(configured) as { keys: JWK[] }
   if (isProductionEnvironment()) throw new Error('GHOST_OAUTH_JWKS_JSON is required in production')
+  ephemeralJwks ||= generateEphemeralJwks()
+  return ephemeralJwks
+}
 
+async function generateEphemeralJwks(): Promise<{ keys: JWK[] }> {
   const { privateKey } = await generateKeyPair('RS256', { extractable: true })
   const jwk = await exportJWK(privateKey)
   jwk.kid = randomUUID()

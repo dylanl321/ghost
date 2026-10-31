@@ -265,12 +265,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
-                    v-if="loginTrendData.series[0].data.length > 0"
-                    type="line"
-                    height="100%"
-                    :options="loginTrendChartOptions"
-                    :series="loginTrendData.series"
+                  <VChart
+                    v-if="loginTrendData.series[0]?.data.length"
+                    :option="loginTrendChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No login data available
@@ -294,12 +293,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="serviceDistributionData.series.length > 0"
-                    type="donut"
-                    height="100%"
-                    :options="serviceDistributionChartOptions"
-                    :series="serviceDistributionData.series"
+                    :option="serviceDistributionChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No service usage data available
@@ -324,12 +322,11 @@
           <div class="p-6">
             <div class="h-80">
               <ClientOnly>
-                <apexchart
+                <VChart
                   v-if="activityHeatmapData.series.length > 0"
-                  type="heatmap"
-                  height="100%"
-                  :options="activityHeatmapChartOptions"
-                  :series="activityHeatmapData.series"
+                  :option="activityHeatmapChartOptions"
+                  class="h-full w-full"
+                  autoresize
                 />
                 <div v-else class="flex items-center justify-center h-full text-gray-400">
                   No activity data available
@@ -406,12 +403,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="loginTimelineData.series.length > 0"
-                    type="area"
-                    height="100%"
-                    :options="loginTimelineChartOptions"
-                    :series="loginTimelineData.series"
+                    :option="loginTimelineChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No login timeline data
@@ -432,12 +428,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="ipDistributionData.series.length > 0"
-                    type="bar"
-                    height="100%"
-                    :options="ipDistributionChartOptions"
-                    :series="ipDistributionData.series"
+                    :option="ipDistributionChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No IP data available
@@ -562,12 +557,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="serviceUsageTimelineData.series.length > 0"
-                    type="line"
-                    height="100%"
-                    :options="serviceUsageTimelineChartOptions"
-                    :series="serviceUsageTimelineData.series"
+                    :option="serviceUsageTimelineChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No service usage timeline data
@@ -588,12 +582,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="serviceErrorRateData.series.length > 0"
-                    type="bar"
-                    height="100%"
-                    :options="serviceErrorRateChartOptions"
-                    :series="serviceErrorRateData.series"
+                    :option="serviceErrorRateChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No error rate data
@@ -715,12 +708,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="securityTimelineData.series.length > 0"
-                    type="area"
-                    height="100%"
-                    :options="securityTimelineChartOptions"
-                    :series="securityTimelineData.series"
+                    :option="securityTimelineChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No security timeline data
@@ -741,12 +733,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="riskDistributionData.series.length > 0"
-                    type="donut"
-                    height="100%"
-                    :options="riskDistributionChartOptions"
-                    :series="riskDistributionData.series"
+                    :option="riskDistributionChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No risk distribution data
@@ -846,12 +837,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="complianceTimelineData.series.length > 0"
-                    type="area"
-                    height="100%"
-                    :options="complianceTimelineChartOptions"
-                    :series="complianceTimelineData.series"
+                    :option="complianceTimelineChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No compliance timeline data
@@ -872,12 +862,11 @@
             <div class="p-6">
               <div class="h-64">
                 <ClientOnly>
-                  <apexchart
+                  <VChart
                     v-if="complianceDistributionData.series.length > 0"
-                    type="bar"
-                    height="100%"
-                    :options="complianceDistributionChartOptions"
-                    :series="complianceDistributionData.series"
+                    :option="complianceDistributionChartOptions"
+                    class="h-full w-full"
+                    autoresize
                   />
                   <div v-else class="flex items-center justify-center h-full text-gray-400">
                     No event distribution data
@@ -936,7 +925,7 @@
         <!-- Compliance Activity Log -->
         <div class="overflow-x-auto">
           <UTable 
-            :rows="complianceAnalytics.events" 
+            :rows="complianceEvents" 
             :columns="[
               { key: 'eventTime', label: 'Time', sortable: true },
               { key: 'eventName', label: 'Event', sortable: true },
@@ -1052,6 +1041,9 @@ interface AccessEvent {
   accountName?: string
   errorCode?: string
   errorMessage?: string
+  eventCategory?: string
+  eventType?: string
+  recipientAccountId?: string
   resources?: any[]
   requestParameters?: any
   responseElements?: any
@@ -1108,23 +1100,12 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const errorDetails = ref<string | null>(null)
 const loadingMessage = ref('Searching CloudTrail logs...')
-const testingConnection = ref(false)
 const mounted = ref(false)
 
 // View state
 const viewMode = ref<'overview' | 'login' | 'services' | 'security' | 'compliance'>('overview')
 const showEventDetails = ref(false)
 const selectedEvent = ref<AccessEvent | null>(null)
-
-// Pagination
-const currentPage = ref(1)
-const pageSize = ref(25)
-const totalPages = computed(() => Math.ceil(accessEvents.value.length / pageSize.value))
-const paginatedEvents = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return accessEvents.value.slice(start, end)
-})
 
 // Filter options
 const selectedDateRange = ref('14d')
@@ -1182,78 +1163,6 @@ const errorEvents = computed(() => {
   return accessEvents.value.filter(e => e.errorCode)
 })
 
-// Simple view computed properties
-const activityByPeriod = computed(() => {
-  if (!mounted.value || !accessEvents.value.length) return []
-  
-  const periods = new Map<string, number>()
-  const now = new Date()
-  
-  accessEvents.value.forEach(event => {
-    const eventDate = new Date(event.eventTime)
-    const diffHours = Math.floor((now.getTime() - eventDate.getTime()) / (1000 * 60 * 60))
-    
-    let periodKey = ''
-    if (diffHours < 1) {
-      periodKey = 'Last hour'
-    } else if (diffHours < 24) {
-      periodKey = `${diffHours}h ago`
-    } else {
-      const diffDays = Math.floor(diffHours / 24)
-      if (diffDays === 1) {
-        periodKey = 'Yesterday'
-      } else if (diffDays < 7) {
-        periodKey = `${diffDays} days ago`
-      } else {
-        const diffWeeks = Math.floor(diffDays / 7)
-        periodKey = `${diffWeeks}w ago`
-      }
-    }
-    
-    periods.set(periodKey, (periods.get(periodKey) || 0) + 1)
-  })
-  
-  return Array.from(periods.entries())
-    .map(([period, count]) => ({ period, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-})
-
-const maxPeriodCount = computed(() => {
-  return Math.max(...activityByPeriod.value.map(p => p.count), 1)
-})
-
-const topServices = computed(() => {
-  if (!mounted.value || !accessEvents.value.length) return []
-  
-  const services = new Map<string, { count: number, hasErrors: boolean }>()
-  
-  accessEvents.value.forEach(event => {
-    const serviceName = event.eventSource || 'Unknown'
-    const current = services.get(serviceName) || { count: 0, hasErrors: false }
-    
-    current.count++
-    if (event.errorCode) {
-      current.hasErrors = true
-    }
-    
-    services.set(serviceName, current)
-  })
-  
-  return Array.from(services.entries())
-    .map(([name, data]) => ({ name, ...data }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8)
-})
-
-const recentEvents = computed(() => {
-  if (!mounted.value || !accessEvents.value.length) return []
-  
-  return [...accessEvents.value]
-    .sort((a, b) => new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime())
-    .slice(0, 10)
-})
-
 // Convert username slug to find actual user email
 const findUserByUsername = async (usernameSlug: string) => {
   if (!user.value?.accessToken || !usernameSlug) return null
@@ -1294,7 +1203,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             return partialMatch
           }
         }
-      } catch (err) {
+      } catch {
         logger.debug(`No results for email pattern: ${email}`)
       }
     }
@@ -1318,7 +1227,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             return bestMatch
           }
         }
-      } catch (err) {
+      } catch {
         logger.debug(`No results for search term: ${searchTerm}`)
       }
     }
@@ -1500,26 +1409,13 @@ const updateFilterOptions = (events: AccessEvent[]) => {
 }
 
 // Utility functions
-const refreshData = () => {
-  if (!mounted.value) return
-  currentPage.value = 1
-  loadAccessHistory()
-}
-
 const resetFilters = () => {
   if (!mounted.value) return
   selectedDateRange.value = '14d'
   selectedEventType.value = 'all'
   selectedAccount.value = 'all'
   selectedService.value = 'all'
-  currentPage.value = 1
   loadAccessHistory()
-}
-
-const viewEventDetails = (event: AccessEvent) => {
-  if (!mounted.value) return
-  selectedEvent.value = event
-  showEventDetails.value = true
 }
 
 const exportAccessHistory = () => {
@@ -1578,10 +1474,8 @@ const exportAccessHistory = () => {
 
   // Create filename
   const username = userProfile.value?.displayName || route.params.username
-  const dateRange = selectedDateRange.value === 'last24h' ? '24h' : 
-                   selectedDateRange.value === 'last7d' ? '7d' : 
-                   selectedDateRange.value === 'last30d' ? '30d' : 'custom'
-  const filename = `access-history-${username?.replace(/\s+/g, '-').toLowerCase()}-${dateRange}-${new Date().toISOString().split('T')[0]}.csv`
+  const dateRange = selectedDateRange.value
+  const filename = `access-history-${String(username || '').replace(/\s+/g, '-').toLowerCase()}-${dateRange}-${new Date().toISOString().split('T')[0]}.csv`
 
   // Download CSV
   try {
@@ -1614,31 +1508,6 @@ const formatDateTime = (dateString: string) => {
   try {
     const date = new Date(dateString)
     return date.toLocaleString()
-  } catch {
-    return dateString
-  }
-}
-
-const formatTimeAgo = (dateString: string) => {
-  try {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMinutes = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
-    if (diffMinutes < 1) {
-      return 'Just now'
-    } else if (diffMinutes < 60) {
-      return `${diffMinutes}m ago`
-    } else if (diffHours < 24) {
-      return `${diffHours}h ago`
-    } else if (diffDays < 7) {
-      return `${diffDays}d ago`
-    } else {
-      return date.toLocaleDateString()
-    }
   } catch {
     return dateString
   }
@@ -2032,7 +1901,7 @@ const serviceUsageTimelineData = computed(() => {
   })
   
   const dates = Array.from(new Set(
-    accessEvents.value.map(e => new Date(e.eventTime).toISOString().split('T')[0])
+    accessEvents.value.map(e => new Date(e.eventTime).toISOString().slice(0, 10))
   )).sort()
   
   const series = topServices.map(service => ({
@@ -2134,342 +2003,127 @@ const complianceDistributionData = computed(() => {
   }
 })
 
-// Chart Options
-const loginTrendChartOptions = computed(() => ({
-  chart: {
-    type: 'line',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  stroke: {
-    curve: 'smooth',
-    width: 3
-  },
-  colors: ['#3B82F6'],
-  xaxis: {
-    categories: loginTrendData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
+// Chart Options (ECharts, registered by nuxt-echarts in nuxt.config.ts)
+const AXIS_TEXT = '#9CA3AF'
+const GRID_LINE = '#374151'
+const PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316']
+
+interface CartesianChart {
+  kind: 'line' | 'area' | 'bar'
+  categories: string[]
+  series: { name: string, data: number[] }[]
+  colors: string[]
+  horizontal?: boolean
+  valueName?: string
+  areaOpacity?: number
+}
+
+function cartesianOption({ kind, categories, series, colors, horizontal, valueName, areaOpacity = 0.3 }: CartesianChart) {
+  const categoryAxis = { type: 'category', data: categories, axisLabel: { color: AXIS_TEXT }, axisLine: { lineStyle: { color: GRID_LINE } } }
+  const valueAxis = {
+    type: 'value',
+    name: valueName,
+    nameTextStyle: { color: AXIS_TEXT },
+    axisLabel: { color: AXIS_TEXT },
+    splitLine: { lineStyle: { color: GRID_LINE, type: 'dashed' } }
   }
+  return {
+    color: colors,
+    tooltip: { trigger: 'axis' },
+    legend: series.length > 1 ? { bottom: 0, textStyle: { color: AXIS_TEXT } } : undefined,
+    grid: { left: 8, right: 16, top: valueName ? 32 : 16, bottom: series.length > 1 ? 32 : 8, containLabel: true },
+    xAxis: horizontal ? valueAxis : categoryAxis,
+    yAxis: horizontal ? { ...categoryAxis, inverse: true } : valueAxis,
+    series: series.map(s => ({
+      name: s.name,
+      data: s.data,
+      type: kind === 'bar' ? 'bar' : 'line',
+      smooth: kind !== 'bar',
+      showSymbol: false,
+      lineStyle: kind === 'bar' ? undefined : { width: kind === 'area' ? 2 : 3 },
+      areaStyle: kind === 'area' ? { opacity: areaOpacity } : undefined,
+      itemStyle: kind === 'bar' ? { borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] } : undefined,
+      barMaxWidth: 48
+    }))
+  }
+}
+
+function donutOption(labels: string[], values: number[], colors: string[]) {
+  return {
+    color: colors,
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, textStyle: { color: AXIS_TEXT } },
+    series: [{
+      type: 'pie',
+      radius: ['45%', '70%'],
+      center: ['50%', '45%'],
+      label: { color: '#FFFFFF', formatter: '{d}%' },
+      data: labels.map((name, i) => ({ name, value: values[i] }))
+    }]
+  }
+}
+
+const loginTrendChartOptions = computed(() => cartesianOption({
+  kind: 'line', colors: ['#3B82F6'], ...loginTrendData.value
 }))
 
-const serviceDistributionChartOptions = computed(() => ({
-  chart: {
-    type: 'donut',
-    background: 'transparent'
-  },
-  theme: { mode: 'dark' },
-  labels: serviceDistributionData.value.labels,
-  colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316'],
-  legend: {
-    position: 'bottom',
-    labels: { colors: '#9CA3AF' }
-  },
-  dataLabels: {
-    enabled: true,
-    style: { colors: ['#FFFFFF'] }
-  },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
+const serviceDistributionChartOptions = computed(() => donutOption(
+  serviceDistributionData.value.labels, serviceDistributionData.value.series, PALETTE
+))
+
+const activityHeatmapChartOptions = computed(() => {
+  const rows = activityHeatmapData.value.series
+  const hours = rows[0]?.data.map(cell => cell.x) || []
+  const cells = rows.flatMap((row, day) => row.data.map((cell, hour) => [hour, day, cell.y]))
+  return {
+    tooltip: { position: 'top', formatter: (p: any) => `${rows[p.value[1]]?.name} ${hours[p.value[0]]}: ${p.value[2]} events` },
+    grid: { left: 8, right: 16, top: 8, bottom: 48, containLabel: true },
+    xAxis: { type: 'category', data: hours, axisLabel: { color: AXIS_TEXT }, splitArea: { show: true } },
+    yAxis: { type: 'category', data: rows.map(row => row.name), axisLabel: { color: AXIS_TEXT }, splitArea: { show: true } },
+    visualMap: {
+      min: 0,
+      max: Math.max(1, ...cells.map(cell => cell[2] as number)),
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      itemHeight: 120,
+      textStyle: { color: AXIS_TEXT },
+      inRange: { color: ['#1F2937', '#3B82F6'] }
+    },
+    series: [{ type: 'heatmap', data: cells }]
   }
+})
+
+const loginTimelineChartOptions = computed(() => cartesianOption({
+  kind: 'area', colors: ['#10B981', '#EF4444'], ...loginTimelineData.value
 }))
 
-const activityHeatmapChartOptions = computed(() => ({
-  chart: {
-    type: 'heatmap',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#3B82F6'],
-  xaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151'
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const ipDistributionChartOptions = computed(() => cartesianOption({
+  kind: 'bar', horizontal: true, colors: ['#8B5CF6'], ...ipDistributionData.value
 }))
 
-const loginTimelineChartOptions = computed(() => ({
-  chart: {
-    type: 'area',
-    background: 'transparent',
-    toolbar: { show: false },
-    stacked: false
-  },
-  theme: { mode: 'dark' },
-  colors: ['#10B981', '#EF4444'],
-  stroke: {
-    curve: 'smooth',
-    width: 2
-  },
-  fill: {
-    type: 'gradient',
-    opacity: 0.3
-  },
-  xaxis: {
-    categories: loginTimelineData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  legend: {
-    labels: { colors: '#9CA3AF' }
-  },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const serviceUsageTimelineChartOptions = computed(() => cartesianOption({
+  kind: 'line', colors: PALETTE.slice(0, 5), ...serviceUsageTimelineData.value
 }))
 
-const ipDistributionChartOptions = computed(() => ({
-  chart: {
-    type: 'bar',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#8B5CF6'],
-  plotOptions: {
-    bar: {
-      horizontal: true,
-      borderRadius: 4
-    }
-  },
-  xaxis: {
-    categories: ipDistributionData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const serviceErrorRateChartOptions = computed(() => cartesianOption({
+  kind: 'bar', colors: ['#EF4444'], valueName: 'Error Rate (%)', ...serviceErrorRateData.value
 }))
 
-const serviceUsageTimelineChartOptions = computed(() => ({
-  chart: {
-    type: 'line',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
-  stroke: {
-    curve: 'smooth',
-    width: 3
-  },
-  xaxis: {
-    categories: serviceUsageTimelineData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  legend: {
-    labels: { colors: '#9CA3AF' }
-  },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const securityTimelineChartOptions = computed(() => cartesianOption({
+  kind: 'area', colors: ['#EF4444'], areaOpacity: 0.4, ...securityTimelineData.value
 }))
 
-const serviceErrorRateChartOptions = computed(() => ({
-  chart: {
-    type: 'bar',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#EF4444'],
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      columnWidth: '60%'
-    }
-  },
-  xaxis: {
-    categories: serviceErrorRateData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } },
-    title: {
-      text: 'Error Rate (%)',
-      style: { color: '#9CA3AF' }
-    }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const riskDistributionChartOptions = computed(() => donutOption(
+  riskDistributionData.value.labels, riskDistributionData.value.series, ['#EF4444', '#F59E0B', '#10B981']
+))
+
+const complianceTimelineChartOptions = computed(() => cartesianOption({
+  kind: 'area', colors: ['#10B981'], ...complianceTimelineData.value
 }))
 
-const securityTimelineChartOptions = computed(() => ({
-  chart: {
-    type: 'area',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#EF4444'],
-  stroke: {
-    curve: 'smooth',
-    width: 3
-  },
-  fill: {
-    type: 'gradient',
-    opacity: 0.4
-  },
-  xaxis: {
-    categories: securityTimelineData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
-}))
-
-const riskDistributionChartOptions = computed(() => ({
-  chart: {
-    type: 'donut',
-    background: 'transparent'
-  },
-  theme: { mode: 'dark' },
-  labels: riskDistributionData.value.labels,
-  colors: ['#EF4444', '#F59E0B', '#10B981'],
-  legend: {
-    position: 'bottom',
-    labels: { colors: '#9CA3AF' }
-  },
-  dataLabels: {
-    enabled: true,
-    style: { colors: ['#FFFFFF'] }
-  },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
-}))
-
-const complianceTimelineChartOptions = computed(() => ({
-  chart: {
-    type: 'area',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#10B981'],
-  stroke: {
-    curve: 'smooth',
-    width: 3
-  },
-  fill: {
-    type: 'gradient',
-    opacity: 0.3
-  },
-  xaxis: {
-    categories: complianceTimelineData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
-}))
-
-const complianceDistributionChartOptions = computed(() => ({
-  chart: {
-    type: 'bar',
-    background: 'transparent',
-    toolbar: { show: false }
-  },
-  theme: { mode: 'dark' },
-  colors: ['#10B981'],
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      columnWidth: '70%'
-    }
-  },
-  xaxis: {
-    categories: complianceDistributionData.value.categories,
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  yaxis: {
-    labels: { style: { colors: '#9CA3AF' } }
-  },
-  grid: {
-    borderColor: '#374151',
-    strokeDashArray: 3
-  },
-  dataLabels: { enabled: false },
-  tooltip: {
-    theme: 'dark',
-    style: { fontSize: '12px' }
-  }
+const complianceDistributionChartOptions = computed(() => cartesianOption({
+  kind: 'bar', colors: ['#10B981'], ...complianceDistributionData.value
 }))
 
 // Chart Helper Functions

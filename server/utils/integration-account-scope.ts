@@ -113,10 +113,13 @@ export async function resolveIntegrationAccountScope(
     })
   }
   const accounts: IntegrationAccount[] = []
+  // The lookup's not-found error tells callers to pass includeDecommissioned=true,
+  // so the selector has to honour it.
+  const includeDecommissioned = query.includeDecommissioned === true || query.includeDecommissioned === 'true'
 
   for (const identifier of identifiers) {
     try {
-      const result = await lookupAccountOptimized(event, identifier, { includeDecommissioned: false })
+      const result = await lookupAccountOptimized(event, identifier, { includeDecommissioned })
       if (result?.account) accounts.push(canonicalize(result.account))
     } catch (error) {
       // The legacy lookup throws response envelopes; preserve their client error status.
@@ -177,6 +180,12 @@ export const integrationAccountParameters = [
     in: 'query',
     schema: { type: 'string' },
     description: 'Comma-separated account ID, GovCloud ID, request ID, or account email values.'
+  },
+  {
+    name: 'includeDecommissioned',
+    in: 'query',
+    schema: { type: 'boolean', default: false },
+    description: 'Also resolve decommissioned accounts named in accountIdentifiers, for example to read their historical costs.'
   },
   {
     name: 'adminOf',

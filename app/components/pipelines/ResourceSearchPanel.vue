@@ -81,7 +81,7 @@
 
         <template #timestamp-data="{ row }">
           <div class="text-sm">
-            <div class="text-white">{{ formatDate(row.timestamp) }}</div>
+            <div class="text-white">{{ formatDateOnly(row.timestamp) }}</div>
             <div class="text-gray-400 text-xs">{{ formatTime(row.timestamp) }}</div>
           </div>
         </template>
@@ -319,15 +319,7 @@ function getActionColor(action: string): string {
   return 'gray'
 }
 
-function formatDate(timestamp: string): string {
-  if (!timestamp) return 'N/A'
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
+const { formatDateOnly } = useDateFormatter()
 
 function formatTime(timestamp: string): string {
   if (!timestamp) return ''

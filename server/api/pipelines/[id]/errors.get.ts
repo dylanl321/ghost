@@ -1,4 +1,5 @@
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
+import { requirePermission } from '../../../utils/user-roles'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
 import { getErrorDetailsForPipeline } from '../../../utils/athena-pipeline-queries'
@@ -59,11 +60,16 @@ registerEndpoint('/api/pipelines/{id}/errors', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const pipelineId = getRouterParam(event, 'id')
 
   if (!pipelineId) {
     return errors.badRequest(event, 'Pipeline ID is required')
+  }
+  if (!/^\d+$/.test(pipelineId)) {
+    return errors.badRequest(event, 'Pipeline ID must contain only digits')
   }
 
   const environment = 'govcloud' as const

@@ -9,13 +9,13 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../../utils/api-response'
-import { lookupAccountOptimized } from '../../../utils/account-lookup-optimized'
+import { lookupAccountOptimized, getEnvironmentAccountId } from '../../../utils/account-lookup-optimized'
 import { batchGetInstanceMetrics } from '../../../utils/cloudwatch-metrics'
 import {
   classifyInstance,
+  summarizeClassifications,
   DEFAULT_THRESHOLDS,
   type ClassificationResult,
-  type ClassificationSummary,
   type InstanceClassification
 } from '../../../utils/instance-utilization-classifier'
 import type { InstanceApiActivity } from '../../../utils/instance-activity-detection'
@@ -23,7 +23,6 @@ import type { ComputeOptimizerRecommendation } from '../../../utils/compute-opti
 import type { EnrichedInstanceData } from '../../../utils/instance-enrichment'
 import { getCacheManager } from '../../../utils/cache-manager'
 import { getLatestAnalysis, getInstanceClassifications, saveLatestPointer, saveInstanceClassifications } from '../../../utils/utilization-persistence'
-import type { AWSEnvironmentType } from '../../../types'
 import { logger } from '../../../utils/logger'
 
 const RETRY_BATCH_SIZE = 5 // Very small batches to maximize success rate on retry
@@ -39,33 +38,30 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const lookbackDays = Math.min(Math.max(parseInt(query.lookbackDays as string) || 14, 1), 30)
 
-  // Load existing results from cache
+  let targetAccountId: string | undefined
+  try {
+    const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
+    targetAccountId = getEnvironmentAccountId(lookupResult.account, environment)
+  } catch {
+    return errors.notFound(event, `No account found for identifier: ${accountIdentifier}`)
+  }
+  if (!targetAccountId) {
+    return errors.badRequest(event, `Account found but missing ${environment} account ID`)
+  }
+
+  // Same key the utilization route and background job use
   const cache = getCacheManager()
-  const cacheKey = `utilization:${accountIdentifier}:${environment}:${lookbackDays}:true`
+  const cacheKey = `utilization:${targetAccountId}:${environment}:${lookbackDays}:true`
   let existingResult = await cache.get<ClassificationResult>(cacheKey)
 
-  // If not in memory cache, try DynamoDB
-  let dynLookupId: string | null = null
-  let latestJobId: string | null = null
-  if (!existingResult) {
-    try {
-      const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
-      if (environment === 'govcloud') {
-        dynLookupId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-      } else {
-        dynLookupId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-      }
-    } catch { /* skip */ }
-
-    if (dynLookupId) {
-      const latestAnalysis = await getLatestAnalysis(dynLookupId, environment).catch(() => null)
-      if (latestAnalysis?.status === 'completed' && latestAnalysis.summary) {
-        latestJobId = latestAnalysis.jobId
-        const { items } = await getInstanceClassifications(latestAnalysis.jobId, { limit: 5000 }).catch(() => ({ items: [] }))
-        if (items.length > 0) {
-          existingResult = { summary: latestAnalysis.summary, instances: items }
-        }
-      }
+  // The latest completed job is where retried results are persisted, whether
+  // the existing result came from memory or from DynamoDB.
+  const latestAnalysis = await getLatestAnalysis(targetAccountId, environment).catch(() => null)
+  const latestJobId = latestAnalysis?.status === 'completed' && latestAnalysis.summary ? latestAnalysis.jobId : null
+  if (!existingResult && latestJobId) {
+    const { items } = await getInstanceClassifications(latestJobId, { limit: 5000 }).catch(() => ({ items: [] }))
+    if (items.length > 0) {
+      existingResult = { summary: latestAnalysis!.summary!, instances: items }
     }
   }
 
@@ -84,22 +80,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (missingInstances.length === 0) {
     logger.info(`[Retry Metrics] No instances with missing metrics for ${accountIdentifier}`)
     return sendSuccess(event, existingResult, { retried: 0, updated: 0 })
-  }
-
-  // Resolve account ID for CloudWatch calls
-  let targetAccountId: string
-  try {
-    const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
-    if (environment === 'govcloud') {
-      targetAccountId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-    } else {
-      targetAccountId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-    }
-    if (!targetAccountId) {
-      return errors.badRequest(event, `Account found but missing ${environment} account ID`)
-    }
-  } catch {
-    return errors.notFound(event, `No account found for identifier: ${accountIdentifier}`)
   }
 
   logger.info(`[Retry Metrics] Retrying CloudWatch for ${missingInstances.length} instances in account ${targetAccountId}`)
@@ -169,7 +149,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Recompute summary
-  existingResult.summary = recomputeSummary(existingResult.instances)
+  existingResult.summary = summarizeClassifications(existingResult.instances)
 
   // Update cache with completed results
   const completionRate = existingResult.instances.filter(i =>
@@ -183,11 +163,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Persist retry results to DynamoDB so they survive container restarts
-  if (dynLookupId && latestJobId && updated > 0) {
+  if (latestJobId && updated > 0) {
     try {
       await saveInstanceClassifications(latestJobId, existingResult.instances)
       await saveLatestPointer({
-        PK: `ACCOUNT#${dynLookupId}`,
+        PK: `ACCOUNT#${targetAccountId}`,
         SK: `LATEST#${environment}`,
         type: 'latest-pointer',
         jobId: latestJobId,
@@ -244,49 +224,4 @@ function reconstructEnrichedData(inst: InstanceClassification): EnrichedInstance
       monthlyEstimate: inst.monthlyEstimate
     } : undefined
   } as EnrichedInstanceData
-}
-
-/**
- * Recompute classification summary from instance list
- */
-function recomputeSummary(instances: InstanceClassification[]): ClassificationSummary {
-  const summary: ClassificationSummary = {
-    totalInstances: instances.length,
-    overProvisioned: 0,
-    underProvisioned: 0,
-    optimized: 0,
-    noData: 0,
-    totalPotentialMonthlySavings: 0,
-    runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
-  }
-
-  for (const inst of instances) {
-    switch (inst.classification) {
-      case 'over-provisioned':
-        summary.overProvisioned++
-        if (inst.optimization?.estimatedMonthlySavings) {
-          summary.totalPotentialMonthlySavings += inst.optimization.estimatedMonthlySavings
-        } else if (inst.monthlyEstimate) {
-          summary.totalPotentialMonthlySavings += inst.monthlyEstimate * 0.5
-        }
-        break
-      case 'under-provisioned':
-        summary.underProvisioned++
-        break
-      case 'optimized':
-        summary.optimized++
-        break
-      case 'no-data':
-        summary.noData++
-        break
-    }
-    switch (inst.runtimeClassification) {
-      case 'usually-running': summary.runtimeSummary.usuallyRunning++; break
-      case 'usually-stopped': summary.runtimeSummary.usuallyStopped++; break
-      default: summary.runtimeSummary.noData++; break
-    }
-  }
-
-  summary.totalPotentialMonthlySavings = Math.round(summary.totalPotentialMonthlySavings * 100) / 100
-  return summary
 }

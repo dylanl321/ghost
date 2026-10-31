@@ -330,6 +330,12 @@ class CacheManager {
   /**
    * Get cache entry info
    */
+  /** Whether key holds an unexpired entry, without touching hit/miss stats. */
+  isFresh(key: string): boolean {
+    const entry = this.cache.get(key)
+    return Boolean(entry && !this.isExpired(entry))
+  }
+
   getEntryInfo(key: string): {
     exists: boolean
     age?: string
@@ -572,6 +578,19 @@ export function getCacheManager(): CacheManager {
  */
 export function createCacheManager(config?: Partial<CacheConfig>): CacheManager {
   return new CacheManager(config)
+}
+
+/**
+ * Clear every tracked cache (the named caches, the default cache and any
+ * created with createTrackedCache). Returns the number of entries removed.
+ */
+export async function clearAllCaches(): Promise<number> {
+  let cleared = 0
+  for (const cache of allCacheInstances) {
+    cleared += cache.getStats().entries
+    await cache.clear()
+  }
+  return cleared
 }
 
 /**

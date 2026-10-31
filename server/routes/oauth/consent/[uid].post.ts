@@ -156,8 +156,15 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: Gho
   }
 }
 
+const INTERACTION_ACTIONS = new Set<InteractionBody['action']>(['details', 'login', 'approve', 'deny'])
+
 export default defineEventHandler(async event => {
-  const body = await readBody<InteractionBody>(event)
+  const body = await readBody<InteractionBody | null>(event)
+  // Reject a missing or unknown action before touching the interaction, so a
+  // malformed request is a 400 rather than a TypeError or an identity write.
+  if (!body || !INTERACTION_ACTIONS.has(body.action)) {
+    throw createError({ statusCode: 400, statusMessage: 'A valid interaction action is required' })
+  }
   const provider = await getOAuthProvider()
   let details: Awaited<ReturnType<typeof provider.interactionDetails>>
   try {

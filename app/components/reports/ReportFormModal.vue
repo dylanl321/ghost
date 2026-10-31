@@ -461,6 +461,7 @@
 </template>
 
 <script setup lang="ts">
+import { calculateNextRunTime } from '#shared/utils/report-schedule'
 import type { ScheduledReport, CreateReportRequest, UpdateReportRequest } from '#shared/types/scheduled-reports'
 
 const props = defineProps<{
@@ -644,40 +645,13 @@ const timezoneOptions = [
 
 const nextRunPreview = computed(() => {
   // Calculate and display next run time based on current settings
-  const { frequency, dayOfWeek, dayOfMonth, time, timezone } = form.value.schedule
-  const [hours, minutes] = time.split(':').map(Number)
-
-  const now = new Date()
-  let next = new Date()
-
-  switch (frequency) {
-    case 'daily':
-      next.setHours(hours, minutes, 0, 0)
-      if (next <= now) {
-        next.setDate(next.getDate() + 1)
-      }
-      break
-    case 'weekly':
-      next.setHours(hours, minutes, 0, 0)
-      const currentDay = next.getDay()
-      const daysUntilNext = (dayOfWeek! - currentDay + 7) % 7
-      next.setDate(next.getDate() + (daysUntilNext || 7))
-      break
-    case 'monthly':
-      next.setDate(dayOfMonth!)
-      next.setHours(hours, minutes, 0, 0)
-      if (next <= now) {
-        next.setMonth(next.getMonth() + 1)
-      }
-      break
-    case 'quarterly':
-      // Simplified quarterly calculation
-      next.setHours(hours, minutes, 0, 0)
-      next.setMonth(next.getMonth() + 3)
-      break
-  }
+  // Same calculation the server stores, in the schedule's own timezone
+  const { time, timezone } = form.value.schedule
+  if (!time) return ''
+  const next = calculateNextRunTime(form.value.schedule, timezone || 'UTC')
 
   return next.toLocaleString('en-US', {
+    timeZone: timezone || 'UTC',
     weekday: 'long',
     year: 'numeric',
     month: 'long',

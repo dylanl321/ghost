@@ -23,7 +23,7 @@
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
           {{ isPeopleView ? 'People Cost Over Time' : `Cost Over Time by "${tagKey}"` }}
         </h3>
-        <span class="text-xs text-gray-500 dark:text-gray-400">Billable Net Unblended</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">Billable Unblended</span>
         <UTooltip text="Export trend data as CSV">
           <UButton
             icon="i-heroicons-arrow-down-tray"
@@ -80,7 +80,7 @@ async function fetchData() {
       groupBy: `TAG:${props.tagKey}`,
       period: apiPeriod,
       granularity: getGranularity(apiPeriod),
-      metric: 'NetUnblendedCost'
+      metric: 'UnblendedCost'
     }
     if (props.accountIds.length > 0) params.accountIds = props.accountIds.join(',')
 
@@ -129,7 +129,7 @@ const processedData = computed(() => {
       const identity = normalizeCostTagIdentity(rawKey, props.tagKey)
       if (isPeopleView.value && !identity.isPerson) return
       const key = identity.groupKey
-      const metric = chartData.value.costMetric || 'NetUnblendedCost'
+      const metric = chartData.value.costMetric || 'UnblendedCost'
       const cost = parseFloat(group.Metrics?.[metric]?.Amount || '0')
       if (!tagValueMap[key]) tagValueMap[key] = {}
       tagValueMap[key][timeKey] = (tagValueMap[key][timeKey] || 0) + cost
@@ -182,12 +182,6 @@ const chartOption = computed(() => {
     })
   }
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
-    return `$${value.toFixed(0)}`
-  }
-
   return {
     backgroundColor: 'transparent',
     tooltip: {
@@ -198,7 +192,7 @@ const chartOption = computed(() => {
           .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
           .forEach((item: any) => {
             if (item.value > 0) {
-              result += `${item.marker} ${item.seriesName}: ${formatCurrency(item.value)}<br/>`
+              result += `${item.marker} ${item.seriesName}: ${formatCostValue(item.value)}<br/>`
             }
           })
         return result
@@ -229,7 +223,7 @@ const chartOption = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: (v: number) => formatCurrency(v)
+        formatter: (v: number) => formatCostValue(v)
       },
       axisLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.2)' } },
       splitLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.05)' } }

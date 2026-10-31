@@ -5,7 +5,7 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { invokeBedrock } from '../../utils/bedrock-client'
+import { invokeBedrock, parseModelJson } from '../../utils/bedrock-client'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 
@@ -290,13 +290,12 @@ Generate 3-5 relevant query completions.`
       // Parse AI suggestions
       let aiSuggestions: QuerySuggestion[] = []
       try {
-        let content = aiResponse.content.trim()
-        if (content.startsWith('```json')) content = content.slice(7)
-        if (content.startsWith('```')) content = content.slice(3)
-        if (content.endsWith('```')) content = content.slice(0, -3)
-        content = content.trim()
-
-        aiSuggestions = JSON.parse(content)
+        const parsed = parseModelJson<unknown>(aiResponse.content)
+        // Drop anything that is not a well-formed suggestion so the sort and
+        // de-duplication below cannot throw on model output
+        aiSuggestions = Array.isArray(parsed)
+          ? parsed.filter((s: any): s is QuerySuggestion => s && typeof s.suggestion === 'string' && typeof s.confidence === 'number')
+          : []
       } catch (parseError) {
         logger.warn('[Query Suggestions] Failed to parse AI response')
       }

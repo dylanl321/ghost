@@ -6,15 +6,18 @@
 export interface BucketPolicyStatement {
   Sid?: string
   Effect: 'Allow' | 'Deny'
-  Principal: any
-  Action: string | string[]
-  Resource: string | string[]
+  Principal?: any
+  NotPrincipal?: any
+  Action?: string | string[]
+  NotAction?: string | string[]
+  Resource?: string | string[]
   Condition?: Record<string, any>
 }
 
 export interface BucketPolicy {
   Version: string
-  Statement: BucketPolicyStatement[]
+  /** A single statement object is valid policy JSON too */
+  Statement: BucketPolicyStatement[] | BucketPolicyStatement
   Id?: string
 }
 
@@ -36,93 +39,60 @@ export interface BucketPolicyAnalysis {
   }>
   allowedActions: string[]
   statements: BucketPolicyStatement[]
+  /** Set when the policy could not be read; the other fields then say nothing about the bucket */
+  error?: string
+}
+
+function toArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined || value === null) return []
+  return Array.isArray(value) ? value : [value]
+}
+
+/** IAM action patterns are case-insensitive and use * and ? wildcards */
+function actionPatternMatches(pattern: string, action: string): boolean {
+  const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i')
+  return regex.test(action)
 }
 
 /**
- * Normalize actions to array format
+ * Whether a statement grants any of the given actions. Handles wildcard
+ * patterns ("*", "s3:Get*") and NotAction, which grants everything except
+ * the listed patterns.
  */
-function normalizeActions(action: string | string[] | undefined): string[] {
-  if (!action) return []
-  return Array.isArray(action) ? action : [action]
-}
-
-/**
- * Check if principal allows public access
- */
-function isPrincipalPublic(principal: any): boolean {
-  if (!principal) return false
-
-  // Check for wildcard principals
-  if (principal === '*') return true
-  if (principal.AWS === '*') return true
-  if (Array.isArray(principal.AWS) && principal.AWS.includes('*')) return true
-
-  return false
-}
-
-/**
- * Extract account IDs from principals
- */
-function extractAccountIds(principal: any): string[] {
-  const accountIds: string[] = []
-
-  if (!principal || principal === '*') return accountIds
-
-  if (typeof principal === 'string') {
-    // Extract account ID from ARN
-    const match = principal.match(/arn:aws[^:]*::(\d{12}):/)
-    if (match) accountIds.push(match[1])
-  } else if (principal.AWS) {
-    const awsPrincipals = Array.isArray(principal.AWS) ? principal.AWS : [principal.AWS]
-    for (const arn of awsPrincipals) {
-      if (typeof arn === 'string' && arn !== '*') {
-        const match = arn.match(/arn:aws[^:]*::(\d{12}):/)
-        if (match) accountIds.push(match[1])
-      }
-    }
-  } else if (principal.Service) {
-    // AWS service principals (not cross-account)
-    return []
+function grantsAnyAction(statement: BucketPolicyStatement, sensitive: string[]): boolean {
+  if (statement.NotAction !== undefined) {
+    const excluded = toArray(statement.NotAction)
+    return sensitive.some(action => !excluded.some(pattern => actionPatternMatches(pattern, action)))
   }
+  const patterns = toArray(statement.Action)
+  return sensitive.some(action => patterns.some(pattern => actionPatternMatches(pattern, action)))
+}
 
+/** Principal "*" or {"AWS": "*"}; NotPrincipal on an Allow also opens access to everyone else */
+function isPrincipalPublic(statement: BucketPolicyStatement): boolean {
+  if (statement.NotPrincipal !== undefined) return true
+  const principal = statement.Principal
+  if (!principal) return false
+  if (principal === '*') return true
+  return toArray(principal.AWS).includes('*')
+}
+
+/** Account IDs named by ARN or as bare 12-digit IDs */
+function extractAccountIds(principal: any): string[] {
+  if (!principal || principal === '*') return []
+  const values = typeof principal === 'string' ? [principal] : toArray(principal.AWS)
+  const accountIds: string[] = []
+  for (const value of values) {
+    if (typeof value !== 'string' || value === '*') continue
+    const match = value.match(/^arn:aws[^:]*:(?:iam|sts)::(\d{12}):/) || value.match(/^(\d{12})$/)
+    if (match) accountIds.push(match[1])
+  }
   return [...new Set(accountIds)]
 }
 
-/**
- * Check if actions allow read access
- */
-function allowsReadAccess(actions: string[]): boolean {
-  const readActions = ['s3:GetObject', 's3:GetObjectVersion', 's3:ListBucket', 's3:*']
-  return actions.some(action =>
-    readActions.some(readAction =>
-      action === readAction || action.match(new RegExp(readAction.replace('*', '.*')))
-    )
-  )
-}
-
-/**
- * Check if actions allow write access
- */
-function allowsWriteAccess(actions: string[]): boolean {
-  const writeActions = ['s3:PutObject', 's3:DeleteObject', 's3:*']
-  return actions.some(action =>
-    writeActions.some(writeAction =>
-      action === writeAction || action.match(new RegExp(writeAction.replace('*', '.*')))
-    )
-  )
-}
-
-/**
- * Check if actions allow list access
- */
-function allowsListAccess(actions: string[]): boolean {
-  const listActions = ['s3:ListBucket', 's3:ListBucketVersions', 's3:*']
-  return actions.some(action =>
-    listActions.some(listAction =>
-      action === listAction || action.match(new RegExp(listAction.replace('*', '.*')))
-    )
-  )
-}
+const READ_ACTIONS = ['s3:GetObject', 's3:GetObjectVersion']
+const WRITE_ACTIONS = ['s3:PutObject', 's3:DeleteObject', 's3:DeleteObjectVersion', 's3:PutBucketPolicy', 's3:PutBucketAcl']
+const LIST_ACTIONS = ['s3:ListBucket', 's3:ListBucketVersions']
 
 /**
  * Analyze a bucket policy
@@ -164,72 +134,62 @@ export function analyzeBucketPolicy(
   let allowsPublicList = false
   let allowsCrossAccount = false
 
-  for (const statement of policy.Statement) {
-    // Skip Deny statements for now (they restrict access)
-    if (statement.Effect === 'Deny') continue
+  const statements = toArray(policy.Statement)
 
-    const actions = normalizeActions(statement.Action)
-    actions.forEach(action => allowedActions.add(action))
+  for (const statement of statements) {
+    // Deny statements only restrict access
+    if (statement.Effect !== 'Allow') continue
 
-    // Check for public access
-    if (isPrincipalPublic(statement.Principal)) {
+    toArray(statement.Action).forEach(action => allowedActions.add(action))
+    if (statement.NotAction !== undefined) {
+      allowedActions.add(`NotAction: ${toArray(statement.NotAction).join(', ')}`)
+    }
+
+    if (isPrincipalPublic(statement)) {
+      const grantsRead = grantsAnyAction(statement, READ_ACTIONS)
+      const grantsWrite = grantsAnyAction(statement, WRITE_ACTIONS)
+      const grantsList = grantsAnyAction(statement, LIST_ACTIONS)
+
+      // Conditions (source VPC, org ID, IP range) usually scope a wildcard
+      // principal down; flag it for review rather than as public.
+      if (statement.Condition) {
+        if (grantsRead || grantsWrite || grantsList) {
+          risks.push({
+            severity: 'medium',
+            finding: 'Wildcard principal limited by conditions; confirm the conditions restrict access',
+            statement
+          })
+        }
+        continue
+      }
+
       isPublic = true
-
-      if (allowsReadAccess(actions)) {
+      if (grantsRead) {
         allowsPublicRead = true
-        risks.push({
-          severity: 'critical',
-          finding: 'Bucket allows public read access',
-          statement
-        })
+        risks.push({ severity: 'critical', finding: 'Bucket allows public read access', statement })
       }
-
-      if (allowsWriteAccess(actions)) {
+      if (grantsWrite) {
         allowsPublicWrite = true
-        risks.push({
-          severity: 'critical',
-          finding: 'Bucket allows public write access',
-          statement
-        })
+        risks.push({ severity: 'critical', finding: 'Bucket allows public write access', statement })
       }
-
-      if (allowsListAccess(actions)) {
+      if (grantsList) {
         allowsPublicList = true
-        risks.push({
-          severity: 'high',
-          finding: 'Bucket allows public list access',
-          statement
-        })
+        risks.push({ severity: 'high', finding: 'Bucket allows public list access', statement })
       }
     } else {
-      // Check for cross-account access
-      const principalAccountIds = extractAccountIds(statement.Principal)
+      for (const accountId of extractAccountIds(statement.Principal)) {
+        if (accountId === bucketAccountId) continue
+        allowsCrossAccount = true
+        crossAccountPrincipals.push(accountId)
 
-      for (const accountId of principalAccountIds) {
-        if (accountId !== bucketAccountId) {
-          allowsCrossAccount = true
-          crossAccountPrincipals.push(accountId)
-
-          // Check if it's intentional (has conditions or limited actions)
-          if (!statement.Condition && actions.includes('s3:*')) {
-            risks.push({
-              severity: 'high',
-              finding: `Grants unrestricted access to account ${accountId}`,
-              statement
-            })
-          } else if (!statement.Condition) {
-            risks.push({
-              severity: 'medium',
-              finding: `Grants access to account ${accountId}`,
-              statement
-            })
-          } else {
-            risks.push({
-              severity: 'low',
-              finding: `Grants conditional access to account ${accountId}`,
-              statement
-            })
-          }
+        const unrestricted = statement.NotAction !== undefined ||
+          toArray(statement.Action).some(action => action === '*' || action.toLowerCase() === 's3:*')
+        if (!statement.Condition && unrestricted) {
+          risks.push({ severity: 'high', finding: `Grants unrestricted access to account ${accountId}`, statement })
+        } else if (!statement.Condition) {
+          risks.push({ severity: 'medium', finding: `Grants access to account ${accountId}`, statement })
+        } else {
+          risks.push({ severity: 'low', finding: `Grants conditional access to account ${accountId}`, statement })
         }
       }
     }
@@ -248,7 +208,7 @@ export function analyzeBucketPolicy(
     },
     risks,
     allowedActions: Array.from(allowedActions),
-    statements: policy.Statement
+    statements
   }
 }
 

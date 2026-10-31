@@ -97,7 +97,7 @@ curl -G -H "x-api-key: YOUR_KEY" \
   "https://ghost.example/api/v1/costs/tags"
 ```
 
-The response includes `data.values` with each normalized tag value, `billableCost`, raw source values, and contributing accounts. It also includes tagged and untagged totals, `signedTotalCost` including credits, and `overallCoverage` calculated from positive charges. Costs use `NetUnblendedCost`, matching the Tag Analysis page.
+The response includes `data.values` with each normalized tag value, `billableCost`, raw source values, and contributing accounts. It also includes tagged and untagged totals, `signedTotalCost` including credits, and `overallCoverage` calculated from positive charges. Costs use `UnblendedCost`, matching the Tag Analysis page and the rest of the Cost Dashboard.
 
 - Use `/api/v1/costs/tag-keys?period=lastMonth` to discover tag keys. Add `tagKey=Project` to discover that key's raw values.
 - Use `includeAccounts=false` for a smaller tag-value response. Each value still includes its `accountCount`.

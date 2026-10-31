@@ -12,63 +12,12 @@ import { requirePermission } from '../../utils/user-roles'
 import { errors } from '../../utils/api-response'
 import { getItem } from '../../utils/dynamodb'
 import { getDynamoDBConfig } from '../../lib/dynamodb-config'
-import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
-import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { queryDevOrgChargesByMonth } from '../../utils/dev-org-charges'
+import { ALLOWED_DEPARTMENTS, computeBudgetVsActual, type AllowedDepartment } from '../../utils/budget-vs-actual'
 import { logger } from '../../utils/logger'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 
-const ALLOWED_DEPARTMENTS = ['DE158', 'DT509', 'DT328'] as const
-type AllowedDepartment = typeof ALLOWED_DEPARTMENTS[number]
-
-const PAYER_ACCOUNT_ID    = process.env.AWS_MASTER_ACCOUNT_ID    || '205950196477'
-const PROFORMA_ACCOUNT_ID = process.env.AWS_PROFORMA_ACCOUNT_ID  || '253821132832'
-const DEV_ORG_ACCOUNT_ID  = process.env.AWS_DEV_ORG_ACCOUNT_ID   || '266632029214'
-const LAS_APNT_CLD_IDS    = ['767397758347', '105013955011']
-
-const DEPT_NAMED_CATEGORIES: Record<AllowedDepartment, { name: string; note?: string }[]> = {
-  DE158: [
-    { name: 'External Access VPC',               note: 'proportional to network traffic levels' },
-    { name: 'DevSecOps - Engineering Solutions',  note: 'proportional to engineering GitLab usage' },
-  ],
-  DT509: [
-    { name: 'Software Engineering Solutions' },
-    { name: 'GDMS ITS SOC' },
-  ],
-  DT328: []
-}
-
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function periodToMonthKey(period: any): string {
-  const start = period.TimePeriod?.Start
-  if (!start) return ''
-  const postingMonth = new Date(`${start}T00:00:00Z`)
-  postingMonth.setUTCMonth(postingMonth.getUTCMonth() + 1)
-  return postingMonth.toISOString().slice(0, 10)
-}
-
-function indexByAccountMonth(resultsByTime: any[] | undefined): Map<string, Map<string, number>> {
-  const out = new Map<string, Map<string, number>>()
-  if (!resultsByTime) return out
-  for (const period of resultsByTime) {
-    const month = periodToMonthKey(period)
-    if (!month) continue
-    for (const group of period.Groups || []) {
-      const accountId = group.Keys?.[0]
-      if (!accountId) continue
-      const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
-      if (!out.has(accountId)) out.set(accountId, new Map())
-      out.get(accountId)!.set(month, (out.get(accountId)!.get(month) || 0) + cost)
-    }
-  }
-  return out
-}
-
-function accountDepartment(acc: any): string {
-  return (acc.pepDepartment || acc.departmentNumber || acc.department || '').trim()
-}
 
 async function fetchPlanOverrides(department: string, year: number): Promise<Record<string, number>> {
   try {
@@ -284,11 +233,7 @@ export default defineEventHandler(async (event) => {
     }
     const exportDepartments: AllowedDepartment[] = requestedDepartment ? [requestedDepartment as AllowedDepartment] : [...ALLOWED_DEPARTMENTS]
 
-    const startDate = `${year - 1}-12-01`
     const now = new Date()
-    const endMonthNum = now.getMonth() + 2
-    const endYear = endMonthNum > 12 ? now.getFullYear() + 1 : now.getFullYear()
-    const endDate = `${endYear}-${String(endMonthNum > 12 ? 1 : endMonthNum).padStart(2, '0')}-01`
 
     // Actuals are intentionally limited to the report year. The following year comes
     // from the saved AWS-backed financial forecast, so this export never asks Cost
@@ -300,78 +245,9 @@ export default defineEventHandler(async (event) => {
       ...allMonths,
       ...Array.from({ length: 12 }, (_, i) => `${year + 1}-${String(i + 1).padStart(2, '0')}-01`)
     ]
-    const yearMonthMin = allMonths[0]
-    const yearMonthMax = allMonths[11]
 
-    // ── Fetch accounts ──
-    const accounts = await getAllAccountsUnified()
-    const deptAccounts = new Map<AllowedDepartment, string[]>()
-    for (const dept of exportDepartments) deptAccounts.set(dept, [])
-    for (const acc of accounts) {
-      const dept = accountDepartment(acc)
-      if (!exportDepartments.includes(dept as AllowedDepartment)) continue
-      const id = acc.accountId || acc.id
-      if (!id || LAS_APNT_CLD_IDS.includes(id)) continue
-      deptAccounts.get(dept as AllowedDepartment)!.push(id)
-    }
-
-    // ── Fetch proforma (budget) + billable (actual) grouped by linked account ──
-    const proformaResult = await getProformaCosts({
-      startDate,
-      endDate,
-      granularity: 'MONTHLY',
-      metrics: ['UnblendedCost'],
-      groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-    })
-
-    const budgetByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
-    const actualByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
-
-    const payerBudgetFromProforma = budgetByAcct.get(PAYER_ACCOUNT_ID)
-    budgetByAcct.delete(PAYER_ACCOUNT_ID)
-    budgetByAcct.delete(DEV_ORG_ACCOUNT_ID)
-    actualByAcct.delete(PAYER_ACCOUNT_ID)
-    actualByAcct.delete(DEV_ORG_ACCOUNT_ID)
-    for (const id of LAS_APNT_CLD_IDS) { budgetByAcct.delete(id); actualByAcct.delete(id) }
-
-    // ── GDMS Cloud actuals + DevOrg ──
-    const ceParams = { startDate, endDate, granularity: 'MONTHLY' as const, metrics: ['UnblendedCost'] }
-    const [masterBillable, proformaOrgTotals, devOrgResult] = await Promise.all([
-      getCostAndUsage(ceParams, 'commercial', PAYER_ACCOUNT_ID),
-      getCostAndUsage(ceParams, 'commercial', PROFORMA_ACCOUNT_ID),
-      queryDevOrgChargesByMonth(year).catch(err => {
-        logger.warn('[BudgetVsActualExport] DevOrg failed:', err)
-        return { byMonth: new Map<string, number>(), byAccountMonth: new Map(), accountNames: new Map() }
-      })
-    ])
-
-    const billableByMonth = new Map<string, number>()
-    for (const period of masterBillable.resultsByTime || []) {
-      const month = periodToMonthKey(period)
-      if (month) billableByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
-    }
-    const proformaOrgByMonth = new Map<string, number>()
-    for (const period of proformaOrgTotals.resultsByTime || []) {
-      const month = periodToMonthKey(period)
-      if (month) proformaOrgByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
-    }
-
-    const payerActualByMonth = new Map<string, number>()
-    const payerBudgetByMonth = new Map<string, number>()
-    for (const month of allMonths) {
-      const gdmsCloud = (billableByMonth.get(month) ?? 0) - (proformaOrgByMonth.get(month) ?? 0)
-      if (gdmsCloud > 0) payerActualByMonth.set(month, gdmsCloud)
-    }
-    for (const [m, c] of payerBudgetFromProforma || []) payerBudgetByMonth.set(m, c)
-
-    const devOrgBudgetByMonth = new Map<string, number>()
-    for (const [m, c] of budgetByAcct.get(DEV_ORG_ACCOUNT_ID) || []) devOrgBudgetByMonth.set(m, c)
-
-    const resolvedDevOrgActual = [...devOrgResult.byMonth.entries()]
-      .filter(([m]) => m >= yearMonthMin && m <= yearMonthMax)
-      .reduce((s, [, v]) => s + v, 0)
-    const payerBudgetTotal = [...payerBudgetByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= yearMonthMax).reduce((s, [, v]) => s + v, 0)
-    const payerActualTotal = [...payerActualByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= yearMonthMax).reduce((s, [, v]) => s + v, 0)
+    // Same computation as the page, so the workbook matches the screen.
+    const report = await computeBudgetVsActual({ departments: exportDepartments, year, environment: 'commercial' })
 
     // ── Plan overrides ──
     const planOverrides = Object.fromEntries(await Promise.all(exportDepartments.map(async (department) => {
@@ -382,80 +258,30 @@ export default defineEventHandler(async (event) => {
       return [department, { ...reportYear, ...forecastYear }]
     }))) as Record<string, Record<string, number>>
 
-    // ── Build department results ──
-    interface MonthlyPoint { month: string; budget: number; actual: number }
-    interface AccountRow { accountId: string; name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; monthlyActuals: Record<string, number> }
-    interface CategoryRow { name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; note?: string; accounts: AccountRow[] }
-    interface DeptResult { department: string; budgetTotal: number; actualTotal: number; monthly: MonthlyPoint[]; categories: CategoryRow[] }
-
-    const deptResults: DeptResult[] = []
-
-    for (const dept of exportDepartments) {
-      const monthMap = new Map<string, { budget: number; actual: number }>()
-      for (const m of allMonths) monthMap.set(m, { budget: 0, actual: 0 })
-      const ensure = (m: string) => { if (!monthMap.has(m)) monthMap.set(m, { budget: 0, actual: 0 }); return monthMap.get(m)! }
-
-      const accountTotals = new Map<string, { budget: number; actual: number }>()
-      const accountMonthlyActuals = new Map<string, Map<string, number>>()
-
-      for (const accountId of deptAccounts.get(dept)!) {
-        let acctBudget = 0, acctActual = 0
-        for (const [m, c] of budgetByAcct.get(accountId) || []) { ensure(m).budget += c; if (m >= yearMonthMin && m <= yearMonthMax) acctBudget += c }
-        for (const [m, c] of actualByAcct.get(accountId) || []) { ensure(m).actual += c; if (m >= yearMonthMin && m <= yearMonthMax) acctActual += c }
-        accountTotals.set(accountId, { budget: acctBudget, actual: acctActual })
-        const monthly = new Map<string, number>()
-        for (const m of allMonths) monthly.set(m, actualByAcct.get(accountId)?.get(m) ?? 0)
-        accountMonthlyActuals.set(accountId, monthly)
+    // YTD totals as the page shows them: plan overrides win over the computed
+    // budget, months after the current one are excluded, and the difference
+    // between the department total and its categories is folded into GDMS Cloud.
+    const ytdCutoff = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const deptResults = report.departments.map((dept) => {
+      const overrides = planOverrides[dept.department] || {}
+      const ytdMonths = dept.monthly.filter(m => m.month <= ytdCutoff)
+      const budgetTotal = ytdMonths.reduce((sum, m) => sum + (overrides[m.month] ?? m.budget), 0)
+      const actualTotal = ytdMonths.reduce((sum, m) => sum + m.actual, 0)
+      const planAdjustment = budgetTotal - dept.categories.reduce((sum, c) => sum + c.ytdBudget, 0)
+      const actualAdjustment = actualTotal - dept.categories.reduce((sum, c) => sum + c.ytdActual, 0)
+      return {
+        department: dept.department,
+        budgetTotal: Math.round(budgetTotal),
+        actualTotal: Math.round(actualTotal),
+        monthly: dept.monthly.map(m => ({ month: m.month, budget: Math.round(m.budget), actual: Math.round(m.actual) })),
+        categories: dept.categories.map(cat => {
+          const isGdmsCloud = cat.name === 'GDMS Cloud'
+          const ytdBudget = Math.round(cat.ytdBudget + (isGdmsCloud ? planAdjustment : 0))
+          const ytdActual = Math.round(cat.ytdActual + (isGdmsCloud ? actualAdjustment : 0))
+          return { name: cat.name, ytdBudget, ytdActual, ytdVariance: ytdActual - ytdBudget, note: cat.note }
+        })
       }
-
-      if (dept === 'DE158') {
-        for (const [m, c] of payerActualByMonth) ensure(m).actual += c
-        for (const [m, c] of payerBudgetByMonth) ensure(m).budget += c
-        for (const [m, c] of devOrgResult.byMonth) ensure(m).actual += c
-        for (const [m, c] of devOrgBudgetByMonth) ensure(m).budget += c
-      }
-
-      const monthly: MonthlyPoint[] = allMonths.map(m => {
-        const pt = monthMap.get(m)!
-        return { month: m, budget: Math.round(pt.budget), actual: Math.round(pt.actual) }
-      })
-
-      const overrides = planOverrides[dept] || {}
-      const planByMonth = (m: string) => overrides[m] ?? monthly.find(x => x.month === m)?.budget ?? 0
-      const budgetTotal = allMonths.filter(m => m >= yearMonthMin && m <= yearMonthMax).reduce((s, m) => s + planByMonth(m), 0)
-      const actualTotal = monthly.filter(x => x.month >= yearMonthMin && x.month <= yearMonthMax).reduce((s, x) => s + x.actual, 0)
-
-      const acctList = accounts.filter(a => { const id = a.accountId || a.id; return id && deptAccounts.get(dept)!.includes(id) && !LAS_APNT_CLD_IDS.includes(id) })
-      const categories: CategoryRow[] = []
-
-      for (const def of DEPT_NAMED_CATEGORIES[dept]) {
-        const catAccounts: AccountRow[] = []
-        for (const acc of acctList) {
-          const id = acc.accountId || acc.id
-          const name = acc.projectName || acc.name || ''
-          if (!name.toLowerCase().includes(def.name.toLowerCase())) continue
-          const totals = accountTotals.get(id) || { budget: 0, actual: 0 }
-          const monthlyActuals: Record<string, number> = {}
-          for (const m of allMonths) monthlyActuals[m] = accountMonthlyActuals.get(id)?.get(m) ?? 0
-          catAccounts.push({ accountId: id, name, ytdBudget: Math.round(totals.budget), ytdActual: Math.round(totals.actual), ytdVariance: Math.round(totals.actual - totals.budget), monthlyActuals })
-        }
-        const ytdBudget = catAccounts.reduce((s, a) => s + a.ytdBudget, 0)
-        const ytdActual = catAccounts.reduce((s, a) => s + a.ytdActual, 0)
-        categories.push({ name: def.name, ytdBudget, ytdActual, ytdVariance: ytdActual - ytdBudget, note: def.note, accounts: catAccounts })
-      }
-
-      if (dept === 'DE158') {
-        const payerMonthly: Record<string, number> = {}
-        for (const m of allMonths) payerMonthly[m] = Math.round(payerActualByMonth.get(m) ?? 0)
-        categories.push({ name: 'GDMS Cloud', ytdBudget: Math.round(payerBudgetTotal), ytdActual: Math.round(payerActualTotal), ytdVariance: Math.round(payerActualTotal - payerBudgetTotal), accounts: [{ accountId: PAYER_ACCOUNT_ID, name: 'GDMS Cloud', ytdBudget: Math.round(payerBudgetTotal), ytdActual: Math.round(payerActualTotal), ytdVariance: Math.round(payerActualTotal - payerBudgetTotal), monthlyActuals: payerMonthly }] })
-        const devBudgetTotal = [...devOrgBudgetByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= yearMonthMax).reduce((s, [, v]) => s + v, 0)
-        const devMonthly: Record<string, number> = {}
-        for (const m of allMonths) devMonthly[m] = Math.round(devOrgResult.byMonth.get(m) ?? 0)
-        categories.push({ name: 'GDMS-DevOrg', ytdBudget: Math.round(devBudgetTotal), ytdActual: Math.round(resolvedDevOrgActual), ytdVariance: Math.round(resolvedDevOrgActual - devBudgetTotal), accounts: [{ accountId: DEV_ORG_ACCOUNT_ID, name: 'GDMS-DevOrg', ytdBudget: Math.round(devBudgetTotal), ytdActual: Math.round(resolvedDevOrgActual), ytdVariance: Math.round(resolvedDevOrgActual - devBudgetTotal), monthlyActuals: devMonthly }] })
-      }
-
-      deptResults.push({ department: dept, budgetTotal: Math.round(budgetTotal), actualTotal: Math.round(actualTotal), monthly, categories })
-    }
+    })
 
     // ── Build Excel workbook ──
     const wb = new ExcelJS.Workbook()
