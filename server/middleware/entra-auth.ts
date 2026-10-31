@@ -9,7 +9,7 @@ import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getClientAddress } from '../utils/client-address'
 import { isV1Path, sendV1Error } from '../utils/v1-errors'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
-import { requireAdmin } from '../utils/user-roles'
+import { getUserEmail, requireAdmin } from '../utils/user-roles'
 import { logger } from '../utils/logger'
 
 interface AuthContext {
@@ -261,9 +261,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode, statusMessage })
   }
 
-  // Special rule: Entra APIs require OIDC authentication (need user's Entra token)
+  // Special rule: Entra APIs require OIDC authentication (need user's Entra token).
+  // Judge the normalized path, as requiresAuthentication does, so a dot
+  // segment or doubled slash cannot slip past the prefix check.
   const url = event.node.req.url || ''
-  if (url.startsWith('/api/entra/') && authContext.authType !== 'oidc') {
+  if (normalizeApiPath(url).startsWith('/api/entra/') && authContext.authType !== 'oidc') {
     throw createError({
       statusCode: 403,
       statusMessage: 'Entra APIs require user authentication. API keys cannot be used for Entra endpoints.'
@@ -364,6 +366,18 @@ export function requireOIDCAuth(event: H3Event): void {
       statusMessage: 'This endpoint requires user authentication. API keys are not supported.'
     })
   }
+}
+
+/**
+ * The signed-in user who owns personal API keys, lower-cased. API keys
+ * themselves cannot manage keys, and a session with no email-like identity
+ * cannot own one.
+ */
+export function requireApiKeyOwner(event: H3Event): string {
+  requireOIDCAuth(event)
+  const owner = getUserEmail(event)
+  if (!owner) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
+  return owner.toLowerCase()
 }
 
 /**

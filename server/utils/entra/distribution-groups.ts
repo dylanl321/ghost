@@ -10,7 +10,7 @@ import type {
   EntraUser
 } from '../../types/entra'
 import { EntraCacheTags } from '../../types/entra'
-import { entraConfig, getCacheKey } from './config'
+import { entraConfig, getCacheKey, odataString } from './config'
 import { parseGroupDescription } from './group-parser'
 import { graphRequest, getAllPages } from './graph-client'
 import { accountCache, CacheTags } from '../cache-manager'
@@ -43,9 +43,7 @@ export async function findDistributionGroup(
 ): Promise<DistributionGroup | null> {
   try {
     // Extract account name from email if needed
-    const accountName = accountIdentifier.includes('@') 
-      ? accountIdentifier.split('@')[0]
-      : accountIdentifier
+    const accountName = accountIdentifier.split('@')[0] || accountIdentifier
     
     // Check if the account name already ends with .AWS (case insensitive)
     const suffix = entraConfig.search.distributionSuffix
@@ -64,7 +62,7 @@ export async function findDistributionGroup(
     logger.info(`Looking for distribution group: ${groupName}`)
     
     // Search for the specific distribution group
-    const filter = `displayName eq '${groupName}'`
+    const filter = `displayName eq ${odataString(groupName)}`
     const queryParams = new URLSearchParams({
       '$filter': filter,
       '$select': 'id,displayName,description,mail,mailEnabled'
@@ -78,7 +76,7 @@ export async function findDistributionGroup(
     }
     
     const group = response.value[0]
-    const { purpose, owners } = parseGroupDescription(group.description)
+    const { owners } = parseGroupDescription(group.description)
     
     const distributionGroup: DistributionGroup = {
       id: group.id,
@@ -134,7 +132,7 @@ export async function getAllDistributionGroups(
     const groups = await getAllPages<EntraGroup>(event, `/groups?${queryParams}`)
     
     const distributionGroups: DistributionGroup[] = groups.map(group => {
-      const { purpose, owners } = parseGroupDescription(group.description)
+      const { owners } = parseGroupDescription(group.description)
       const accountName = extractAccountName(group.displayName) || ''
       
       return {
@@ -207,32 +205,6 @@ export async function getDistributionGroupMembers(
     logger.error(`Failed to get distribution group members for ${groupId}:`, error)
     throw error
   }
-}
-
-/**
- * Link distribution groups to AWS accounts
- * This requires account lookup from your existing account management
- */
-export async function linkDistributionGroupsToAccounts(
-  distributionGroups: DistributionGroup[],
-  accounts: any[] // Use your existing account type
-): Map<string, string> {
-  const accountMap = new Map<string, string>()
-  
-  for (const group of distributionGroups) {
-    // Find matching account by email prefix
-    const matchingAccount = accounts.find(account => {
-      if (!account.email) return false
-      const emailPrefix = account.email.split('@')[0]
-      return emailPrefix === group.accountName
-    })
-    
-    if (matchingAccount) {
-      accountMap.set(group.accountName, matchingAccount.id)
-    }
-  }
-  
-  return accountMap
 }
 
 /**

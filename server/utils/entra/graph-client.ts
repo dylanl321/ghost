@@ -9,11 +9,13 @@ import type {
   EntraGroup,
   EntraUser,
   GroupMembersResponse,
+  AccountGroups
 } from '../../types/entra'
 import { EntraCacheTags } from '../../types/entra'
 import {
   getCacheKey,
   buildGroupFilter,
+  odataString,
   buildDistributionGroupFilter,
   GRAPH_SELECT_FIELDS,
   getGraphBaseUrl,
@@ -286,11 +288,19 @@ export async function getAWSGroups(
   event: H3Event,
   filters?: GroupSearchFilters,
   options: { maxPages?: number; signal?: AbortSignal } = {}
-): Promise<{ data: Record<string, any>; fromCache: boolean; truncated?: boolean }> {
-  const cacheKey = getCacheKey('groups', filters?.accountId || 'all')
+): Promise<{ data: Record<string, AccountGroups>; fromCache: boolean; truncated?: boolean }> {
+  // Every filter that changes the Graph query must be part of the key, or a
+  // narrowed result (one role, no distribution groups) is served to callers
+  // that asked for everything.
+  const includeDistribution = filters?.includeDistribution !== false
+  const cacheKey = getCacheKey('groups', [
+    filters?.accountId || 'all',
+    filters?.role ? `role-${filters.role.toLowerCase()}` : '',
+    includeDistribution ? '' : 'no-dist'
+  ].filter(Boolean).join(':'))
   
   // Check cache first
-  const cached = await accountCache.get(cacheKey)
+  const cached = await accountCache.get<Record<string, AccountGroups>>(cacheKey)
   if (cached) {
     logger.info(`Cache hit for ${cacheKey}`)
     return { data: cached, fromCache: true, truncated: false }
@@ -304,7 +314,7 @@ export async function getAWSGroups(
     
     // Add role filter if specified
     if (filters?.role) {
-      filter += ` and contains(displayName, '-${filters.role}')`
+      filter += ` and contains(displayName, ${odataString(`-${filters.role}`)})`
     }
     
     // Build query parameters
@@ -325,7 +335,7 @@ export async function getAWSGroups(
     
     // Also get distribution groups if requested
     let allGroups = groups
-    if (filters?.includeDistribution !== false) {
+    if (includeDistribution) {
       const distFilter = buildDistributionGroupFilter(
         filters?.accountId ? undefined : undefined // Will need account name lookup
       )
@@ -477,7 +487,8 @@ export async function searchUsers(
   searchTerm: string
 ): Promise<EntraUser[]> {
   try {
-    const filter = `startsWith(displayName, '${searchTerm}') or startsWith(mail, '${searchTerm}') or startsWith(userPrincipalName, '${searchTerm}')`
+    const term = odataString(searchTerm)
+    const filter = `startsWith(displayName, ${term}) or startsWith(mail, ${term}) or startsWith(userPrincipalName, ${term})`
     
     const queryParams = new URLSearchParams({
       '$filter': filter,

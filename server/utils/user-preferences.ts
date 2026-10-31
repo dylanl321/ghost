@@ -4,7 +4,7 @@
  */
 
 import type { UserPreferences, UpdatePreferencesRequest } from '../../shared/types/user-preferences'
-import { getItem, putItem, scanItems } from './dynamodb'
+import { deleteItem, getItem, putItem, scanItems } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import type { H3Event } from 'h3'
 import { logger } from './logger'
@@ -34,13 +34,74 @@ function detectTimezoneFromRequest(event?: H3Event): string {
 }
 
 /**
+ * Preferences are keyed by the lower-cased user id. Sessions carry the email as
+ * Entra returns it (often mixed case) while notification and digest code look
+ * it up lower-cased, so an unnormalized key silently split one user's settings
+ * across two rows.
+ */
+export function normalizePreferencesUserId(userId: string): string {
+  return String(userId).trim().toLowerCase()
+}
+
+async function preferencesTable() {
+  return {
+    tableName: await getTableName('userPreferences'),
+    environment: await getTableEnvironment('userPreferences'),
+    accountId: await getTableAccountId('userPreferences')
+  }
+}
+
+/**
+ * Fold a row stored under a legacy mixed-case key into the normalized row.
+ * The newer row's fields win, and its preference keys win over the older
+ * row's, so a default row auto-created under the lower-case key cannot mask
+ * settings the user saved under the old key. The legacy row is removed only
+ * after the merged row is written.
+ */
+export function mergeLegacyPreferences(
+  userId: string,
+  normalized: UserPreferences | null,
+  legacy: UserPreferences
+): UserPreferences {
+  if (!normalized) return { ...legacy, userId }
+  const [older, newer] = (legacy.updatedAt || '') > (normalized.updatedAt || '')
+    ? [normalized, legacy]
+    : [legacy, normalized]
+  return {
+    ...older,
+    ...newer,
+    userId,
+    createdAt: [legacy.createdAt, normalized.createdAt].filter(Boolean).sort()[0] || newer.createdAt,
+    preferences: { ...older.preferences, ...newer.preferences }
+  }
+}
+
+async function migrateLegacyPreferences(
+  rawUserId: string,
+  userId: string,
+  normalized: UserPreferences | null
+): Promise<UserPreferences | null> {
+  if (rawUserId === userId) return normalized
+  const { tableName, environment, accountId } = await preferencesTable()
+  const legacy = await getItem(tableName, { userId: rawUserId }, environment, accountId) as UserPreferences | null
+  if (!legacy) return normalized
+
+  const merged = mergeLegacyPreferences(userId, normalized, legacy)
+  await putItem(tableName, merged, environment, accountId)
+  await deleteItem(tableName, { userId: rawUserId }, environment, accountId)
+  logger.info(`Migrated user preferences to normalized key for ${userId}`)
+  return merged
+}
+
+/**
  * Get user preferences by userId
  * Auto-creates with defaults if doesn't exist
  */
 export async function getUserPreferences(
-  userId: string,
+  rawUserId: string,
   event?: H3Event
 ): Promise<UserPreferences> {
+  const userId = normalizePreferencesUserId(rawUserId)
   try {
     const tableName = await getTableName('userPreferences')
     const environment = await getTableEnvironment('userPreferences')
@@ -54,8 +115,9 @@ export async function getUserPreferences(
       accountId
     )
 
-    if (existing) {
-      return existing as UserPreferences
+    const current = await migrateLegacyPreferences(rawUserId.trim(), userId, existing as UserPreferences | null)
+    if (current) {
+      return current
     }
 
     // Auto-create with defaults
@@ -93,23 +155,25 @@ export async function getUserPreferences(
  * Update user preferences (partial update)
  */
 export async function updateUserPreferences(
-  userId: string,
+  rawUserId: string,
   updates: UpdatePreferencesRequest
 ): Promise<UserPreferences> {
+  const userId = normalizePreferencesUserId(rawUserId)
   try {
     // Get existing preferences (or create defaults)
-    const existing = await getUserPreferences(userId)
+    const existing = await getUserPreferences(rawUserId)
 
-    // Merge updates
+    // Only the documented fields are writable. Spreading the request body
+    // let callers overwrite createdAt/lastLoginAt or add arbitrary attributes.
     const updated: UserPreferences = {
       ...existing,
-      ...updates,
+      ...(typeof updates?.timezone === 'string' ? { timezone: updates.timezone } : {}),
       userId, // Ensure userId doesn't change
       updatedAt: new Date().toISOString()
     }
 
     // Merge preferences object if provided
-    if (updates.preferences) {
+    if (updates?.preferences && typeof updates.preferences === 'object' && !Array.isArray(updates.preferences)) {
       updated.preferences = {
         ...existing.preferences,
         ...updates.preferences
@@ -144,6 +208,7 @@ export async function setUserPreference(
     // Update the specific preference
     const updated: UserPreferences = {
       ...existing,
+      userId: normalizePreferencesUserId(userId),
       preferences: {
         ...existing.preferences,
         [key]: value
@@ -174,6 +239,7 @@ export async function updateLastLogin(userId: string): Promise<void> {
 
     const updated: UserPreferences = {
       ...existing,
+      userId: normalizePreferencesUserId(userId),
       lastLoginAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -234,13 +300,10 @@ export async function deleteUserPreferences(userId: string): Promise<boolean> {
     const environment = await getTableEnvironment('userPreferences')
     const accountId = await getTableAccountId('userPreferences')
 
-    const { deleteItem } = await import('./dynamodb')
-    await deleteItem(
-      tableName,
-      { userId },
-      environment,
-      accountId
-    )
+    // Remove the normalized row and any row left under the legacy key.
+    for (const key of new Set([normalizePreferencesUserId(userId), userId.trim()])) {
+      await deleteItem(tableName, { userId: key }, environment, accountId)
+    }
 
     return true
 

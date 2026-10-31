@@ -4,7 +4,7 @@
  */
 
 import { createError, defineEventHandler, readBody, getRouterParam } from 'h3'
-import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
+import { requireApiKeyOwner } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
@@ -71,14 +71,7 @@ registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
-    requireOIDCAuth(event)
-
-    // Get authenticated user
-    const authContext = getAuthContext(event)
-    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
-      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
-    if (!userIdValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
-    const userId = String(userIdValue).toLowerCase()
+    const userId = requireApiKeyOwner(event)
 
     // Get key ID from route params
     const keyId = getRouterParam(event, 'keyId')

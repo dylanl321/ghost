@@ -59,12 +59,13 @@ export default defineNuxtConfig({
   },
 
   echarts: {
-    charts: ["BarChart", "LineChart", "PieChart", "GaugeChart"],
+    charts: ["BarChart", "LineChart", "PieChart", "GaugeChart", "HeatmapChart"],
     components: [
       "TitleComponent",
       "TooltipComponent",
       "LegendComponent",
       "GridComponent",
+      "VisualMapComponent",
     ],
   },
   css: ["~/assets/css/main.css"],

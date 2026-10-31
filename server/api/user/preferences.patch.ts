@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Parse request body
-    const updates = await readBody<UpdatePreferencesRequest>(event)
+    const updates = (await readBody<UpdatePreferencesRequest | null>(event)) || {}
 
     // Validate timezone if provided
     if (updates.timezone) {

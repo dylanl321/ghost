@@ -5,7 +5,7 @@
 
 import { createError, defineEventHandler, getRouterParam } from 'h3'
 import { getApiKeyUsage, isApiKeyOwnedBy } from '../../../../utils/api-keys'
-import { getAuthContext, requireOIDCAuth } from '../../../../middleware/entra-auth'
+import { requireApiKeyOwner } from '../../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../../types/entra'
 import { logger } from '../../../../utils/logger'
@@ -90,8 +90,6 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
-    requireOIDCAuth(event)
-
     // Get key ID from route params
     const keyId = getRouterParam(event, 'keyId')
     if (!keyId) {
@@ -100,11 +98,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
         statusMessage: 'API key ID is required'
       })
     }
-    const authContext = getAuthContext(event)
-    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
-      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
-    const userId = userIdValue ? String(userIdValue).toLowerCase() : ''
-    if (!userId || !(await isApiKeyOwnedBy(keyId, userId))) {
+    const userId = requireApiKeyOwner(event)
+    if (!(await isApiKeyOwnedBy(keyId, userId))) {
       throw createError({ statusCode: 404, statusMessage: 'API key not found' })
     }
 

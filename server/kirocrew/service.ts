@@ -42,6 +42,18 @@ export function redactRevision(revision: KiroCrewRevision) {
   }
 }
 
+/** The current revision with secrets redacted, or an empty revision 0. */
+export async function currentRedactedRevision() {
+  const revision = await getKiroCrewRepository().current()
+  return revision ? redactRevision(revision) : {
+    schemaVersion: 1,
+    revision: 0,
+    updatedAt: null,
+    publishedBy: null,
+    records: []
+  }
+}
+
 export async function publishKiroCrewRevision(raw: unknown, publishedBy: string) {
   const input = parseKiroCrewPublishInput(raw)
   const repository = getKiroCrewRepository()

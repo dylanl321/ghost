@@ -5,7 +5,7 @@
 
 import { updateUserPreferences } from '../../../utils/user-preferences'
 import { isUserAdmin } from '../../../utils/user-roles'
-import type { UpdatePreferencesRequest } from '../../../shared/types/user-preferences'
+import type { UpdatePreferencesRequest } from '../../../../shared/types/user-preferences'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Parse request body
-    const updates = await readBody<UpdatePreferencesRequest>(event)
+    const updates = (await readBody<UpdatePreferencesRequest | null>(event)) || {}
 
     // Validate timezone if provided
     if (updates.timezone) {

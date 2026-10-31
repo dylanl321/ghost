@@ -7,7 +7,7 @@ import { defineEventHandler } from 'h3'
 import { validateAllEntraConfig, getConfigSummary } from '../../../utils/entra/validation'
 import { validateOIDCConfig } from '../../../utils/oidc-config'
 import { getApiKeyStats } from '../../../utils/api-keys'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
+import { getTableEnvironment } from '../../../lib/dynamodb-config'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
@@ -88,7 +88,7 @@ interface ConfigStatusResponse {
   nodeEnv: string
 }
 
-export default defineEventHandler(async (event): Promise<EntraAPIResponse<ConfigStatusResponse>> => {
+export default defineEventHandler(async (): Promise<EntraAPIResponse<ConfigStatusResponse>> => {
   try {
     // Configuration status is available to all authenticated users
     // No admin scope required for basic status checks
@@ -108,7 +108,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Config
       oidcConfig,
       configSummary,
       apiKeyStats,
-      environment: process.env.API_KEYS_STORAGE_ENV || 'commercial',
+      // Where API keys are actually stored, from the same config the key code reads.
+      environment: await getTableEnvironment('apiKeys'),
       nodeEnv: process.env.NODE_ENV || 'development'
     }
     

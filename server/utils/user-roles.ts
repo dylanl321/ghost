@@ -46,6 +46,22 @@ function getSessionGroupNames(user: any): string[] {
     .filter(Boolean)
 }
 
+// Graph is addressed by the Entra object id; email is the last resort.
+function getGraphUserId(user: any): string | undefined {
+  return user.id || user.oid || user.sub ||
+    user.claims?.id || user.claims?.oid || user.claims?.sub ||
+    user.email || user.claims?.email || undefined
+}
+
+async function loadGraphGroupNames(
+  event: H3Event,
+  userId: string,
+  loadUserGroups: typeof getUserGroups
+): Promise<string[]> {
+  const groups = await loadUserGroups(event, userId)
+  return groups.map(group => group.displayName).filter(Boolean)
+}
+
 // ADMIN_BYPASS is a deliberate, human-owned security decision for non-production
 // deployments and its behavior must not change. The warning is identical on every
 // admin/permission check, so emit it only once per process to avoid log noise
@@ -103,12 +119,9 @@ export async function isUserAdmin(
 
   // For OIDC auth, fetch groups from Microsoft Graph API
   if (auth.authType === 'oidc') {
-    // Try to get user ID from various possible locations in the session
-    const userId = user.id || user.oid || user.sub ||
-                   user.claims?.id || user.claims?.oid || user.claims?.sub ||
-                   user.email || user.claims?.email
+    const userId = getGraphUserId(user)
     if (!userId) {
-      logger.error('Cannot fetch groups: user ID not found in session. User object:', JSON.stringify(user, null, 2))
+      logger.error('Cannot fetch groups: user ID not found in session')
       return false
     }
 
@@ -118,18 +131,10 @@ export async function isUserAdmin(
       return cached.isAdmin
     }
 
-    // Fetch from Graph API
     try {
-      // Fetch user's groups from Microsoft Graph
-      const userGroups = await loadUserGroups(event, userId)
+      const graphGroups = await loadGraphGroupNames(event, userId, loadUserGroups)
+      const isAdmin = hasConfiguredAdminRole(user, [...sessionGroups, ...graphGroups])
 
-      // Use the same role rules as the client, including configured admin usernames.
-      const isAdmin = hasConfiguredAdminRole(
-        user,
-        userGroups.map(group => group.displayName).filter(Boolean)
-      )
-
-      // Cache the result
       adminCache.set(userId, {
         isAdmin,
         expiresAt: Date.now() + ADMIN_CACHE_TTL
@@ -183,10 +188,13 @@ export async function requireAdmin(event: H3Event): Promise<void> {
  * backend so API endpoints can enforce permissions independently of the
  * client middleware (which only runs in the browser and can be bypassed).
  *
- * Group source is identical to isUserAdmin(): session groups when present
- * (API-key / dev sessions), otherwise Microsoft Graph memberOf for OIDC users.
+ * Group source is identical to isUserAdmin(): named session groups, plus
+ * Microsoft Graph memberOf for OIDC users.
  */
-export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
+export async function getUserPermissions(
+  event: H3Event,
+  loadUserGroups: typeof getUserGroups = getUserGroups
+): Promise<Set<string>> {
   const auth = event.context.auth
   if (!auth || !auth.isAuthenticated || !auth.user) {
     return new Set<string>()
@@ -201,22 +209,18 @@ export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
 
   const user = auth.user
 
-  // Gather the user's group display names.
-  let groupNames: string[] = []
-  const sessionGroups = getSessionGroupNames(user)
-  if (sessionGroups.length > 0) {
-    groupNames = sessionGroups
-  } else if (auth.authType === 'oidc') {
-    const userId = user.id || user.oid || user.sub ||
-                   user.claims?.id || user.claims?.oid || user.claims?.sub ||
-                   user.email || user.claims?.email
+  // Same group sources as isUserAdmin(): named session groups, plus Graph
+  // memberOf for OIDC users. Entra sessions usually carry group object IDs,
+  // so session groups alone must never stand in for the Graph lookup.
+  let groupNames = getSessionGroupNames(user)
+  if (auth.authType === 'oidc') {
+    const userId = getGraphUserId(user)
     if (userId) {
       try {
-        const groups = await getUserGroups(event, userId)
-        groupNames = groups.map(g => g.displayName).filter(Boolean)
+        groupNames = [...new Set([...groupNames, ...await loadGraphGroupNames(event, userId, loadUserGroups)])]
       } catch (error) {
         logger.error('Failed to fetch user groups for permission check:', error)
-        // Fail closed - no groups means only default (viewer) permissions.
+        // Fail closed - session groups only, which usually means viewer permissions.
       }
     }
   }
@@ -260,5 +264,5 @@ export function getUserEmail(event: H3Event): string | null {
   }
 
   const user = auth.user
-  return user.email || user.claims?.email || user.claims?.preferred_username || null
+  return user.email || user.preferred_username || user.claims?.email || user.claims?.preferred_username || null
 }

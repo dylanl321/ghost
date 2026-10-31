@@ -375,7 +375,7 @@ export async function listAggregateResources(
       params.Filters = filters
     }
 
-    logger.info(`[Config] Query params: ${JSON.stringify(params, null, 2)}`)
+    logger.debug('[Config] Query params', params)
 
     const command = new ListAggregateDiscoveredResourcesCommand(params)
     const response = await withThrottleRetry(
