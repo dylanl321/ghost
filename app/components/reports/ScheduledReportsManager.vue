@@ -183,7 +183,7 @@ const toast = useToast()
 const { user } = useOidcAuth()
 const { isAdmin } = useUserRoles()
 
-const userEmail = computed(() => user.value?.email || '')
+const userEmail = computed(() => (user.value?.claims?.email || user.value?.claims?.preferred_username || '') as string)
 
 const {
   loading,

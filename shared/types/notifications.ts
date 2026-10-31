@@ -104,6 +104,24 @@ export const CATEGORY_PREFERENCE_MAP: Record<NotificationCategory, string | null
   ACHIEVEMENT: null      // Always delivered (earned by user action, no email)
 }
 
+/**
+ * What applies when a user has never saved notification settings. The
+ * settings page and the server both read these; they used to disagree (the
+ * page showed a weekly digest the server never sent, and two categories as
+ * off that were still delivered).
+ */
+export const DEFAULT_NOTIFICATION_PREFERENCES = {
+  criticalSecurityFindings: true,
+  complianceViolations: true,
+  securityScoreChanges: true,
+  pipelineFailures: true,
+  deploymentCompletions: true,
+  emailDigestEnabled: false,
+  emailDigestFrequency: 'daily' as DigestPreferences['emailDigestFrequency'],
+  emailDigestTime: 8,
+  emailDigestDay: 'monday'
+}
+
 // ---------------------------------------------------------------------------
 // Category display metadata (for UI rendering)
 // ---------------------------------------------------------------------------
@@ -148,6 +166,8 @@ export const FILTER_GROUP_CATEGORIES: Record<NotificationFilterGroup, Notificati
 // ---------------------------------------------------------------------------
 
 export type BroadcastStatus = 'pending' | 'in-progress' | 'complete' | 'scheduled'
+// 'role' is kept only so older broadcast records still type-check; new
+// broadcasts are 'all' or 'list'
 export type BroadcastTarget = 'all' | 'role' | 'list'
 
 export interface BroadcastNotification {

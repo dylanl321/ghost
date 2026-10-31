@@ -6,8 +6,9 @@
  * and cleans up stale execution locks
  */
 
-import { listAllReports, calculateNextRunTime, updateReport } from '../../../utils/scheduled-reports'
-import { cleanupStaleLocks } from '../../../utils/execution-locks'
+import { listAllReports, updateReport } from '../../../utils/scheduled-reports'
+import { calculateNextRunTime } from '../../../../shared/utils/report-schedule'
+import { cleanupStaleLocks, STALE_LOCK_MAX_AGE_MINUTES } from '../../../utils/execution-locks'
 import { logger } from '../../../utils/logger'
 import { requireAdmin } from '../../../utils/user-roles'
 
@@ -27,9 +28,10 @@ export default defineEventHandler(async (event) => {
       errors: [] as string[]
     }
 
-    // 1. Clean up stale execution locks first (older than 5 minutes)
+    // 1. Clean up abandoned execution locks. Only locks older than the
+    // longest job, so a report that is mid-run keeps its lock and is not sent twice.
     try {
-      results.locksDeleted = await cleanupStaleLocks(5)
+      results.locksDeleted = await cleanupStaleLocks(STALE_LOCK_MAX_AGE_MINUTES)
       logger.info(`Deleted ${results.locksDeleted} stale lock(s)`)
     } catch (error: any) {
       logger.error('Error cleaning up locks:', error)

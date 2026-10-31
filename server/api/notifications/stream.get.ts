@@ -8,21 +8,13 @@
  */
 
 import { defineEventHandler, setResponseHeaders } from 'h3'
-import { getUserSession } from '../../utils/entra/session'
 import { notificationEmitter } from '../../utils/notification-emitter'
+import { requireNotificationUserId } from '../../utils/notification-service'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   // Authenticate
-  const session = await getUserSession(event)
-  if (!session?.user) {
-    throw createError({ statusCode: 401, message: 'Authentication required' })
-  }
-
-  const userId = session.user.email || session.user.id || session.user.sub
-  if (!userId) {
-    throw createError({ statusCode: 401, message: 'User identification failed' })
-  }
+  const userId = await requireNotificationUserId(event)
 
   // Set SSE headers
   setResponseHeaders(event, {
@@ -55,14 +47,15 @@ export default defineEventHandler(async (event) => {
   // Send initial connected event
   send('connected', { userId, ts: Date.now() })
 
-  // Clean up on client disconnect
-  res.on('close', () => {
-    clearInterval(pingInterval)
-    cleanup()
-    logger.debug(`[SSE] Notification stream closed for ${userId}`)
+  // Keep the handler alive until the client disconnects — do NOT call res.end().
+  // Resolving on close lets the handler (and its closure) be released; a
+  // promise that never settles kept one alive per connection ever opened.
+  await new Promise<void>((resolve) => {
+    res.on('close', () => {
+      clearInterval(pingInterval)
+      cleanup()
+      logger.debug(`[SSE] Notification stream closed for ${userId}`)
+      resolve()
+    })
   })
-
-  // Keep the handler alive — do NOT call res.end()
-  // The promise never resolves, keeping the connection open until the client disconnects
-  await new Promise(() => {})
 })

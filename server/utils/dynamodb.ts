@@ -110,12 +110,13 @@ export async function updateItem(
   key: Record<string, any>,
   updates: Record<string, any>,
   environment: 'commercial' | 'govcloud' = 'govcloud',
-  accountId?: string
+  accountId?: string,
+  removeAttributes: string[] = []
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
   
-  // Sanitize updates before marshalling
-  const sanitizedUpdates = sanitizeForDynamoDB(updates)
+  // Sanitize updates before marshalling (an all-empty object sanitizes to undefined)
+  const sanitizedUpdates = sanitizeForDynamoDB(updates) || {}
 
   // Debug logging for serialization issues
   logger.info('[DynamoDB updateItem] Pre-sanitization data:', {
@@ -126,7 +127,7 @@ export async function updateItem(
   })
 
   // Check if all fields were removed during sanitization
-  if (Object.keys(sanitizedUpdates).length === 0) {
+  if (Object.keys(sanitizedUpdates).length === 0 && removeAttributes.length === 0) {
     logger.warn('[DynamoDB updateItem] All update fields were removed during sanitization', {
       tableName,
       originalUpdates: updates
@@ -156,6 +157,14 @@ export async function updateItem(
     keyKeys: Object.keys(key)
   })
 
+  // null values are stripped by sanitization, so attributes that must be
+  // deleted (e.g. a sparse GSI key) are passed explicitly and REMOVEd.
+  const removeParts = removeAttributes.map((field, index) => {
+    const attrName = `#rm${index}`
+    expressionAttributeNames[attrName] = field
+    return attrName
+  })
+
   // Marshall all values at once to ensure proper DynamoDB format
   const expressionAttributeValues = marshall(valueMap, {
     removeUndefinedValues: true,
@@ -165,9 +174,12 @@ export async function updateItem(
   const commandParams = {
     TableName: tableName,
     Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }),
-    UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+    UpdateExpression: [
+      updateExpressionParts.length > 0 ? `SET ${updateExpressionParts.join(', ')}` : '',
+      removeParts.length > 0 ? `REMOVE ${removeParts.join(', ')}` : ''
+    ].filter(Boolean).join(' '),
     ExpressionAttributeNames: expressionAttributeNames,
-    ExpressionAttributeValues: expressionAttributeValues,
+    ExpressionAttributeValues: Object.keys(expressionAttributeValues).length > 0 ? expressionAttributeValues : undefined,
     ReturnValues: 'ALL_NEW' as const
   }
 
@@ -179,14 +191,14 @@ export async function updateItem(
     attributeValueCount: Object.keys(expressionAttributeValues).length,
     attributeNames: Object.keys(expressionAttributeNames).map(k => `${k}=${expressionAttributeNames[k]}`),
     keySize: JSON.stringify(commandParams.Key).length,
-    valuesSize: JSON.stringify(commandParams.ExpressionAttributeValues).length
+    valuesSize: (JSON.stringify(commandParams.ExpressionAttributeValues) || '').length
   })
 
   // Log the actual marshalled values (first 500 chars for debugging)
   try {
     const marshalledStr = JSON.stringify(commandParams.ExpressionAttributeValues)
     logger.info('[DynamoDB updateItem] Marshalled values sample:', marshalledStr.substring(0, 500))
-  } catch (e) {
+  } catch {
     logger.warn('[DynamoDB updateItem] Could not stringify marshalled values')
   }
 
@@ -210,7 +222,7 @@ export async function updateItem(
     logger.error('[DynamoDB updateItem] Failed command details:', {
       key: JSON.stringify(commandParams.Key),
       expressionAttributeNames: JSON.stringify(commandParams.ExpressionAttributeNames),
-      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues)
+      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues || {})
     })
 
     throw error
@@ -327,6 +339,73 @@ export async function scanItems(
       : undefined,
     count: response.Count || 0
   }
+}
+
+/**
+ * Scan every page of a table. DynamoDB applies Limit before FilterExpression
+ * and stops each page at 1 MB, so a single scanItems call can miss matching
+ * items; use this when the caller needs all of them.
+ */
+export async function scanAllItems(
+  tableName: string,
+  filterExpression?: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  expressionAttributeNames?: Record<string, string>,
+  expressionAttributeValues?: Record<string, any>,
+  accountId?: string,
+  maxPages: number = 100
+): Promise<Record<string, any>[]> {
+  const items: Record<string, any>[] = []
+  let nextToken: string | undefined
+  let pages = 0
+
+  do {
+    const page = await scanItems(
+      tableName,
+      filterExpression,
+      undefined,
+      nextToken,
+      environment,
+      expressionAttributeNames,
+      expressionAttributeValues,
+      accountId
+    )
+    items.push(...page.items)
+    nextToken = page.nextToken
+    pages++
+  } while (nextToken && pages < maxPages)
+
+  if (nextToken) {
+    logger.warn(`[DynamoDB] scanAllItems stopped after ${maxPages} pages of ${tableName}`)
+  }
+
+  return items
+}
+
+/**
+ * Query every page of a key condition, for the same reason as scanAllItems.
+ * Stops early once `stopWhen` returns true for the items collected so far.
+ */
+export async function queryAllItems(
+  params: Omit<DynamoDBQueryParams, 'limit' | 'nextToken'>,
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string,
+  options: { maxPages?: number, stopWhen?: (items: Record<string, any>[]) => boolean } = {}
+): Promise<Record<string, any>[]> {
+  const maxPages = options.maxPages ?? 100
+  const items: Record<string, any>[] = []
+  let nextToken: string | undefined
+  let pages = 0
+
+  do {
+    const page = await queryItems({ ...params, nextToken }, environment, accountId)
+    items.push(...page.items)
+    nextToken = page.nextToken
+    pages++
+    if (options.stopWhen?.(items)) break
+  } while (nextToken && pages < maxPages)
+
+  return items
 }
 
 /**

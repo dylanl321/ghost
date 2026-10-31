@@ -1448,6 +1448,7 @@ async function confirmDelete() {
     reportToDelete.value = null
   } catch (err: any) {
     logger.error('Failed to delete report:', err)
+    toast.add({ title: 'Delete failed', description: err?.data?.message || err?.message || 'Failed to delete report', color: 'red' })
   } finally {
     deleting.value = false
   }
@@ -1457,8 +1458,10 @@ async function handleTest(report: ScheduledReport) {
   try {
     const { sendTestReport } = useDatasetReports()
     await sendTestReport(report.reportId)
+    toast.add({ title: 'Test report sent', description: 'Check your inbox for the test report', color: 'green' })
   } catch (err: any) {
     logger.error('Failed to send test report:', err)
+    toast.add({ title: 'Test report failed', description: err?.data?.message || err?.message || 'Failed to send test report', color: 'red' })
   }
 }
 
@@ -1470,6 +1473,7 @@ async function handleTogglePause(report: ScheduledReport) {
     await fetchReports()
   } catch (err: any) {
     logger.error('Failed to toggle pause:', err)
+    toast.add({ title: 'Update failed', description: err?.data?.message || err?.message || 'Failed to update report status', color: 'red' })
   }
 }
 

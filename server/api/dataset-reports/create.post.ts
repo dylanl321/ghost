@@ -9,7 +9,9 @@ import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
-import { getDatasetReportConfigErrors, getScheduleErrors } from '../../utils/dataset-report-validation'
+import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
+import { getScheduleErrors } from '../../../shared/utils/report-schedule'
+import { assertCanCreateReport, assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 interface CreateDatasetReportRequest {
   reportName: string
@@ -72,7 +74,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const validationErrors = [
-      ...getDatasetReportConfigErrors(body.reportConfig),
+      ...getScheduledDatasetReportErrors(body.reportConfig),
       ...getScheduleErrors(body.schedule)
     ]
     if (validationErrors.length > 0) {
@@ -102,6 +104,8 @@ export default defineEventHandler(async (event) => {
 
     // Check if user has admin privileges (AWS-Product-Team membership)
     const isAdmin = await isUserAdmin(event)
+    await assertSelfOnlyRecipients(event, body.recipients)
+    await assertCanCreateReport(event)
 
     // Convert to ReportConfig format (compatible with existing infrastructure)
     const reportRequest: CreateReportRequest = {

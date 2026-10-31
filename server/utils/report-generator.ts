@@ -10,6 +10,10 @@ import { getCostAndUsage } from './cost-explorer'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { validateDateParams } from './date-helpers'
 import { exportToPDFServer } from './pdf-export-server'
+import { createCostExportConfig } from './cost-export-server'
+import { buildXlsxBuffer } from '../../shared/utils/export/xlsx-workbook'
+import { buildCombinedCSV } from '../../shared/utils/export/csv-content'
+import { buildJSONExport, generateFilename } from '../../shared/utils/export/format'
 import { logger } from './logger'
 
 /**
@@ -39,7 +43,7 @@ export async function generateCostReport(
     if (config.format === 'pdf') {
       return await generatePDFReport(dataset, config)
     } else {
-      return await generateTextReport(dataset, config)
+      return generateDataFileReport(dataset, config)
     }
   } catch (error: any) {
     logger.error('Report generation error:', error)
@@ -214,8 +218,6 @@ async function generatePDFReport(
 }> {
   try {
     // Use the existing export system by creating DataExportConfig
-    const { createCostExportConfig } = await import('./cost-export-server')
-
     const exportConfig = createCostExportConfig(dataset, {
       includeServices: config.includeServices,
       includeHistorical: config.includeHistorical,
@@ -248,97 +250,43 @@ async function generatePDFReport(
 }
 
 /**
- * Generate text/CSV report
+ * Generate an xlsx, csv or json report from the same sheets the PDF and the
+ * browser export use. These formats used to be a plain-text summary sent
+ * under a spreadsheet filename and MIME type, so xlsx files arrived corrupt.
  */
-async function generateTextReport(
+function generateDataFileReport(
   dataset: NormalizedDataset,
   config: ReportConfig
-): Promise<{
+): {
   success: boolean
   buffer?: Buffer
   filename?: string
   error?: string
-}> {
-  const dateRange = validateDateParams({
-    period: config.timeframe as any
+} {
+  const exportConfig = createCostExportConfig(dataset, {
+    includeServices: config.includeServices,
+    includeHistorical: config.includeHistorical,
+    includeForecast: config.includeForecast
   })
 
-  const reportContent = formatReportData(config, dataset, dateRange)
-  const buffer = Buffer.from(reportContent, 'utf-8')
-
-  const timestamp = new Date().toISOString().split('T')[0]
-  const filename = `cost-report-${timestamp}.${config.format}`
+  let buffer: Buffer
+  switch (config.format) {
+    case 'xlsx':
+      buffer = Buffer.from(buildXlsxBuffer(exportConfig))
+      break
+    case 'csv':
+      buffer = Buffer.from(buildCombinedCSV(exportConfig), 'utf-8')
+      break
+    case 'json':
+      buffer = Buffer.from(buildJSONExport(exportConfig), 'utf-8')
+      break
+    default:
+      return { success: false, error: `Unsupported report format: ${config.format}` }
+  }
 
   return {
     success: true,
     buffer,
-    filename
+    filename: generateFilename(exportConfig.options?.filename || exportConfig.title, config.format)
   }
-}
-
-/**
- * Format cost data into a readable text report
- */
-function formatReportData(
-  config: ReportConfig,
-  dataset: NormalizedDataset,
-  dateRange: { startDate: string; endDate: string }
-): string {
-  const accountMap = new Map()
-  dataset.accountsList.forEach(acc => {
-    if (acc.awsStandardAccountID) accountMap.set(acc.awsStandardAccountID, acc)
-    if (acc.awsGovCloudAccountID) accountMap.set(acc.awsGovCloudAccountID, acc)
-  })
-
-  // Calculate totals from analysis data
-  let totalCost = 0
-  const accountCosts = new Map<string, number>()
-
-  const costData = (dataset.analysis as any)?.data || dataset.analysis
-  if (costData?.resultsByTime) {
-    costData.resultsByTime.forEach((result: any) => {
-      result.Groups?.forEach((group: any) => {
-        const accountId = group.Keys?.[0]
-        const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
-        if (accountId) {
-          accountCosts.set(accountId, (accountCosts.get(accountId) || 0) + cost)
-          totalCost += cost
-        }
-      })
-    })
-  }
-
-  // Build report sections
-  const sections = []
-
-  // Header
-  sections.push(`AWS COST REPORT`)
-  sections.push(`Generated: ${new Date().toLocaleString()}`)
-  sections.push(`Period: ${dateRange.startDate} to ${dateRange.endDate}`)
-  sections.push(`Data Mode: ${dataset.mode}`)
-  sections.push(`\n${'='.repeat(80)}\n`)
-
-  // Summary
-  sections.push(`SUMMARY`)
-  sections.push(`Total Cost: $${totalCost.toFixed(2)}`)
-  sections.push(`Accounts: ${accountCosts.size}`)
-  sections.push(`\n${'='.repeat(80)}\n`)
-
-  // Account breakdown
-  sections.push(`COST BY ACCOUNT`)
-  sections.push(`\n`)
-
-  const sortedAccounts = Array.from(accountCosts.entries())
-    .sort((a, b) => b[1] - a[1])
-
-  sortedAccounts.forEach(([accountId, cost]) => {
-    const account = accountMap.get(accountId)
-    const accountName = account?.name || accountId
-    sections.push(`${accountName.padEnd(50)} $${cost.toFixed(2).padStart(15)}`)
-  })
-
-  sections.push(`\n${'='.repeat(80)}`)
-  sections.push(`TOTAL${' '.repeat(45)}$${totalCost.toFixed(2).padStart(15)}`)
-
-  return sections.join('\n')
 }

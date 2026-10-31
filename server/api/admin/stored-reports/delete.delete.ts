@@ -3,7 +3,7 @@
  * DELETE /api/admin/stored-reports/delete
  */
 
-import { deleteReportFromS3 } from '../../../utils/s3-reports-storage'
+import { deleteReportFromS3, isStoredReportKey } from '../../../utils/s3-reports-storage'
 import { logger } from '../../../utils/logger'
 import { requireAdmin } from '../../../utils/user-roles'
 
@@ -12,12 +12,12 @@ export default defineEventHandler(async (event) => {
 
   try {
     const body = await readBody(event)
-    const { s3Key } = body
+    const s3Key = body?.s3Key
 
-    if (!s3Key) {
+    if (!isStoredReportKey(s3Key)) {
       throw createError({
         statusCode: 400,
-        message: 'S3 key is required'
+        message: 'A stored report key under reports/ is required'
       })
     }
 

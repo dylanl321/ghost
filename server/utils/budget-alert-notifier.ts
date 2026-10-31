@@ -70,6 +70,9 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
   const now = new Date()
   const dateFrom = new Date(now.getTime() - LOOKBACK_MINUTES * 60 * 1000).toISOString()
   const month = now.toISOString().substring(0, 7) // YYYY-MM
+  // Alerts are partitioned by month, so the first run of a month also reads
+  // the tail of the previous one; otherwise alerts from its last minutes are lost.
+  const months = Array.from(new Set([dateFrom.substring(0, 7), month]))
 
   logger.info('[BudgetAlertNotifier] Processing recent alerts', { month, dateFrom })
 
@@ -81,18 +84,22 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
   // failure is intentionally allowed to propagate so the scheduler's catch
   // records a job/heartbeat error rather than a false successful zero-count
   // completion. Per-notification send failures below remain contained.
-  const result = await withTransientRetry(
-    () => getAlertsByMonth(month, {
-      dateFrom,
-      limit: 100,
-      sortOrder: 'desc'
-    }),
-    { component: 'budget-alert-notifier', operation: 'getAlertsByMonth', month }
-  )
+  const alerts: BudgetAlert[] = []
+  for (const queryMonth of months) {
+    const result = await withTransientRetry(
+      () => getAlertsByMonth(queryMonth, {
+        dateFrom,
+        limit: 100,
+        sortOrder: 'desc'
+      }),
+      { component: 'budget-alert-notifier', operation: 'getAlertsByMonth', month: queryMonth }
+    )
+    alerts.push(...result.alerts)
+  }
 
-  logger.info('[BudgetAlertNotifier] Found alerts to process', { count: result.count })
+  logger.info('[BudgetAlertNotifier] Found alerts to process', { count: alerts.length })
 
-  for (const alert of result.alerts) {
+  for (const alert of alerts) {
     processed++
 
     // Skip dry-run alerts
@@ -139,7 +146,10 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
           },
           dedupeKey: `budget-alert-${alert.alert_id}`
         })
-        if (sendResult.success && !sendResult.skipped) {
+        if (sendResult.deduplicated) {
+          // Seen in the previous run's overlapping lookback window
+          skipped++
+        } else if (sendResult.success && !sendResult.skipped) {
           notified++
         } else {
           logger.warn('[BudgetAlertNotifier] Notification not delivered', {

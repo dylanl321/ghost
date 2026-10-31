@@ -44,6 +44,35 @@ async function getSESConfig() {
 }
 
 /**
+ * Escape text for interpolation into HTML email bodies
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * Encode a header value per RFC 2047 when it is not plain ASCII. Raw UTF-8
+ * (e.g. the em dash in digest subjects) is not valid in a MIME header, and
+ * stripping CR/LF stops a report name from injecting extra headers.
+ */
+export function encodeMimeHeader(value: string): string {
+  const singleLine = value.replace(/[\r\n]+/g, ' ')
+  if (/^[\x20-\x7e]*$/.test(singleLine)) return singleLine
+  return `=?UTF-8?B?${Buffer.from(singleLine, 'utf8').toString('base64')}?=`
+}
+
+/** Base64 body wrapped at 76 characters, as MIME requires */
+function toBase64Lines(content: string | Buffer): string {
+  const base64 = (typeof content === 'string' ? Buffer.from(content, 'utf8') : content).toString('base64')
+  return base64.replace(/.{1,76}/g, '$&\r\n').trimEnd()
+}
+
+/**
  * Render email template with variable substitution
  * Supports basic conditionals: {{#if variable}}...{{/if}}
  */
@@ -58,10 +87,11 @@ export function renderTemplate(template: string, context: TemplateContext): stri
     return (value && String(value).trim() !== '') ? content : ''
   })
 
-  // Replace {{variable}} with values from context
+  // Replace {{variable}} with values from context. A replacer function keeps
+  // "$&" or "$1" in a value (e.g. a report name) from being expanded.
   for (const [key, value] of Object.entries(context)) {
     const regex = new RegExp(`{{${key}}}`, 'g')
-    rendered = rendered.replace(regex, String(value ?? ''))
+    rendered = rendered.replace(regex, () => String(value ?? ''))
   }
 
   // Clean up any remaining unreplaced variables
@@ -79,10 +109,10 @@ async function buildMimeMessage(options: SendEmailOptions): Promise<string> {
   const altBoundary = `----=_Part_Alt_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
   const headers = [
-    `From: ${config.fromName} <${config.fromEmail}>`,
+    `From: ${encodeMimeHeader(config.fromName)} <${config.fromEmail}>`,
     `To: ${options.to.join(', ')}`,
     `Reply-To: ${options.replyTo || config.replyTo}`,
-    `Subject: ${options.subject}`,
+    `Subject: ${encodeMimeHeader(options.subject)}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`
   ]
@@ -105,9 +135,9 @@ async function buildMimeMessage(options: SendEmailOptions): Promise<string> {
     message += [
       `--${altBoundary}`,
       `Content-Type: text/plain; charset=UTF-8`,
-      `Content-Transfer-Encoding: 7bit`,
+      `Content-Transfer-Encoding: base64`,
       '',
-      options.text,
+      toBase64Lines(options.text),
       ''
     ].join('\r\n')
   }
@@ -116,9 +146,9 @@ async function buildMimeMessage(options: SendEmailOptions): Promise<string> {
   message += [
     `--${altBoundary}`,
     `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: 7bit`,
+    `Content-Transfer-Encoding: base64`,
     '',
-    options.html,
+    toBase64Lines(options.html),
     '',
     `--${altBoundary}--`,
     ''
@@ -127,15 +157,15 @@ async function buildMimeMessage(options: SendEmailOptions): Promise<string> {
   // Attachments
   if (options.attachments && options.attachments.length > 0) {
     for (const attachment of options.attachments) {
-      const base64Content = attachment.content.toString('base64')
+      const filename = encodeMimeHeader(attachment.filename.replace(/["\\]/g, '_'))
 
       message += [
         `--${boundary}`,
-        `Content-Type: ${attachment.contentType}`,
-        `Content-Disposition: attachment; filename="${attachment.filename}"`,
+        `Content-Type: ${attachment.contentType}; name="${filename}"`,
+        `Content-Disposition: attachment; filename="${filename}"`,
         `Content-Transfer-Encoding: base64`,
         '',
-        base64Content,
+        toBase64Lines(attachment.content),
         ''
       ].join('\r\n')
     }

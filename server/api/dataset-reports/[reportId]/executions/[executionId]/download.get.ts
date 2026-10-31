@@ -5,7 +5,7 @@
  */
 
 import { getTableConfig } from '../../../../../lib/dynamodb-config'
-import type { ReportExecution } from '../../../../../../shared/types/scheduled-reports'
+import { getExecution } from '../../../../../utils/scheduled-reports'
 import { logger } from '../../../../../utils/logger'
 import { requireDatasetReportAccess } from '../../../../../utils/dataset-report-access'
 import { getReportDownloadUrl } from '../../../../../utils/s3-reports-storage'
@@ -27,13 +27,7 @@ export default defineEventHandler(async (event) => {
 
     const tableConfig = await getTableConfig('reportExecutions')
 
-    // Get the execution record
-    const execution = await getItem(
-      tableConfig.tableName,
-      { reportId, executionId },
-      tableConfig.environment,
-      tableConfig.accountId
-    ) as ReportExecution | null
+    const execution = await getExecution(reportId, executionId)
 
     if (!execution) {
       throw createError({
@@ -66,10 +60,10 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Increment download count
+    // Increment download count (the key is reportId + executionTime)
     await updateItem(
       tableConfig.tableName,
-      { reportId, executionId },
+      { reportId, executionTime: execution.executionTime },
       {
         downloadCount: (execution.downloadCount || 0) + 1
       },
