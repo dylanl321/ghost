@@ -20,7 +20,9 @@ import '../../server/api/v1/security/inspector/findings.get'
 import '../../server/api/v1/security/summary.get'
 
 test('generated registry includes direct and helper-registered route modules', () => {
-  assert.ok(documentedRouteCount >= 150, 'generated registry must contain every documented route module')
+  // The audit removed 15 unused documented routes (162 -> 147); this floor only
+  // catches a generator that misses helper-registered modules wholesale.
+  assert.ok(documentedRouteCount >= 140, 'generated registry must contain every documented route module')
 })
 
 test('OpenAPI output is deterministic and supplies operation IDs and path parameters', () => {
