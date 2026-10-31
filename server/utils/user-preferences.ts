@@ -196,30 +196,32 @@ export async function updateLastLogin(userId: string): Promise<void> {
 export async function getAllUserPreferences(
   limit: number = 100
 ): Promise<{ preferences: UserPreferences[]; total: number }> {
-  try {
-    const tableName = await getTableName('userPreferences')
-    const environment = await getTableEnvironment('userPreferences')
-    const accountId = await getTableAccountId('userPreferences')
+  const tableName = await getTableName('userPreferences')
+  const environment = await getTableEnvironment('userPreferences')
+  const accountId = await getTableAccountId('userPreferences')
 
+  // Scan every page: a single Scan's Limit returned only the first N users,
+  // and `total` was the size of that page rather than the user count
+  const all: UserPreferences[] = []
+  let nextToken: string | undefined
+  do {
     const result = await scanItems(
       tableName,
       undefined,
-      limit,
       undefined,
+      nextToken,
       environment,
       undefined,
       undefined,
       accountId
     )
+    all.push(...(result.items as UserPreferences[]))
+    nextToken = result.nextToken
+  } while (nextToken)
 
-    return {
-      preferences: result.items as UserPreferences[],
-      total: result.count
-    }
-
-  } catch (error) {
-    logger.error('Error listing all user preferences:', error)
-    return { preferences: [], total: 0 }
+  return {
+    preferences: all.slice(0, limit),
+    total: all.length
   }
 }
 

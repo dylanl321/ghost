@@ -234,45 +234,5 @@ IMPORTANT: Focus on analysis and observations, not recommendations. Write direct
 
       return lines.join('\n')
     }
-  },
-
-  'variance-driver': {
-    systemPrompt: [
-      'You are an AWS FinOps analyst writing a brief variance summary for a finance dashboard.',
-      'Write exactly 2-3 short sentences, no more. Each sentence must be concise and direct.',
-      'State the primary driver of the variance, any notable trend in recent months, and whether the category is tracking above or below plan.',
-      'If budget is zero or not set, note the spend without a budget reference.',
-      'Do NOT start with any introduction, preamble, or category name. Jump directly to the observation.',
-      'Write in plain prose — no headings, no bullet points, no markdown.',
-      DATA_CONSTRAINT
-    ].join(' '),
-    ttl: 3600,
-    buildPrompt(ctx) {
-      const lines: string[] = ['Explain the primary variance driver for this AWS cost category:']
-
-      lines.push(`- Category: ${ctx.categoryName || 'Unknown'}`)
-      lines.push(`- Department: ${ctx.department || 'Unknown'}`)
-      lines.push(`- YTD plan: ${formatCurrency(ctx.ytdBudget || 0)}`)
-      lines.push(`- YTD actual: ${formatCurrency(ctx.ytdActual || 0)}`)
-
-      const variance = (ctx.ytdActual || 0) - (ctx.ytdBudget || 0)
-      const variancePct = ctx.ytdBudget > 0 ? (variance / ctx.ytdBudget) * 100 : 0
-      lines.push(`- YTD variance: ${variance >= 0 ? '+' : ''}${formatCurrency(variance)} (${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(1)}%)`)
-
-      if (ctx.monthlyActuals && Object.keys(ctx.monthlyActuals).length > 0) {
-        const sorted = Object.entries(ctx.monthlyActuals as Record<string, number>).sort(([a], [b]) => a.localeCompare(b))
-        const recent = sorted.slice(-3).map(([m, v]) => {
-          const [, mo] = m.split('-').map(Number)
-          const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-          return `${monthNames[mo - 1]}: ${formatCurrency(v)}`
-        }).join(', ')
-        lines.push(`- Recent monthly actuals: ${recent}`)
-      }
-
-      if (ctx.accountCount !== undefined) lines.push(`- Accounts in category: ${ctx.accountCount}`)
-      if (ctx.topAccount) lines.push(`- Largest account: ${ctx.topAccount.name} (${formatCurrency(ctx.topAccount.ytdActual)} YTD)`)
-
-      return lines.join('\n')
-    }
   }
 }

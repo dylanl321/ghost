@@ -1,7 +1,8 @@
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
+import { requirePermission } from '../../../utils/user-roles'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
-import { getResourceChangesForPipeline } from '../../../utils/athena-pipeline-queries'
+import { getResourceChangesForPipeline, clampIntParam } from '../../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/{id}/resources', 'GET', {
@@ -67,13 +68,18 @@ registerEndpoint('/api/pipelines/{id}/resources', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const pipelineId = getRouterParam(event, 'id')
   const query = getQuery(event)
-  const limit = query.limit ? parseInt(query.limit as string) : 500
+  const limit = clampIntParam(query.limit, 500, 1, 5000)
 
   if (!pipelineId) {
     return errors.badRequest(event, 'Pipeline ID is required')
+  }
+  if (!/^\d+$/.test(pipelineId)) {
+    return errors.badRequest(event, 'Pipeline ID must contain only digits')
   }
 
   const environment = 'govcloud' as const

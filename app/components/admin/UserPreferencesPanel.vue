@@ -142,7 +142,7 @@
 import type { UserPreferences } from '#shared/types/user-preferences'
 import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
 import { layoutsAreEqual, DEFAULT_DASHBOARD_LAYOUT } from '#shared/types/dashboard-layout'
-import { formatSessionDuration } from '~/composables/useAdminUserDetail'
+import { findUserActivity, formatSessionDuration } from '~/composables/useAdminUserDetail'
 import type { ActivityMetricsData } from '~/composables/useAdminUserDetail'
 
 const { fetchAllPreferences, fetchActivityMetrics, resetTourForUser } = useAdminUserDetail()
@@ -241,7 +241,7 @@ const filteredPreferences = computed(() => {
 })
 
 function getUserAvgSessionMs(userId: string): number {
-  return activityMetrics.value?.byUser?.find(u => u.userId === userId)?.avgSessionLengthMs ?? 0
+  return findUserActivity(activityMetrics.value?.byUser, userId)?.avgSessionLengthMs ?? 0
 }
 
 // Load data

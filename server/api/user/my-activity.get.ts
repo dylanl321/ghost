@@ -28,9 +28,12 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 401, message: 'User identification failed' })
     }
     const username = (email as string).split('@')[0] || ''
+    if (!/^[\w.@-]+$/.test(username)) {
+      return { success: true, data: [] }
+    }
 
-    // Fetch last 7 days of logs
-    const logs = await getLogs(7 * 86400)
+    // Fetch last 7 days of this user's action logs (filtered by CloudWatch, not here)
+    const logs = await getLogs(7 * 86400, `"Action - USER:${username},"`)
 
     const items: ActivityItem[] = []
     for (const log of logs) {

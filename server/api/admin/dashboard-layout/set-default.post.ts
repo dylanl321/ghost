@@ -5,8 +5,8 @@
  */
 
 import { defineEventHandler, readBody } from 'h3'
-import { requireAdmin } from '../../../utils/user-roles'
-import { updateSiteConfig, getSiteConfig, saveConfigHistory } from '../../../utils/site-config'
+import { requireAdmin, getUserEmail } from '../../../utils/user-roles'
+import { updateSiteConfigWithHistory } from '../../../utils/site-config'
 import { ALL_SECTION_IDS } from '../../../../shared/types/dashboard-layout'
 import type { DashboardLayoutConfig } from '../../../../shared/types/dashboard-layout'
 
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody<{ layout: DashboardLayoutConfig }>(event)
 
-  if (!body.layout || !Array.isArray(body.layout.sections)) {
+  if (!body?.layout || !Array.isArray(body.layout.sections)) {
     throw createError({ statusCode: 400, message: 'Invalid layout: sections array required' })
   }
 
@@ -27,21 +27,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const configKey = 'ui.dashboardLayout.default'
-  const auth = event.context.auth
-  const username = auth?.user?.email || auth?.user?.preferred_username || 'unknown'
-
-  // Get old value for audit history
-  const oldConfig = await getSiteConfig(configKey, false)
-  const oldValue = oldConfig?.value
-
-  await updateSiteConfig(configKey, body.layout, username)
-
-  // Save change history (non-blocking)
-  if (oldValue !== undefined) {
-    saveConfigHistory(configKey, oldValue, body.layout, username, 'Admin set org default dashboard layout')
-      .catch(err => logger.error('Failed to save config history:', err))
-  }
+  await updateSiteConfigWithHistory('ui.dashboardLayout.default', body.layout, getUserEmail(event) || 'unknown', 'Admin set org default dashboard layout')
 
   return { success: true, message: 'Default dashboard layout saved' }
 })

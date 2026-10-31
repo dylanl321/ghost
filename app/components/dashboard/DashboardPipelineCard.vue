@@ -96,14 +96,15 @@ onMounted(async () => {
     const data = await fetchPipelineSummary(30)
     if (data?.summary) {
       const s = data.summary
+      // The summary row keeps Athena's snake_case column names
       summary.value = {
-        totalRuns: s.totalRuns || 0,
-        successfulRuns: s.successfulRuns || 0,
-        failedRuns: s.failedRuns || 0,
-        successRate: typeof s.successRate === 'number' ? s.successRate : 0,
-        avgDuration: s.avgDuration || 0,
-        uniqueAccounts: s.uniqueAccounts || 0,
-        totalChanges: s.totalChanges || 0
+        totalRuns: Number(s.total_runs) || 0,
+        successfulRuns: Number(s.successful_pipelines) || 0,
+        failedRuns: Number(s.failed_pipelines) || 0,
+        successRate: Number(s.pipeline_success_rate) || 0,
+        avgDuration: Number(s.avg_duration) || 0,
+        uniqueAccounts: Number(s.unique_accounts) || 0,
+        totalChanges: Number(s.total_changes) || 0
       }
     }
   } catch {

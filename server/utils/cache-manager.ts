@@ -581,6 +581,19 @@ export function createCacheManager(config?: Partial<CacheConfig>): CacheManager 
 }
 
 /**
+ * Clear every tracked cache (the named caches, the default cache and any
+ * created with createTrackedCache). Returns the number of entries removed.
+ */
+export async function clearAllCaches(): Promise<number> {
+  let cleared = 0
+  for (const cache of allCacheInstances) {
+    cleared += cache.getStats().entries
+    await cache.clear()
+  }
+  return cleared
+}
+
+/**
  * Clear pattern-based cache entries
  */
 export async function clearPattern(pattern: string): Promise<number> {

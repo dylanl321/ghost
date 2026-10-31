@@ -10,7 +10,7 @@
     </div>
 
     <div v-else :class="displayStyle === 'half' ? 'grid grid-cols-2 gap-3' : 'flex flex-wrap gap-3'">
-      <NuxtLink to="/admin/pipelines" class="group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
+      <NuxtLink v-if="canViewPipelines" to="/admin/pipelines" class="group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
         :class="pipelineHealthColor">
         <UIcon name="i-heroicons-server-stack" class="w-4 h-4" />
         <span class="text-sm font-medium">Pipeline: {{ pipelineHealthPercent }}%</span>
@@ -27,7 +27,7 @@
         <span class="text-sm font-medium">{{ activeAccounts }} Accounts</span>
       </NuxtLink>
 
-      <NuxtLink v-if="failedRuns > 0" to="/admin/pipelines" class="group flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
+      <NuxtLink v-if="canViewPipelines && failedRuns > 0" to="/admin/pipelines" class="group flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
         <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
         <span class="text-sm font-medium">{{ failedRuns }} Failed Run{{ failedRuns !== 1 ? 's' : '' }}</span>
       </NuxtLink>
@@ -45,7 +45,10 @@ const props = withDefaults(defineProps<{
   loading: boolean
 }>(), { displayStyle: 'full' })
 
-const pipelineLoading = ref(true)
+// Pipeline health comes from an admin.logs-only API, so other users don't get the tile
+const { can } = useUserRoles()
+const canViewPipelines = computed(() => can('admin.logs'))
+const pipelineLoading = ref(false)
 const pipelineHealthPercent = ref(0)
 const failedRuns = ref(0)
 
@@ -62,14 +65,17 @@ const alertColor = computed(() => {
   return 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30'
 })
 
-onMounted(async () => {
+// Roles can load after mount, so fetch once the permission is known
+async function loadPipelineHealth() {
+  pipelineLoading.value = true
   try {
     const res = await $fetch<{ success: boolean; data: any }>('/api/pipelines/global-summary')
-    if (res.success && res.data) {
-      const total = res.data.totalPipelines || 0
-      const healthy = res.data.healthyPipelines || res.data.successCount || 0
+    const summary = res.success ? res.data?.summary : null
+    if (summary) {
+      const total = Number(summary.total_runs) || 0
+      const healthy = Number(summary.successful_pipelines) || 0
       pipelineHealthPercent.value = total > 0 ? Math.round((healthy / total) * 100) : 100
-      failedRuns.value = res.data.failedCount || res.data.failedPipelines || 0
+      failedRuns.value = Number(summary.failed_pipelines) || 0
     }
   } catch {
     pipelineHealthPercent.value = 100
@@ -77,5 +83,11 @@ onMounted(async () => {
   } finally {
     pipelineLoading.value = false
   }
+}
+
+onMounted(() => {
+  watch(canViewPipelines, (allowed, wasAllowed) => {
+    if (allowed && !wasAllowed) loadPipelineHealth()
+  }, { immediate: true })
 })
 </script>

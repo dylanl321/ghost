@@ -139,11 +139,22 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[Security Posture] AccountId: ${accountId || 'all'}, Environment: ${environment}`)
 
   try {
-    // Get account info if accountId provided
+    // Security Hub findings come from a single partition
+    // (AWS_SECURITYHUB_ENVIRONMENT, GovCloud by default) and carry that
+    // partition's account IDs. A commercial account ID found no findings and
+    // was reported as "healthy", so translate it to the hub's partition.
+    const hubEnvironment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as AWSEnvironmentType) || 'govcloud'
     let accountName: string | undefined
+    let hubAccountId = accountId
     if (accountId) {
-      const account = await lookupAccountUnified({ accountId })
+      const account = await lookupAccountUnified({ accountId }) || await lookupAccountUnified({ govCloudAccountId: accountId })
       accountName = account?.name || account?.projectName
+      if (account) {
+        const partitionAccountId = hubEnvironment === 'govcloud'
+          ? (account.govCloudAccountId || account.awsGovCloudAccountID)
+          : (account.accountId || account.awsStandardAccountID)
+        hubAccountId = partitionAccountId || accountId
+      }
     }
 
     // Fetch Security Hub findings
@@ -156,7 +167,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       filters.severities = severities
     }
 
-    const accountIds = accountId ? [accountId] : []
+    const accountIds = hubAccountId ? [hubAccountId] : []
     const findings = await getSecurityHubFindings(accountIds, filters)
 
     // Filter by resourceId if provided

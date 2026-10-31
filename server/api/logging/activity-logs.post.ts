@@ -1,6 +1,9 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { getUserEmail } from '../../utils/user-roles'
+import { logMessage } from '../../utils/log-manager'
+import { normalizeActivityMessage } from '../../utils/activity-message'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/logging/activity-logs', 'POST', {
@@ -50,14 +53,24 @@ export default defineEventHandler(async (event) => {
   const startTime = Date.now()
 
   try {
-    const body = await readBody<{ message?: string }>(event)
-    const { message } = body
+    const email = getUserEmail(event)
+    if (!email) {
+      return errors.unauthorized(event, 'Authentication required')
+    }
 
-    if (!message) {
+    const body = await readBody<{ message?: string }>(event)
+    const message = typeof body?.message === 'string' ? body.message : ''
+
+    if (!message.trim()) {
       return errors.badRequest(event, 'Message is required')
     }
 
-    await logMessage(message)
+    const normalized = normalizeActivityMessage(message, email.split('@')[0] || 'UnknownUser')
+    if (!normalized) {
+      return errors.badRequest(event, 'Message must include a USER field')
+    }
+
+    await logMessage(normalized)
 
     const metadata = { responseTimeMs: Date.now() - startTime }
     return sendSuccess(event, { message: 'Log sent successfully' }, metadata)

@@ -160,13 +160,15 @@ async function getResourceCounts(accountId: string, environment: AWSEnvironmentT
   }
 
   const resourceCounts: Record<string, Record<string, number>> = {}
+  let failedQueries = 0
+  let totalQueries = 0
 
   for (const [resourceType, queries] of Object.entries(queryGroups)) {
     resourceCounts[resourceType] = {}
     for (const [queryName, baseQuery] of Object.entries(queries)) {
-      // Throttle requests
-      const waitTime = 0.2
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      // Space out requests: SelectAggregateResourceConfig has a low request rate limit
+      if (totalQueries > 0) await new Promise(resolve => setTimeout(resolve, 200))
+      totalQueries++
 
       let query = baseQuery
       if (accountId) {
@@ -182,18 +184,7 @@ async function getResourceCounts(accountId: string, environment: AWSEnvironmentT
 
         if (response.Results && response.Results.length > 0) {
           const parsed = JSON.parse(response.Results[0])
-          let value = 0
-          if (queryName.includes("size")) {
-            value =
-              parsed.SUM ||
-              parsed[
-                "SUM(CAST(JSON_EXTRACT(configuration, '$.size') AS INTEGER))"
-              ] ||
-              0
-          } else {
-            value = parsed.COUNT || parsed["COUNT(*)"] || 0
-          }
-          resourceCounts[resourceType][queryName] = value
+          resourceCounts[resourceType][queryName] = parsed.COUNT || parsed["COUNT(*)"] || 0
         } else {
           resourceCounts[resourceType][queryName] = 0
         }
@@ -203,8 +194,14 @@ async function getResourceCounts(accountId: string, environment: AWSEnvironmentT
           err
         )
         resourceCounts[resourceType][queryName] = 0
+        failedQueries++
       }
     }
+  }
+
+  // Don't cache a page of zeros for an hour when Config could not be reached at all
+  if (failedQueries === totalQueries) {
+    throw new Error('Every AWS Config resource count query failed')
   }
 
   // Transform result to structured output
@@ -251,6 +248,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Support both old and new parameter names for backward compatibility
   const accountId = (query.account_id as string) || (query.govcloud_account_id as string) || ""
   const environment = (query.environment as AWSEnvironmentType) || 'commercial'
+
+  // The account ID is placed in a Config query expression
+  if (accountId && !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'account_id must be a 12-digit AWS account ID')
+  }
 
   // Validate environment parameter
   if (environment !== 'commercial' && environment !== 'govcloud') {

@@ -11,7 +11,6 @@ import {
   SelectAggregateResourceConfigCommand,
   BatchGetAggregateResourceConfigCommand,
   type ConfigServiceClient,
-  type ResourceIdentifier,
   type ConfigurationItem,
   type AggregateResourceIdentifier,
   type ListAggregateDiscoveredResourcesCommandInput
@@ -29,8 +28,8 @@ const CACHE_TTL = {
 }
 
 const CACHE_KEYS = {
-  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number) =>
-    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}`,
+  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number, region?: string, resourceName?: string) =>
+    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}:${region || 'all'}:${resourceName || 'all'}`,
   RESOURCE_DETAIL: (aggregator: string, resourceId: string) => 
     `config:resource:${aggregator}:${resourceId}`,
   RESOURCE_CONFIG: (aggregator: string, resourceId: string) => 
@@ -38,6 +37,8 @@ const CACHE_KEYS = {
   AGGREGATOR_INFO: (aggregator: string) => 
     `config:aggregator:${aggregator}`
 }
+
+const verifiedAggregators = new Set<string>()
 
 /**
  * Get the correct Config aggregator name for a given environment
@@ -180,7 +181,7 @@ export interface ResourceDetail {
 
 export interface BatchResourceResult {
   successful: ResourceDetail[]
-  failed: Array<{ identifier: ResourceIdentifier; error: Error }>
+  failed: Array<{ identifier: AggregateResourceIdentifier; error: Error }>
 }
 
 /**
@@ -205,7 +206,7 @@ export async function listAggregateResources(
   filter?: ResourceFilter,
   environment: AWSEnvironmentType = 'commercial',
   region?: string
-): Promise<{ resources: ResourceIdentifier[]; nextToken?: string }> {
+): Promise<{ resources: AggregateResourceIdentifier[]; nextToken?: string }> {
   const cache = getCacheManager()
 
   // If multiple accounts provided, query them in parallel
@@ -235,12 +236,14 @@ export async function listAggregateResources(
     aggregatorName,
     filter?.resourceType,
     filter?.accountIds?.[0],
-    filter?.limit
+    filter?.limit,
+    filter?.regions?.[0],
+    filter?.resourceNames?.[0]
   )
 
   // Check cache for non-paginated requests
   if (!filter?.nextToken) {
-    const cached = await cache.get<{ resources: ResourceIdentifier[]; nextToken?: string }>(cacheKey)
+    const cached = await cache.get<{ resources: AggregateResourceIdentifier[]; nextToken?: string }>(cacheKey)
     if (cached) {
       logger.info(`[Config] Cache hit for resource list: ${cacheKey}`)
       return cached
@@ -249,27 +252,31 @@ export async function listAggregateResources(
 
   const client = await getConfigClient(environment, region)
 
-  // First, verify the aggregator exists
-  try {
-    const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
-    const checkAggregatorCommand = new DescribeConfigurationAggregatorsCommand({
-      ConfigurationAggregatorNames: [aggregatorName]
-    })
-    const aggregatorResponse = await client.send(checkAggregatorCommand)
+  // First, verify the aggregator exists (once per aggregator and region)
+  const aggregatorKey = `${environment}:${region || 'default'}:${aggregatorName}`
+  if (!verifiedAggregators.has(aggregatorKey)) {
+    try {
+      const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
+      const checkAggregatorCommand = new DescribeConfigurationAggregatorsCommand({
+        ConfigurationAggregatorNames: [aggregatorName]
+      })
+      const aggregatorResponse = await client.send(checkAggregatorCommand)
 
-    if (!aggregatorResponse.ConfigurationAggregators?.length) {
-      throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
-    }
+      if (!aggregatorResponse.ConfigurationAggregators?.length) {
+        throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
+      }
 
-    logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
-  } catch (error) {
-    if ((error instanceof Error ? error.name : "Error") === 'NoSuchConfigurationAggregatorException' || (error instanceof Error ? error.message : String(error))?.includes('does not exist')) {
-      throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
+      verifiedAggregators.add(aggregatorKey)
+      logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
+    } catch (error) {
+      if ((error instanceof Error ? error.name : "Error") === 'NoSuchConfigurationAggregatorException' || (error instanceof Error ? error.message : String(error))?.includes('does not exist')) {
+        throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
+      }
+      throw error
     }
-    throw error
   }
 
-  const resources: ResourceIdentifier[] = []
+  const resources: AggregateResourceIdentifier[] = []
   let currentToken = filter?.nextToken
   const maxItems = filter?.limit || 100
 
@@ -303,6 +310,9 @@ export async function listAggregateResources(
         }
         if (filter?.regions && filter.regions.length > 0) {
           filters.Region = filter.regions[0]
+        }
+        if (filter?.resourceNames && filter.resourceNames.length > 0) {
+          filters.ResourceName = filter.resourceNames[0]
         }
 
         // Only add Filters if we have at least one filter
@@ -355,6 +365,9 @@ export async function listAggregateResources(
     }
     if (filter?.regions && filter.regions.length > 0) {
       filters.Region = filter.regions[0]
+    }
+    if (filter?.resourceNames && filter.resourceNames.length > 0) {
+      filters.ResourceName = filter.resourceNames[0]
     }
 
     // Only add Filters if we have at least one filter
@@ -453,7 +466,7 @@ export async function batchGetResourceConfigs(
   const client = await getConfigClient(environment, region)
   
   const successful: ResourceDetail[] = []
-  const failed: Array<{ identifier: ResourceIdentifier; error: Error }> = []
+  const failed: Array<{ identifier: AggregateResourceIdentifier; error: Error }> = []
   const uncachedIdentifiers: AggregateResourceIdentifier[] = []
   
   // Check cache for each resource
@@ -521,7 +534,7 @@ export async function batchGetResourceConfigs(
         if (response.UnprocessedResourceIdentifiers) {
           for (const unprocessed of response.UnprocessedResourceIdentifiers) {
             failed.push({
-              identifier: unprocessed as ResourceIdentifier,
+              identifier: unprocessed,
               error: new Error('Resource could not be processed')
             })
           }
@@ -530,7 +543,7 @@ export async function batchGetResourceConfigs(
         // Add all chunk items to failed if batch request fails
         for (const identifier of chunk) {
           failed.push({
-            identifier: identifier as ResourceIdentifier,
+            identifier,
             error: error as Error
           })
         }
@@ -556,7 +569,9 @@ export async function queryResources(
   nextToken?: string
 ): Promise<{ results: any[]; nextToken?: string }> {
   const cache = getCacheManager()
-  const cacheKey = `config:query:${aggregatorName}:${Buffer.from(query).toString('base64')}`
+  // The limit is part of the key: a cached 10-row answer must not be served
+  // to a caller that asked for 200 rows
+  const cacheKey = `config:query:${aggregatorName}:${limit || 100}:${Buffer.from(query).toString('base64')}`
   
   // Check cache for non-paginated requests
   if (!nextToken) {
@@ -601,6 +616,78 @@ export async function queryResources(
   }
   
   return result
+}
+
+/**
+ * Parse one row from SelectAggregateResourceConfig. Rows arrive as JSON
+ * strings and the configuration and tags fields can themselves be JSON strings.
+ */
+export function parseConfigQueryRow(row: unknown): Record<string, any> {
+  const parsed = typeof row === 'string' ? JSON.parse(row) : (row as Record<string, any>)
+  if (typeof parsed.configuration === 'string') {
+    try {
+      parsed.configuration = JSON.parse(parsed.configuration)
+    } catch {
+      // leave the raw string
+    }
+  }
+  if (typeof parsed.tags === 'string') {
+    try {
+      parsed.tags = JSON.parse(parsed.tags)
+    } catch {
+      parsed.tags = []
+    }
+  }
+  return parsed
+}
+
+/**
+ * Convert Config tags (an array of {key, value}, or already an object) to a record
+ */
+export function configTagsToRecord(tags: unknown): Record<string, string> {
+  const record: Record<string, string> = {}
+  if (typeof tags === 'string') {
+    try { tags = JSON.parse(tags) } catch { return record }
+  }
+  if (Array.isArray(tags)) {
+    for (const tag of tags) {
+      if (tag && tag.key && tag.value !== undefined) {
+        record[tag.key] = tag.value
+      }
+    }
+  } else if (tags && typeof tags === 'object') {
+    Object.assign(record, tags)
+  }
+  return record
+}
+
+/**
+ * Escape a value for a single-quoted Config advanced query string literal
+ */
+export function escapeConfigString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+/**
+ * Build a Config advanced query that finds resources whose name or a tag value
+ * starts with one of the search terms. AWS Config only accepts a trailing
+ * wildcard with at least three literal characters, so '%term%' is rejected and
+ * '_' (a single-character wildcard) is stripped.
+ */
+export function buildConfigSearchQuery(terms: string[], resourceType = 'AWS::EC2::Instance'): string | null {
+  const type = /^AWS::[A-Za-z0-9]+::[A-Za-z0-9]+$/.test(resourceType) ? resourceType : 'AWS::EC2::Instance'
+  const cleaned = [...new Set(terms
+    .map(term => String(term).replace(/[%_]/g, '').trim())
+    .filter(term => term.length >= 3))]
+    .slice(0, 5)
+  if (cleaned.length === 0) return null
+
+  const conditions = cleaned.flatMap((term) => {
+    const escaped = escapeConfigString(term)
+    return [`resourceName LIKE '${escaped}%'`, `tags.value LIKE '${escaped}%'`, `resourceId = '${escaped}'`]
+  })
+
+  return `SELECT resourceId, resourceType, resourceName, accountId, awsRegion, configuration, tags WHERE resourceType = '${type}' AND (${conditions.join(' OR ')})`
 }
 
 /**

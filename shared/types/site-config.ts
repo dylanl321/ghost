@@ -393,6 +393,17 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isPublic: true,
     isEditable: true,
   },
+  {
+    key: 'announcements.list',
+    value: [],
+    type: 'array',
+    category: 'ui',
+    label: 'Announcements',
+    description: 'Active announcements displayed as banners to all users. Managed through /api/admin/announcements/update.',
+    defaultValue: [],
+    isPublic: true,
+    isEditable: false,
+  },
 
   // ---------------------------------------------------------------------------
   // OAuth Administration — evidence-based alert settings (oauth.alerts.*)

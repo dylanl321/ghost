@@ -11,8 +11,26 @@ import { getCacheManager } from './cache-manager'
 const GITLAB_TOKEN = process.env.GITLAB_API_TOKEN || ''
 const CACHE_TTL_SECONDS = 1800 // 30 minutes cache for GitLab data
 
-// Note: We extract base URL from job_url instead of using GITLAB_BASE_URL env var
-// This allows supporting multiple GitLab instances automatically
+// The base URL is taken from job_url so several GitLab instances work. job_url
+// comes from pipeline telemetry, so the token is only sent over https, and only
+// to the origins in GITLAB_BASE_URL (comma-separated) when that is set.
+const GITLAB_ALLOWED_ORIGINS = (process.env.GITLAB_BASE_URL || '')
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean)
+  .map((value) => {
+    try {
+      return new URL(value).origin
+    } catch {
+      return ''
+    }
+  })
+  .filter(Boolean)
+
+export function isAllowedGitLabOrigin(url: URL): boolean {
+  if (url.protocol !== 'https:') return false
+  return GITLAB_ALLOWED_ORIGINS.length === 0 || GITLAB_ALLOWED_ORIGINS.includes(url.origin)
+}
 
 /**
  * GitLab Job Details from API
@@ -72,44 +90,6 @@ export interface GitLabJobDetails {
 }
 
 /**
- * GitLab Pipeline Details from API
- * https://docs.gitlab.com/api/pipelines.html#get-a-single-pipeline
- */
-export interface GitLabPipelineDetails {
-  id: number
-  iid: number
-  project_id: number
-  sha: string
-  ref: string
-  status: string
-  source: string // push, web, trigger, schedule, api, external, pipeline, etc.
-  created_at: string
-  updated_at: string
-  web_url: string
-  before_sha: string
-  tag: boolean
-  yaml_errors: string | null
-  user: {
-    id: number
-    username: string
-    name: string
-    avatar_url: string
-  }
-  started_at: string
-  finished_at: string
-  committed_at: string
-  duration: number
-  queued_duration: number
-  coverage: string | null
-  detailed_status: {
-    icon: string
-    text: string
-    label: string
-    group: string
-  }
-}
-
-/**
  * GitLab Merge Request Details from API
  * https://docs.gitlab.com/api/merge_requests.html#get-single-mr
  */
@@ -154,6 +134,10 @@ export interface GitLabMergeRequest {
 function parseProjectFromJobUrl(jobUrl: string): { projectPath: string, jobId: string, baseUrl: string } | null {
   try {
     const url = new URL(jobUrl)
+    if (!isAllowedGitLabOrigin(url)) {
+      logger.warn(`[GitLab API] Refusing to call non-allowed GitLab origin: ${url.origin}`)
+      return null
+    }
     const pathParts = url.pathname.split('/').filter(Boolean)
 
     const dashIndex = pathParts.indexOf('-')
@@ -237,63 +221,6 @@ export async function getGitLabJobDetails(jobUrl: string): Promise<GitLabJobDeta
 
   } catch (error: any) {
     logger.error(`[GitLab API] Failed to fetch job details for ${jobUrl}:`, (error instanceof Error ? error.message : String(error)))
-    return null
-  }
-}
-
-/**
- * Fetch GitLab pipeline details
- * https://docs.gitlab.com/api/pipelines.html#get-a-single-pipeline
- */
-export async function getGitLabPipelineDetails(jobUrl: string, pipelineId: number): Promise<GitLabPipelineDetails | null> {
-  if (!GITLAB_TOKEN) {
-    logger.warn('[GitLab API] No GITLAB_API_TOKEN configured, skipping pipeline details fetch')
-    return null
-  }
-
-  const cache = getCacheManager()
-  const cacheKey = `gitlab:pipeline:${jobUrl}:${pipelineId}`
-
-  // Check cache
-  const cached = await cache.get(cacheKey)
-  if (cached) {
-    return cached as GitLabPipelineDetails
-  }
-
-  const parsed = parseProjectFromJobUrl(jobUrl)
-  if (!parsed) {
-    return null
-  }
-
-  const { projectPath, baseUrl } = parsed
-  const encodedProject = encodeURIComponent(projectPath)
-  const apiUrl = `${baseUrl}/api/v4/projects/${encodedProject}/pipelines/${pipelineId}`
-
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        'PRIVATE-TOKEN': GITLAB_TOKEN
-      }
-    })
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        logger.warn(`[GitLab API] Pipeline not found: ${pipelineId}`)
-        return null
-      }
-      throw new Error(`GitLab API returned ${response.status}: ${response.statusText}`)
-    }
-
-    const pipelineDetails = await response.json() as GitLabPipelineDetails
-
-    // Cache the result
-    await cache.set(cacheKey, pipelineDetails, { ttl: CACHE_TTL_SECONDS })
-
-    logger.info(`[GitLab API] Fetched pipeline details for ${pipelineId}`)
-    return pipelineDetails
-
-  } catch (error: any) {
-    logger.error(`[GitLab API] Failed to fetch pipeline details:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }

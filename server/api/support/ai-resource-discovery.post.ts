@@ -11,9 +11,9 @@
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { queryResources, getAggregatorName } from '../../utils/config-service'
+import { queryResources, getAggregatorName, buildConfigSearchQuery, parseConfigQueryRow, configTagsToRecord } from '../../utils/config-service'
 import { fuzzySearchAccounts, calculateRelevanceScore } from '../../utils/fuzzy-search'
-import { invokeBedrock } from '../../utils/bedrock-client'
+import { invokeBedrock, parseModelJson } from '../../utils/bedrock-client'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
@@ -74,7 +74,6 @@ Respond with a JSON object:
       "resourceType": "specific resource type if mentioned"
     }
   },
-  "configQuery": "AWS Config SQL query if resource/instance search needed",
   "explanation": "Brief explanation of how you interpreted the query"
 }
 
@@ -167,6 +166,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   const environment = body.environment || 'govcloud'
+  if (environment !== 'commercial' && environment !== 'govcloud') {
+    return errors.badRequest(event, 'Environment must be "commercial" or "govcloud"')
+  }
   const searchTypes = body.searchTypes || ['accounts', 'instances', 'resources']
   const limit = Math.min(body.limit || 10, 50)
 
@@ -190,14 +192,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Parse AI response
     let parsedIntent: any
     try {
-      let content = aiResponse.content.trim()
-      // Remove markdown code blocks if present
-      if (content.startsWith('```json')) content = content.slice(7)
-      if (content.startsWith('```')) content = content.slice(3)
-      if (content.endsWith('```')) content = content.slice(0, -3)
-      content = content.trim()
-
-      parsedIntent = JSON.parse(content)
+      parsedIntent = parseModelJson(aiResponse.content)
     } catch (parseError) {
       logger.error('[AI Discovery] Failed to parse AI response:', aiResponse.content)
       // Fall back to basic keyword extraction
@@ -219,7 +214,9 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     // Step 2: Execute searches based on parsed intent
     const intent = parsedIntent.intent || parsedIntent
-    const searchTerms = intent.searchTerms || [query]
+    const searchTerms: string[] = Array.isArray(intent.searchTerms) && intent.searchTerms.length > 0
+      ? intent.searchTerms.map((term: unknown) => String(term))
+      : [query]
     const primarySearchTerm = searchTerms.join(' ')
 
     // Search accounts if relevant
@@ -254,94 +251,69 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (searchTypes.includes('instances') || searchTypes.includes('resources')) {
       const aggregatorName = getAggregatorName(environment)
 
-      // Build Config query based on parsed intent
-      let configQuery = parsedIntent.configQuery
+      // Build the Config query from the extracted search terms only. The
+      // model's own configQuery is never executed: running model-written SQL
+      // let any signed-in user run arbitrary aggregator queries, which
+      // /api/support/execute-query restricts to administrators.
+      const configQuery = buildConfigSearchQuery(
+        searchTerms,
+        typeof intent.filters?.resourceType === 'string' ? intent.filters.resourceType : undefined
+      )
 
       if (!configQuery) {
-        // Generate a Config query based on search terms
-        const resourceType = intent.filters?.resourceType || 'AWS::EC2::Instance'
-        const tagConditions = searchTerms.map((term: string) =>
-          `tags.value LIKE '%${term}%'`
-        ).join(' OR ')
+        suggestions.push('Use search terms of at least three characters')
+      } else {
+        try {
+          logger.debug('[AI Discovery] Executing Config query:', configQuery)
+          const configResults = await queryResources(aggregatorName, configQuery, environment, undefined, limit * 2)
 
-        configQuery = `
-          SELECT
-            resourceId,
-            resourceType,
-            resourceName,
-            accountId,
-            awsRegion,
-            configuration,
-            tags
-          WHERE resourceType = '${resourceType}'
-            AND (${tagConditions} OR resourceName LIKE '%${primarySearchTerm}%')
-        `.trim()
-      }
+          for (const result of configResults.results) {
+            const parsed = parseConfigQueryRow(result)
+            const config = parsed.configuration
+            const tagsObj = configTagsToRecord(parsed.tags)
 
-      try {
-        logger.debug('[AI Discovery] Executing Config query:', configQuery)
-        const configResults = await queryResources(aggregatorName, configQuery, environment, undefined, limit * 2)
+            // Calculate confidence based on how well it matches search terms
+            let confidence = 50 // Base confidence
+            const nameLower = (tagsObj.Name || parsed.resourceName || '').toLowerCase()
+            for (const term of searchTerms) {
+              const termLower = term.toLowerCase()
+              if (nameLower.includes(termLower)) {
+                confidence += 25
+              }
+              // Check tags for matches
+              for (const [, value] of Object.entries(tagsObj)) {
+                if (value.toLowerCase().includes(termLower)) {
+                  confidence += 15
+                }
+              }
+            }
+            confidence = Math.min(confidence, 100)
 
-        for (const result of configResults.results) {
-          const parsed = JSON.parse(result)
-          const config = typeof parsed.configuration === 'string'
-            ? JSON.parse(parsed.configuration)
-            : parsed.configuration
-          const tags = typeof parsed.tags === 'string'
-            ? JSON.parse(parsed.tags)
-            : parsed.tags
-
-          // Convert tags array to object
-          const tagsObj: Record<string, string> = {}
-          if (Array.isArray(tags)) {
-            tags.forEach((tag: any) => {
-              if (tag.key && tag.value !== undefined) {
-                tagsObj[tag.key] = tag.value
+            const isInstance = parsed.resourceType === 'AWS::EC2::Instance'
+            results.push({
+              type: isInstance ? 'instance' : 'resource',
+              id: parsed.resourceId,
+              name: tagsObj.Name || parsed.resourceName || parsed.resourceId,
+              confidence,
+              matchReason: `Found via Config query matching "${primarySearchTerm}"`,
+              details: {
+                resourceType: parsed.resourceType?.split('::').pop(),
+                accountId: parsed.accountId,
+                region: parsed.awsRegion,
+                ...(isInstance && {
+                  instanceType: config?.instanceType,
+                  state: config?.state?.name || config?.state,
+                  privateIp: config?.privateIpAddress,
+                  publicIp: config?.publicIpAddress
+                }),
+                tags: tagsObj
               }
             })
           }
-
-          // Calculate confidence based on how well it matches search terms
-          let confidence = 50 // Base confidence
-          const nameLower = (tagsObj.Name || parsed.resourceName || '').toLowerCase()
-          for (const term of searchTerms) {
-            const termLower = term.toLowerCase()
-            if (nameLower.includes(termLower)) {
-              confidence += 25
-            }
-            // Check tags for matches
-            for (const [, value] of Object.entries(tagsObj)) {
-              if (value.toLowerCase().includes(termLower)) {
-                confidence += 15
-              }
-            }
-          }
-          confidence = Math.min(confidence, 100)
-
-          const isInstance = parsed.resourceType === 'AWS::EC2::Instance'
-          results.push({
-            type: isInstance ? 'instance' : 'resource',
-            id: parsed.resourceId,
-            name: tagsObj.Name || parsed.resourceName || parsed.resourceId,
-            confidence,
-            matchReason: `Found via Config query matching "${primarySearchTerm}"`,
-            details: {
-              resourceType: parsed.resourceType?.split('::').pop(),
-              accountId: parsed.accountId,
-              region: parsed.awsRegion,
-              ...(isInstance && {
-                instanceType: config?.instanceType,
-                state: config?.state?.name || config?.state,
-                privateIp: config?.privateIpAddress,
-                publicIp: config?.publicIpAddress
-              }),
-              tags: tagsObj
-            }
-          })
+        } catch (queryError: any) {
+          logger.warn('[AI Discovery] Config query failed:', queryError.message)
+          suggestions.push('Try a more specific search term or different resource type')
         }
-      } catch (queryError: any) {
-        logger.warn('[AI Discovery] Config query failed:', queryError.message)
-        suggestions.push('Try a more specific search term or different resource type')
       }
     }
 

@@ -173,11 +173,10 @@ const selectedTimeRange = ref(30)
 
 // Fetch author data
 const { data: authorData, pending, error } = await useFetch(
-  `/api/pipelines/authors/${authorEmail.value}/timeline`,
+  `/api/pipelines/authors/${encodeURIComponent(authorEmail.value)}/timeline`,
   {
     query: {
-      days: selectedTimeRange,
-      environment: 'govcloud'
+      days: selectedTimeRange
     },
     watch: [selectedTimeRange]
   }

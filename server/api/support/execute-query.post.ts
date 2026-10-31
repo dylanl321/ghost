@@ -1,27 +1,26 @@
 /**
  * POST /api/support/execute-query
- * Execute AI-generated queries against AWS Config, CloudWatch, or CloudTrail
+ * Execute AI-generated queries against AWS Config or CloudWatch Logs
  */
 
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { queryResources, getAggregatorName } from '../../utils/config-service'
 import {
-  CloudWatchLogsClient,
   FilterLogEventsCommand,
   type FilteredLogEvent
 } from '@aws-sdk/client-cloudwatch-logs'
-import { assumeChildAccountRole } from '../../utils/credentials/awsAccountCredentials'
+import { getChildAccountLogsClient } from '../../utils/cloudwatch-logs-client'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
 import { requireAdmin } from '../../utils/user-roles'
 
 interface ExecuteQueryRequest {
-  queryType: 'config' | 'cloudwatch' | 'cloudtrail'
+  queryType: 'config' | 'cloudwatch'
   query: string
   environment: 'commercial' | 'govcloud'
-  accountId?: string      // Required for cloudwatch/cloudtrail
+  accountId?: string      // Required for cloudwatch
   logGroup?: string       // Required for cloudwatch
   startTime?: number
   endTime?: number
@@ -44,7 +43,7 @@ interface ExecuteQueryResponse {
 
 registerEndpoint('/api/support/execute-query', 'POST', {
   summary: 'Execute AI-generated queries',
-  description: 'Execute queries against AWS Config, CloudWatch Logs, or CloudTrail',
+  description: 'Execute queries against AWS Config or CloudWatch Logs',
   tags: ['Support Tools'],
   requestBody: {
     required: true,
@@ -56,12 +55,12 @@ registerEndpoint('/api/support/execute-query', 'POST', {
           properties: {
             queryType: {
               type: 'string',
-              enum: ['config', 'cloudwatch', 'cloudtrail'],
+              enum: ['config', 'cloudwatch'],
               description: 'Type of query to execute'
             },
             query: {
               type: 'string',
-              description: 'The query to execute (Config SQL, CloudWatch filter pattern, or CloudTrail filter)'
+              description: 'The query to execute (Config SQL or CloudWatch filter pattern)'
             },
             environment: {
               type: 'string',
@@ -70,7 +69,7 @@ registerEndpoint('/api/support/execute-query', 'POST', {
             },
             accountId: {
               type: 'string',
-              description: 'Account ID (required for cloudwatch/cloudtrail)'
+              description: 'Account ID (required for cloudwatch)'
             },
             logGroup: {
               type: 'string',
@@ -230,17 +229,7 @@ async function executeCloudWatchQuery(
 ): Promise<Record<string, any>[]> {
   logger.info(`[Execute Query] Running CloudWatch query on ${logGroup} in ${accountId}`)
 
-  const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
-  const credentials = await assumeChildAccountRole(environment, accountId)
-
-  const client = new CloudWatchLogsClient({
-    region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId!,
-      secretAccessKey: credentials.secretAccessKey!,
-      sessionToken: credentials.sessionToken
-    }
-  })
+  const client = await getChildAccountLogsClient(environment, accountId)
 
   const command = new FilterLogEventsCommand({
     logGroupName: logGroup,
@@ -274,25 +263,6 @@ async function executeCloudWatchQuery(
   })
 }
 
-// Execute CloudTrail query (placeholder - would need Security Lake integration)
-async function executeCloudTrailQuery(
-  _query: string,
-  _environment: AWSEnvironmentType,
-  _accountId: string,
-  _startTime: number,
-  _endTime: number,
-  _limit: number
-): Promise<Record<string, any>[]> {
-  // CloudTrail queries via Security Lake require Athena integration
-  // For now, return an informative message
-  logger.warn('[Execute Query] CloudTrail query execution via Security Lake not yet implemented')
-  return [{
-    message: 'CloudTrail query execution via Security Lake is not yet implemented. Please use the Access Audit tool for CloudTrail analysis.',
-    queryType: 'cloudtrail',
-    status: 'not_implemented'
-  }]
-}
-
 export default defineEventHandler(handleAsync(async (event) => {
   await requireAdmin(event)
 
@@ -311,8 +281,15 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'environment is required')
   }
 
+  if (body.environment !== 'commercial' && body.environment !== 'govcloud') {
+    return errors.badRequest(event, 'Environment must be "commercial" or "govcloud"')
+  }
+  if (body.accountId !== undefined && !/^\d{12}$/.test(String(body.accountId))) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
+  }
+
   const environment = body.environment as AWSEnvironmentType
-  const limit = Math.min(body.limit || 100, 500)
+  const limit = Math.min(Math.max(Number(body.limit) || 100, 1), 500)
   const startTime = body.startTime || Date.now() - 24 * 60 * 60 * 1000 // Default 24h ago
   const endTime = body.endTime || Date.now()
 
@@ -345,22 +322,12 @@ export default defineEventHandler(handleAsync(async (event) => {
         )
         break
 
-      case 'cloudtrail':
-        if (!body.accountId) {
-          return errors.badRequest(event, 'accountId is required for CloudTrail queries')
-        }
-        records = await executeCloudTrailQuery(
-          body.query,
-          environment,
-          body.accountId,
-          startTime,
-          endTime,
-          limit
-        )
-        break
-
       default:
-        return errors.badRequest(event, `Invalid queryType: ${body.queryType}. Must be "config", "cloudwatch", or "cloudtrail"`)
+        // There is no CloudTrail query backend here; the old placeholder
+        // returned a fake "not implemented" row as if it were a result
+        return errors.badRequest(event, String(body.queryType) === 'cloudtrail'
+          ? 'CloudTrail queries are not supported here. Use the Access Audit tool for CloudTrail activity.'
+          : `Invalid queryType: ${body.queryType}. Must be "config" or "cloudwatch"`)
     }
 
     const executionTime = Date.now() - executionStart

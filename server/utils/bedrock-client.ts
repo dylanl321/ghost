@@ -26,38 +26,65 @@ export interface BedrockModelConfig {
   requestFormat: 'nova' | 'claude'
 }
 
+function envInt(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || '', 10)
+  return Number.isFinite(value) ? value : fallback
+}
+
+function envFloat(name: string, fallback: number): number {
+  const value = Number.parseFloat(process.env[name] || '')
+  return Number.isFinite(value) ? value : fallback
+}
+
+function envList(name: string): string[] | undefined {
+  const values = process.env[name]?.split(',').map(value => value.trim()).filter(Boolean)
+  return values && values.length > 0 ? values : undefined
+}
+
+/** The partition Bedrock is called in. Every client call and error message uses this one value. */
+export function bedrockEnvironment(): 'commercial' | 'govcloud' {
+  return process.env.BEDROCK_ENVIRONMENT === 'govcloud' ? 'govcloud' : 'commercial'
+}
+
+function bedrockRegion(): string {
+  return process.env.BEDROCK_REGION ||
+    (bedrockEnvironment() === 'commercial'
+      ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
+      : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+}
+
 // Model configurations with fallback options for both Commercial and GovCloud environments
 const MODEL_CONFIGS: Record<BedrockModel, BedrockModelConfig> = {
   'nova-pro': {
     modelId: process.env.BEDROCK_NOVA_MODEL_ID || 'amazon.nova-pro-v1:0', // Direct model ID for Nova Pro
-    maxTokens: parseInt(process.env.BEDROCK_NOVA_MAX_TOKENS || '4096'),
-    temperature: parseFloat(process.env.BEDROCK_NOVA_TEMPERATURE || '0.7'),
-    topP: parseFloat(process.env.BEDROCK_NOVA_TOP_P || '0.9'),
+    maxTokens: envInt('BEDROCK_NOVA_MAX_TOKENS', 4096),
+    temperature: envFloat('BEDROCK_NOVA_TEMPERATURE', 0.7),
+    topP: envFloat('BEDROCK_NOVA_TOP_P', 0.9),
     requestFormat: 'nova'
   },
   'claude-sonnet': {
     modelId: process.env.BEDROCK_CLAUDE_MODEL_ID || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', // Cross-region inference profile for Claude 3.5 Sonnet
-    maxTokens: parseInt(process.env.BEDROCK_CLAUDE_MAX_TOKENS || '4096'),
-    temperature: parseFloat(process.env.BEDROCK_CLAUDE_TEMPERATURE || '0.3'), // Lower temperature for more consistent analysis
-    topP: parseFloat(process.env.BEDROCK_CLAUDE_TOP_P || '0.95'),
+    maxTokens: envInt('BEDROCK_CLAUDE_MAX_TOKENS', 4096),
+    temperature: envFloat('BEDROCK_CLAUDE_TEMPERATURE', 0.3), // Lower temperature for more consistent analysis
+    topP: envFloat('BEDROCK_CLAUDE_TOP_P', 0.95),
     requestFormat: 'claude'
   }
 }
 
 // Fallback model IDs to try if primary model fails
 const FALLBACK_MODEL_IDS: Record<BedrockModel, string[]> = {
-  'nova-pro': [
-    process.env.BEDROCK_NOVA_MODEL_ID || 'amazon.nova-pro-v1:0',
-    ...(process.env.BEDROCK_NOVA_FALLBACK_MODELS?.split(',') || ['amazon.nova-micro-v1:0']), // Fallback models
-  ],
-  'claude-sonnet': [
-    process.env.BEDROCK_CLAUDE_MODEL_ID || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', // Cross-region inference profile (primary)
-    ...(process.env.BEDROCK_CLAUDE_FALLBACK_MODELS?.split(',') || [
+  'nova-pro': [...new Set([
+    MODEL_CONFIGS['nova-pro'].modelId,
+    ...(envList('BEDROCK_NOVA_FALLBACK_MODELS') || ['amazon.nova-micro-v1:0']), // Fallback models
+  ])],
+  'claude-sonnet': [...new Set([
+    MODEL_CONFIGS['claude-sonnet'].modelId, // Primary model or inference profile
+    ...(envList('BEDROCK_CLAUDE_FALLBACK_MODELS') || [
       'anthropic.claude-3-5-sonnet-20241022-v2:0',  // Direct model ID fallback
       'us.anthropic.claude-3-5-sonnet-20240620-v1:0', // Older inference profile
       'anthropic.claude-3-5-sonnet-20240620-v1:0',  // Older direct model ID
     ])
-  ]
+  ])]
 }
 
 export interface BedrockRequest {
@@ -91,15 +118,9 @@ export interface BedrockResponse {
  * Get Bedrock Runtime client with environment flexibility
  */
 async function getBedrockClient(): Promise<BedrockRuntimeClient> {
-  // Determine environment from configuration (defaults to commercial for better model availability)
-  const environment = process.env.BEDROCK_ENVIRONMENT || 'commercial'
-  const useEnvironment = environment === 'govcloud' ? 'govcloud' : 'commercial'
-  
-  // Use configured region for Bedrock operations based on environment
-  const region = process.env.BEDROCK_REGION || 
-    (useEnvironment === 'commercial' 
-      ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
-      : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+  // BEDROCK_ENVIRONMENT selects the partition (defaults to commercial)
+  const useEnvironment = bedrockEnvironment()
+  const region = bedrockRegion()
   
   // Get account ID if cross-account access is needed
   const accountId = useEnvironment === 'commercial'
@@ -108,7 +129,29 @@ async function getBedrockClient(): Promise<BedrockRuntimeClient> {
   
   logger.info(`[Bedrock] Using environment: ${useEnvironment}, region: ${region}`)
   
-  return await getBedrockRuntimeClient(useEnvironment as any, region, accountId)
+  return await getBedrockRuntimeClient(useEnvironment, region, accountId)
+}
+
+/**
+ * Parse a JSON answer from a model. Models sometimes wrap JSON in a markdown
+ * fence or add a sentence before it, so fall back to the outermost object or
+ * array in the text.
+ */
+export function parseModelJson<T = any>(content: string): T {
+  const cleaned = content.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+  try {
+    return JSON.parse(cleaned) as T
+  } catch (error) {
+    const start = cleaned.search(/[[{]/)
+    const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'))
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1)) as T
+    }
+    throw error
+  }
 }
 
 /**
@@ -185,6 +228,25 @@ function formatRequest(config: BedrockModelConfig, request: BedrockRequest): Rec
   }
 }
 
+/** Join every text block of a response (Claude can return several, and non-text blocks first). */
+function joinTextBlocks(blocks: unknown): string {
+  if (!Array.isArray(blocks)) return ''
+  return blocks
+    .map(block => (block && typeof block.text === 'string' ? block.text : ''))
+    .join('')
+    .trim()
+}
+
+/**
+ * True when Bedrock rejected the model ID itself, so the next fallback model is worth trying.
+ * Other ValidationExceptions (prompt too long, bad parameters) fail the same way on every model.
+ */
+export function isModelUnavailableError(error: { name?: string; message?: string }): boolean {
+  if (error.name === 'ResourceNotFoundException') return true
+  if (error.name !== 'ValidationException') return false
+  return /model identifier is invalid|model.*(not found|not supported|isn't supported|is not supported|access)|inference profile|on-demand throughput|end of its life|legacy/i.test(error.message || '')
+}
+
 /**
  * Parse response based on model type
  */
@@ -197,11 +259,9 @@ function parseResponse(config: BedrockModelConfig, responseBody: Record<string, 
     const content = message?.content as any[]
     
     // Try multiple possible response structures
-    const textContent = content?.[0]?.text || 
-                       responseBody.content || 
-                       responseBody.text || 
-                       responseBody.outputText ||
-                       'No response generated'
+    const textContent = joinTextBlocks(content) ||
+                       (typeof responseBody.text === 'string' ? responseBody.text : '') ||
+                       (typeof responseBody.outputText === 'string' ? responseBody.outputText : '')
     
     // Token usage might be in usage object
     const usage = responseBody.usage as Record<string, number>
@@ -216,7 +276,7 @@ function parseResponse(config: BedrockModelConfig, responseBody: Record<string, 
     const content = responseBody.content as any[]
     const usage = responseBody.usage as Record<string, number>
     return {
-      content: content?.[0]?.text || 'No response generated',
+      content: joinTextBlocks(content),
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens
     }
@@ -266,10 +326,8 @@ async function tryInvokeWithFallbacks(
     } catch (error: any) {
       logger.error(`[Bedrock] Model ${modelId} failed: ${error.name} - ${error.message}`)
       
-      // If it's not a model-not-found error, return the error immediately
-      if (error.name !== 'ValidationException' && 
-          error.name !== 'ResourceNotFoundException' &&
-          !error.message?.includes('model identifier is invalid')) {
+      // Only a model availability error is worth retrying on the next model ID
+      if (!isModelUnavailableError(error)) {
         return { success: false, error }
       }
       
@@ -283,7 +341,7 @@ async function tryInvokeWithFallbacks(
     success: false,
     error: {
       name: 'ModelUnavailableException',
-      message: `None of the ${model} models are available in ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'} environment: ${fallbackIds.join(', ')}`
+      message: `None of the ${model} models are available in ${bedrockEnvironment()} environment: ${fallbackIds.join(', ')}`
     }
   }
 }
@@ -337,9 +395,9 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
           success: false,
           error: createError(
             'MODEL_NOT_FOUND',
-            `No ${modelStr} models available in ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'} environment`,
+            `No ${modelStr} models available in ${bedrockEnvironment()} environment`,
             error.message,
-            `Contact your AWS administrator to enable Bedrock models in ${process.env.BEDROCK_REGION || (process.env.BEDROCK_ENVIRONMENT === 'commercial' ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1' : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')}. Available fallback models for ${modelStr}: ${FALLBACK_MODEL_IDS[modelStr as BedrockModel]?.join(', ') || 'none'}`,
+            `Contact your AWS administrator to enable Bedrock models in ${bedrockRegion()}. Available fallback models for ${modelStr}: ${FALLBACK_MODEL_IDS[modelStr as BedrockModel]?.join(', ') || 'none'}`,
             false
           ),
           model: model,
@@ -373,6 +431,23 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
     const responseBody = JSON.parse(new TextDecoder().decode(response.body))
     const { content, inputTokens, outputTokens } = parseResponse(config, responseBody)
 
+    if (!content) {
+      return {
+        success: false,
+        error: createError(
+          'EMPTY_RESPONSE',
+          'The model returned no text',
+          `stop_reason: ${responseBody.stop_reason ?? responseBody.stopReason ?? 'unknown'}`,
+          'Try again. If it keeps happening, the prompt may be hitting a content filter or token limit.',
+          true
+        ),
+        model: actualModelUsed,
+        inputTokens,
+        outputTokens,
+        processingTime: Date.now() - startTime
+      }
+    }
+
     logger.debug(`[Bedrock] Success: ${content.length} characters generated, tokens: ${inputTokens}→${outputTokens}`)
 
     return {
@@ -405,8 +480,8 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
         bedrockError = createError(
           'MODEL_NOT_FOUND',
           `Model ${config.modelId} is not available`,
-          `The requested model is not accessible in ${process.env.BEDROCK_REGION || (process.env.BEDROCK_ENVIRONMENT === 'commercial' ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1' : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')} region`,
-          `Ensure the model is enabled in your AWS account and available in ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'} environment. Contact your AWS administrator if needed.`,
+          `The requested model is not accessible in ${bedrockRegion()} region`,
+          `Ensure the model is enabled in your AWS account and available in ${bedrockEnvironment()} environment. Contact your AWS administrator if needed.`,
           false
         )
         break
@@ -457,8 +532,8 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
           bedrockError = createError(
             'CREDENTIALS_ERROR',
             'AWS credentials not configured',
-            `Unable to load AWS credentials for ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'} environment`,
-            `Ensure ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'}_ACCESS_KEY_ID and ${process.env.BEDROCK_ENVIRONMENT === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'}_SECRET_ACCESS_KEY environment variables are set correctly.`,
+            `Unable to load AWS credentials for ${bedrockEnvironment()} environment`,
+            `Ensure ${bedrockEnvironment() === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'}_ACCESS_KEY_ID and ${bedrockEnvironment() === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'}_SECRET_ACCESS_KEY environment variables are set correctly.`,
             false
           )
         } else if (error.message?.includes('getaddrinfo ENOTFOUND')) {
@@ -704,39 +779,5 @@ Return your analysis as a JSON object with this exact structure:
     model,
     temperature: 0.2, // Very focused analysis for consistent structure
     maxTokens: 2500 // Allow more tokens for detailed recommendations
-  })
-}
-
-/**
- * Get available models and their configurations
- */
-export function getAvailableModels(): Record<BedrockModel, Omit<BedrockModelConfig, 'requestFormat'>> {
-  return {
-    'nova-pro': {
-      modelId: MODEL_CONFIGS['nova-pro'].modelId,
-      maxTokens: MODEL_CONFIGS['nova-pro'].maxTokens,
-      temperature: MODEL_CONFIGS['nova-pro'].temperature,
-      topP: MODEL_CONFIGS['nova-pro'].topP,
-      stopSequences: MODEL_CONFIGS['nova-pro'].stopSequences
-    },
-    'claude-sonnet': {
-      modelId: MODEL_CONFIGS['claude-sonnet'].modelId,
-      maxTokens: MODEL_CONFIGS['claude-sonnet'].maxTokens,
-      temperature: MODEL_CONFIGS['claude-sonnet'].temperature,
-      topP: MODEL_CONFIGS['claude-sonnet'].topP,
-      stopSequences: MODEL_CONFIGS['claude-sonnet'].stopSequences
-    }
-  }
-}
-
-/**
- * Test Bedrock connectivity and model availability
- */
-export async function testBedrockConnection(model: BedrockModel = 'claude-sonnet'): Promise<BedrockResponse> {
-  return invokeBedrock({
-    prompt: 'Hello! Please confirm you can receive and respond to this test message. Reply with "Bedrock connection successful" and today\'s date.',
-    model,
-    maxTokens: 100,
-    temperature: 0.1
   })
 }

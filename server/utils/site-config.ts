@@ -10,9 +10,9 @@ import {
   GetItemCommand,
   PutItemCommand,
   ScanCommand,
-  BatchWriteItemCommand,
-  QueryCommand
+  BatchWriteItemCommand
 } from '@aws-sdk/client-dynamodb';
+import type { BatchWriteItemCommandOutput, ScanCommandInput } from '@aws-sdk/client-dynamodb';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
@@ -23,6 +23,76 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 // In-memory cache for config values
 const configCache = new Map<string, { value: SiteConfigItem; expiresAt: number }>();
+
+/**
+ * The site-config table's only key is `key`, so change history is stored as
+ * separate rows whose key starts with this prefix: history#<configKey>#<changedAt>.
+ */
+export const HISTORY_KEY_PREFIX = 'history#';
+
+export function historyRowKey(configKey: string, changedAt: string): string {
+  return `${HISTORY_KEY_PREFIX}${configKey}#${changedAt}`;
+}
+
+/** Error with an HTTP status, so routes can pass it straight to createError. */
+export class SiteConfigError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+    this.name = 'SiteConfigError';
+  }
+}
+
+/**
+ * Earlier versions wrote history rows with the config key itself as the table
+ * key, which overwrote the setting with { key, PK, SK, oldValue, newValue, ... }.
+ * Such a row still holds the value the admin saved in newValue, so read it as
+ * that setting instead of silently falling back to the default.
+ */
+export function normalizeStoredItem(item: Record<string, any>): Record<string, any> {
+  if (typeof item.SK === 'string' && item.SK.startsWith('HISTORY#') && !('value' in item) && 'newValue' in item) {
+    const defaultItem = DEFAULT_SITE_CONFIG.find(c => c.key === item.key);
+    return {
+      ...(defaultItem ?? {}),
+      key: item.key,
+      value: item.newValue,
+      updatedAt: item.changedAt,
+      updatedBy: item.changedBy,
+    };
+  }
+  return item;
+}
+
+/** Scan every page of the table (a single Scan stops at 1 MB). */
+async function scanAll(
+  client: DynamoDBClient,
+  input: Omit<ScanCommandInput, 'TableName' | 'ExclusiveStartKey'> = {}
+): Promise<Record<string, any>[]> {
+  const items: Record<string, any>[] = [];
+  let startKey: Record<string, any> | undefined;
+  do {
+    const response = await client.send(new ScanCommand({ ...input, TableName: TABLE_NAME, ExclusiveStartKey: startKey }));
+    for (const item of response.Items ?? []) items.push(unmarshall(item));
+    startKey = response.LastEvaluatedKey;
+  } while (startKey);
+  return items;
+}
+
+/** BatchWriteItem in chunks of 25, retrying anything DynamoDB returns as unprocessed. */
+async function batchPutAll(client: DynamoDBClient, items: Record<string, any>[]): Promise<void> {
+  for (let i = 0; i < items.length; i += 25) {
+    let requests: any[] | undefined = items.slice(i, i + 25).map(item => ({
+      PutRequest: { Item: marshall(item, { removeUndefinedValues: true }) }
+    }));
+    for (let attempt = 0; requests && requests.length > 0; attempt++) {
+      if (attempt >= 5) {
+        throw new Error(`Site config batch write left ${requests.length} item(s) unprocessed`);
+      }
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
+      const response: BatchWriteItemCommandOutput = await client.send(new BatchWriteItemCommand({ RequestItems: { [TABLE_NAME]: requests } }));
+      requests = response.UnprocessedItems?.[TABLE_NAME];
+    }
+  }
+}
 
 // Cached DynamoDB client with expiration tracking to avoid circular dependencies with aws-client-factory
 interface CachedDynamoDBClient {
@@ -158,7 +228,7 @@ export async function getSiteConfig(key: string, useCache = true): Promise<SiteC
     });
 
     const response = await client.send(command);
-    const item = response.Item ? unmarshall(response.Item) as SiteConfigItem : null;
+    const item = response.Item ? normalizeStoredItem(unmarshall(response.Item)) as SiteConfigItem : null;
 
     if (item) {
       // Merge with default metadata
@@ -194,12 +264,9 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
       return DEFAULT_SITE_CONFIG;
     }
 
-    const command = new ScanCommand({
-      TableName: TABLE_NAME
-    });
-
-    const response = await client.send(command);
-    const items = response.Items ? response.Items.map(item => unmarshall(item) as SiteConfigItem).filter(item => !isRetiredSiteConfigKey(item.key)) : [];
+    const items = (await scanAll(client))
+      .map(item => normalizeStoredItem(item) as SiteConfigItem)
+      .filter(item => !isRetiredSiteConfigKey(item.key) && isSiteConfigItem(item));
 
     // If DB is empty or has fewer items than defaults, merge with defaults
     if (items.length === 0) {
@@ -250,7 +317,7 @@ export async function updateSiteConfig(
     // Get existing config or default
     const existing = await getSiteConfig(key, false);
     if (!existing) {
-      throw new Error(`Configuration key not found: ${key}`);
+      throw new SiteConfigError(`Configuration key not found: ${key}`, 404);
     }
 
     // Validate the new value
@@ -291,14 +358,30 @@ export async function updateSiteConfig(
 
     return mergedUpdated;
   } catch (error: any) {
+    if (error instanceof SiteConfigError) throw error;
     // If table doesn't exist, provide helpful error message
-    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('not found')) {
+    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException') {
       throw new Error(`Site config table '${TABLE_NAME}' not found. Please run 'npx tsx scripts/init-site-config.ts' to initialize the table.`);
     }
 
     logger.error(`Error updating site config for key ${key}:`, error);
     throw error;
   }
+}
+
+/**
+ * Update a configuration item and record the change in its history.
+ */
+export async function updateSiteConfigWithHistory(
+  key: string,
+  value: any,
+  updatedBy: string,
+  reason?: string
+): Promise<SiteConfigItem> {
+  const previous = await getSiteConfig(key, false);
+  const updated = await updateSiteConfig(key, value, updatedBy);
+  await saveConfigHistory(key, previous?.value ?? null, value, updatedBy, reason);
+  return updated;
 }
 
 /**
@@ -341,19 +424,7 @@ export async function resetAllSiteConfig(updatedBy?: string, excludeKeys: readon
     throw new Error('AWS credentials not configured. Cannot reset site config in DynamoDB.');
   }
 
-  for (let i = 0; i < resetConfigs.length; i += 25) {
-    const chunk = resetConfigs.slice(i, i + 25);
-    const command = new BatchWriteItemCommand({
-      RequestItems: {
-        [TABLE_NAME]: chunk.map(item => ({
-          PutRequest: {
-            Item: marshall(item, { removeUndefinedValues: true })
-          }
-        }))
-      }
-    });
-    await client.send(command);
-  }
+  await batchPutAll(client, resetConfigs);
 
   // Clear entire cache
   configCache.clear();
@@ -380,19 +451,7 @@ export async function initializeSiteConfig(): Promise<void> {
       throw new Error('AWS credentials not configured. Cannot initialize site config in DynamoDB.');
     }
 
-    for (let i = 0; i < initialConfigs.length; i += 25) {
-      const chunk = initialConfigs.slice(i, i + 25);
-      const command = new BatchWriteItemCommand({
-        RequestItems: {
-          [TABLE_NAME]: chunk.map(item => ({
-            PutRequest: {
-              Item: marshall(item, { removeUndefinedValues: true })
-            }
-          }))
-        }
-      });
-      await client.send(command);
-    }
+    await batchPutAll(client, initialConfigs);
 
     logger.info('Site config initialized successfully');
   } catch (error) {
@@ -440,7 +499,7 @@ function getDefaultConfig(key: string): SiteConfigItem | null {
   return DEFAULT_SITE_CONFIG.find((c) => c.key === key) || null;
 }
 
-const NON_CONFIG_KEY_PREFIXES = ['security:']
+const NON_CONFIG_KEY_PREFIXES = ['security:', HISTORY_KEY_PREFIX]
 
 // Track which orphan keys we've already warned about to avoid log spam
 const warnedOrphanKeys = new Set<string>()
@@ -539,8 +598,9 @@ function validateConfigValue(config: SiteConfigItem, value: any): void {
   // Type check
   const valueType = Array.isArray(value) ? 'array' : typeof value;
   if (valueType !== config.type && config.type !== 'object') {
-    throw new Error(
-      `Invalid type for ${config.key}: expected ${config.type}, got ${valueType}`
+    throw new SiteConfigError(
+      `Invalid type for ${config.key}: expected ${config.type}, got ${valueType}`,
+      400
     );
   }
 
@@ -551,10 +611,10 @@ function validateConfigValue(config: SiteConfigItem, value: any): void {
     // Numeric min/max
     if (typeof value === 'number') {
       if (min !== undefined && value < min) {
-        throw new Error(`Value for ${config.key} must be at least ${min}`);
+        throw new SiteConfigError(`Value for ${config.key} must be at least ${min}`, 400);
       }
       if (max !== undefined && value > max) {
-        throw new Error(`Value for ${config.key} must be at most ${max}`);
+        throw new SiteConfigError(`Value for ${config.key} must be at most ${max}`, 400);
       }
     }
 
@@ -562,14 +622,15 @@ function validateConfigValue(config: SiteConfigItem, value: any): void {
     if (typeof value === 'string' && pattern) {
       const regex = new RegExp(pattern);
       if (!regex.test(value)) {
-        throw new Error(`Value for ${config.key} does not match required pattern`);
+        throw new SiteConfigError(`Value for ${config.key} does not match required pattern`, 400);
       }
     }
 
     // Allowed values
     if (allowedValues && !allowedValues.includes(value)) {
-      throw new Error(
-        `Value for ${config.key} must be one of: ${allowedValues.join(', ')}`
+      throw new SiteConfigError(
+        `Value for ${config.key} must be one of: ${allowedValues.join(', ')}`,
+        400
       );
     }
   }
@@ -616,8 +677,8 @@ export async function putSiteConfigRaw(key: string, value: any): Promise<void> {
 }
 
 /**
- * Save a change history entry to DynamoDB
- * History entries use a composite key: PK=CONFIG#key, SK=HISTORY#timestamp
+ * Save a change history entry to DynamoDB, as its own row keyed
+ * history#<configKey>#<changedAt> (see HISTORY_KEY_PREFIX).
  */
 export async function saveConfigHistory(
   key: string,
@@ -634,109 +695,70 @@ export async function saveConfigHistory(
       return;
     }
 
-    const timestamp = new Date().toISOString();
-    const historyEntry: SiteConfigHistoryEntry = {
-      key,
+    const changedAt = new Date().toISOString();
+    const historyItem = {
+      key: historyRowKey(key, changedAt),
+      configKey: key,
       oldValue,
       newValue,
       changedBy,
-      changedAt: timestamp,
+      changedAt,
       reason,
     };
 
-    // Store history with composite key for efficient querying
-    const historyItem = {
-      PK: `CONFIG#${key}`,
-      SK: `HISTORY#${timestamp}`,
-      ...historyEntry,
-    };
-
-    const command = new PutItemCommand({
+    await client.send(new PutItemCommand({
       TableName: TABLE_NAME,
       Item: marshall(historyItem, { removeUndefinedValues: true }),
-    });
-
-    await client.send(command);
+    }));
   } catch (error) {
     logger.error('Error saving config history:', error);
     // Don't throw - history is nice-to-have, not critical
   }
 }
 
-/**
- * Get change history for a specific configuration key
- */
-export async function getConfigHistory(key: string, limit = 50): Promise<SiteConfigHistoryEntry[]> {
-  try {
-    const client = await getDynamoDBClientDirect();
+export function toHistoryEntry(row: Record<string, any>): SiteConfigHistoryEntry {
+  return {
+    key: row.configKey,
+    oldValue: row.oldValue,
+    newValue: row.newValue,
+    changedBy: row.changedBy,
+    changedAt: row.changedAt,
+    reason: row.reason,
+  };
+}
 
-    if (!client) {
-      logger.warn('Cannot retrieve config history: AWS credentials not available');
-      return [];
-    }
+async function scanHistory(prefix: string, limit: number): Promise<SiteConfigHistoryEntry[]> {
+  const client = await getDynamoDBClientDirect();
 
-    const command = new QueryCommand({
-      TableName: TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: marshall({
-        ':pk': `CONFIG#${key}`,
-        ':sk': 'HISTORY#',
-      }),
-      ScanIndexFilter: undefined,
-      Limit: limit,
-      ScanIndexForward: false, // Most recent first
-    });
-
-    const response = await client.send(command);
-    const items = response.Items ? response.Items.map(item => {
-      const unmarshalled = unmarshall(item);
-      // Remove DynamoDB keys from result
-      const { PK, SK, ...historyEntry } = unmarshalled;
-      return historyEntry as SiteConfigHistoryEntry;
-    }) : [];
-
-    return items;
-  } catch (error) {
-    logger.error(`Error fetching config history for key ${key}:`, error);
+  if (!client) {
+    logger.warn('Cannot retrieve config history: AWS credentials not available');
     return [];
   }
+
+  // Filters apply after a Scan reads each page, so every page is read and the
+  // newest entries are kept.
+  const rows = await scanAll(client, {
+    FilterExpression: 'begins_with(#k, :prefix)',
+    ExpressionAttributeNames: { '#k': 'key' },
+    ExpressionAttributeValues: marshall({ ':prefix': prefix }),
+  });
+
+  return rows
+    .map(toHistoryEntry)
+    .sort((a, b) => b.changedAt.localeCompare(a.changedAt))
+    .slice(0, limit);
 }
 
 /**
- * Get change history for all configuration changes
+ * Get change history for a specific configuration key, most recent first
+ */
+export async function getConfigHistory(key: string, limit = 50): Promise<SiteConfigHistoryEntry[]> {
+  return scanHistory(`${HISTORY_KEY_PREFIX}${key}#`, limit);
+}
+
+/**
+ * Get change history for all configuration changes, most recent first
  */
 export async function getAllConfigHistory(limit = 100): Promise<SiteConfigHistoryEntry[]> {
-  try {
-    const client = await getDynamoDBClientDirect();
-
-    if (!client) {
-      logger.warn('Cannot retrieve config history: AWS credentials not available');
-      return [];
-    }
-
-    const command = new ScanCommand({
-      TableName: TABLE_NAME,
-      FilterExpression: 'begins_with(SK, :sk)',
-      ExpressionAttributeValues: marshall({
-        ':sk': 'HISTORY#',
-      }),
-      Limit: limit,
-    });
-
-    const response = await client.send(command);
-    const items = response.Items ? response.Items.map(item => {
-      const unmarshalled = unmarshall(item);
-      // Remove DynamoDB keys from result
-      const { PK, SK, ...historyEntry } = unmarshalled;
-      return historyEntry as SiteConfigHistoryEntry;
-    }) : [];
-
-    // Sort by timestamp descending (most recent first)
-    items.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
-
-    return items;
-  } catch (error) {
-    logger.error('Error fetching all config history:', error);
-    return [];
-  }
+  return scanHistory(HISTORY_KEY_PREFIX, limit);
 }

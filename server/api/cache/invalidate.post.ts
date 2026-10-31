@@ -86,8 +86,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   await requireScope(event, 'admin')
 
   const body = await readBody(event)
-  const tags = body?.tags || ['all']
-  const reason = body?.reason || 'Manual invalidation'
+  const tags: string[] = body?.tags ?? ['all']
+  const reason = typeof body?.reason === 'string' ? body.reason.slice(0, 500) : 'Manual invalidation'
+
+  if (!Array.isArray(tags) || tags.length === 0 || tags.some(tag => typeof tag !== 'string')) {
+    return errors.badRequest(event, 'tags must be a non-empty array of strings')
+  }
   
   // Validate tags
   const validTags = ['accounts', 'costs', 'organization', 'services', 'budgets', 'all']
@@ -98,7 +102,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   // Import cache managers
-  const { organizationCache, accountCache, costCache, CacheTags } = await import('../../utils/cache-manager')
+  const { organizationCache, accountCache, costCache, CacheTags, clearAllCaches } = await import('../../utils/cache-manager')
   
   // Get stats before invalidation
   const statsBefore = {
@@ -116,14 +120,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   if (tags.includes('all')) {
-    // Clear all caches
-    await organizationCache.clear()
-    await accountCache.clear()
-    await costCache.clear()
-    
+    // Clear every cache, including the default cache and AI insights, not just the three named ones
     invalidationResults.organization = statsBefore.organization.entries
     invalidationResults.accounts = statsBefore.accounts.entries
     invalidationResults.costs = statsBefore.costs.entries
+    const clearedTotal = await clearAllCaches()
+    invalidationResults.total = clearedTotal
   } else {
     // Selective invalidation by tags
     if (tags.includes('organization')) {
@@ -152,7 +154,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
   }
   
-  invalidationResults.total = invalidationResults.organization + invalidationResults.accounts + invalidationResults.costs
+  if (!tags.includes('all')) {
+    invalidationResults.total = invalidationResults.organization + invalidationResults.accounts + invalidationResults.costs
+  }
   
   // Get stats after invalidation
   const statsAfter = {
