@@ -321,9 +321,10 @@ function openDetail(issue: OAuthIssue) {
                         v-model="form.disposition"
                         :items="DISPOSITION_OPTIONS"
                         aria-label="Disposition"
-                       :search-input="false">
-                        <template #label>{{ dispositionLabel(form.disposition) }}</template>
-                        <template #option="{ option }">{{ dispositionLabel(option) }}</template>
+                        :search-input="false"
+                      >
+                        <template #default>{{ dispositionLabel(form.disposition) }}</template>
+                        <template #item-label="{ item: option }">{{ dispositionLabel(option) }}</template>
                       </USelectMenu>
                     </UFormField>
 

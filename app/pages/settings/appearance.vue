@@ -191,7 +191,8 @@
               v-model="tablePageSize"
               :items="pageSizeOptions"
               @change="saveTablePreference"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
 
           <div class="flex items-center justify-between">

@@ -436,20 +436,22 @@ onMounted(async () => {
                 size="sm"
               />
             </div>
-            <USelectMenu
+            <USelectMenu value-key="value"
               v-model="selectedRole"
               :items="[{ label: 'All Roles', value: '' }, ...allRoles.map(role => ({ label: role, value: role }))]"
               placeholder="Filter by role"
               size="sm"
               class="min-w-[180px]"
-             :search-input="false"/>
-            <USelectMenu
+              :search-input="false"
+            />
+            <USelectMenu value-key="value"
               v-model="selectedAccount"
               :items="[{ label: 'All Accounts', value: '' }, ...allAccounts.map(acc => ({ label: acc.name, value: acc.id }))]"
               placeholder="Filter by account"
               size="sm"
               class="min-w-[200px]"
-             :search-input="false"/>
+              :search-input="false"
+            />
             <UCheckbox
               v-model="showOnlyAwsUsers"
               label="AWS users only"

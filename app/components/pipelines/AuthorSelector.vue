@@ -11,14 +11,14 @@
       :loading="loading"
       class="w-64"
      :search-input="{ placeholder: 'Search authors...' }">
-      <template #label>
+      <template #default>
         <span v-if="selectedAuthorEmail">
           {{ getSelectedAuthorLabel() }}
         </span>
         <span v-else class="text-gray-500">All Authors</span>
       </template>
 
-      <template #option="{ option }">
+      <template #item-label="{ item: option }">
         <div class="flex items-center justify-between w-full">
           <div class="flex items-center gap-2">
             <div

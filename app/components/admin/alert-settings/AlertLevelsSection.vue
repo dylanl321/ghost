@@ -96,7 +96,8 @@
                 :items="isEditing ? [form.level] : availableLevels"
                 :disabled="isEditing"
                 placeholder="Select level"
-               :search-input="false"/>
+                :search-input="false"
+              />
               <template #hint>
                 <span class="text-xs">Valid levels: INFO, WARNING, CRITICAL, ESCALATION</span>
               </template>

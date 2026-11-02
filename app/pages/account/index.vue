@@ -11,12 +11,13 @@
             </p>
           </div>
           <div class="flex gap-2">
-            <USelectMenu
+            <USelectMenu value-key="value"
               v-model="selectedEnvironment"
               :items="environmentOptions"
               size="sm"
               class="w-40"
-             :search-input="false"/>
+              :search-input="false"
+            />
             <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
               Refresh
             </UButton>
@@ -44,9 +45,9 @@
               Collapse All
             </UButton>
             <USwitch v-model="showPolicies">
-              <template #default="{ checked }">
-                <span class="text-sm" :class="checked ? 'text-blue-500' : 'text-gray-400'">
-                  {{ checked ? 'Show SCPs' : 'Hide SCPs' }}
+              <template #label>
+                <span class="text-sm" :class="showPolicies ? 'text-blue-500' : 'text-gray-400'">
+                  {{ showPolicies ? 'Show SCPs' : 'Hide SCPs' }}
                 </span>
               </template>
             </USwitch>

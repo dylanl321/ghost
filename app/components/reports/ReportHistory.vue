@@ -16,7 +16,7 @@
           {{ filter.label }}
           <UBadge
             v-if="filter.count !== undefined"
-            :color="currentStatusFilter === filter.value ? 'white' : 'gray'"
+            :color="currentStatusFilter === filter.value ? 'neutral' : 'gray'"
             size="xs"
             class="ml-1"
           >
@@ -34,7 +34,8 @@
           label-key="label"
           size="sm"
           class="w-40"
-         :search-input="false"/>
+          :search-input="false"
+        />
 
         <!-- Search -->
         <UInput

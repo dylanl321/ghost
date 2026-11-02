@@ -23,7 +23,7 @@
           @click="currentFilter = filter.value"
         >
           {{ filter.label }}
-          <UBadge v-if="filter.count !== undefined" :color="currentFilter === filter.value ? 'white' : 'gray'" size="xs" class="ml-2">
+          <UBadge v-if="filter.count !== undefined" :color="currentFilter === filter.value ? 'neutral' : 'gray'" size="xs" class="ml-2">
             {{ filter.count }}
           </UBadge>
         </UButton>

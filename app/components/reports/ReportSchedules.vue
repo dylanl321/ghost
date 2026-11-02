@@ -15,7 +15,7 @@
           {{ filter.label }}
           <UBadge
             v-if="filter.count !== undefined"
-            :color="currentFilter === filter.value ? 'white' : 'gray'"
+            :color="currentFilter === filter.value ? 'neutral' : 'gray'"
             size="xs"
             class="ml-1"
           >

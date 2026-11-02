@@ -85,7 +85,7 @@
                 class="flex-1"
                 size="lg"
                :search-input="{ placeholder: 'Search timezones...' }">
-                <template #option="{ option }">
+                <template #item-label="{ item: option }">
                   <div class="flex items-center justify-between w-full">
                     <span>{{ option.label }}</span>
                     <span class="text-gray-400 text-sm">{{ option.offset }}</span>
@@ -134,7 +134,8 @@
               label-key="label"
               value-key="value"
               size="lg"
-             :search-input="false"/>
+              :search-input="false"
+            />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Preview: {{ dateFormatPreview }}
             </p>

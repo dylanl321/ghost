@@ -6,7 +6,7 @@
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ filteredRows.length }} {{ activeView.label.toLowerCase() }} row{{ filteredRows.length === 1 ? '' : 's' }}</p>
       </div>
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <UTabs v-model="activeIndex" :items="withIndexValues(tabs)"  :unmount-on-hide="false"/>
+        <UTabs v-model="activeIndex" :items="withIndexValues(tabs)" :unmount-on-hide="false" />
         <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Search current tab" size="sm" class="sm:w-64" />
       </div>
     </header>

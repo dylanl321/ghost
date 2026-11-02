@@ -121,7 +121,7 @@ type UserMenuItem = {
   href?: string
   target?: string
   description?: string
-  click?: () => void
+  onSelect?: () => void
 }
 
 interface Props {

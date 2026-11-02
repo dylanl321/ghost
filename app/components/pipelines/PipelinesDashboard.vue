@@ -49,7 +49,7 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
       @update:open="error = null"
     >
       <template #title>Failed to load pipeline data</template>

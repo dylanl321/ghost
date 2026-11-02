@@ -3,17 +3,16 @@
     <!-- Roles Filter -->
     <div class="space-y-2">
       <label class="text-xs font-medium text-gray-400">AWS Roles</label>
-      <USelectMenu
+      <USelectMenu value-key="value"
         v-model="selectedRoles"
         :items="roleOptions"
         :loading="optionsLoading"
         multiple
-       
         placeholder="All roles..."
         size="sm"
         class="w-full"
       >
-        <template #label>
+        <template #default>
           <span v-if="optionsLoading" class="text-gray-500">Loading roles...</span>
           <span v-else-if="selectedRoles.length === 0" class="text-gray-500">All roles</span>
           <span v-else class="text-gray-300">{{ selectedRoles.length }} selected</span>
@@ -48,24 +47,24 @@
           :items="lookbackOptions"
           size="sm"
           class="w-full"
-         :search-input="false"/>
+          :search-input="false"
+        />
       </div>
     </div>
 
     <!-- Departments Filter -->
     <div class="space-y-2">
       <label class="text-xs font-medium text-gray-400">Departments</label>
-      <USelectMenu
+      <USelectMenu value-key="value"
         v-model="selectedDepartments"
         :items="departmentOptions"
         :loading="optionsLoading"
         multiple
-       
         placeholder="All departments..."
         size="sm"
         class="w-full"
       >
-        <template #label>
+        <template #default>
           <span v-if="optionsLoading" class="text-gray-500">Loading departments...</span>
           <span v-else-if="selectedDepartments.length === 0" class="text-gray-500">All departments</span>
           <span v-else class="text-gray-300">{{ selectedDepartments.length }} selected</span>

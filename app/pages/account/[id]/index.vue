@@ -6,7 +6,7 @@
       color="orange"
       variant="solid"
       icon="i-heroicons-exclamation-triangle"
-      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
     >
       <template #title>
         <span class="font-semibold">Account {{ accountStatus }}</span>

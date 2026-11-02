@@ -262,7 +262,8 @@ function close() {
                 multiple
                 placeholder="Select resources"
                 aria-label="Permitted resources"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </UFormField>
 
             <UFormField label="Permitted scopes" required>
@@ -272,7 +273,8 @@ function close() {
                 multiple
                 placeholder="Select scopes"
                 aria-label="Permitted scopes"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </UFormField>
 
             <UAlert

@@ -70,7 +70,7 @@
             @click="activeCategory = 'all'"
           >
             All
-            <UBadge size="xs" :color="activeCategory === 'all' ? 'white' : 'gray'" variant="subtle" class="ml-1">
+            <UBadge size="xs" :color="activeCategory === 'all' ? 'neutral' : 'gray'" variant="subtle" class="ml-1">
               {{ toolDefinitions.length }}
             </UBadge>
           </UButton>
@@ -84,7 +84,7 @@
           >
             <Icon :name="cat.icon" class="w-3.5 h-3.5 mr-1" />
             {{ cat.label }}
-            <UBadge size="xs" :color="activeCategory === cat.id ? 'white' : 'gray'" variant="subtle" class="ml-1">
+            <UBadge size="xs" :color="activeCategory === cat.id ? 'neutral' : 'gray'" variant="subtle" class="ml-1">
               {{ cat.count }}
             </UBadge>
           </UButton>

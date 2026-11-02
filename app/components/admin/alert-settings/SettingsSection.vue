@@ -84,7 +84,8 @@
                 :items="timezoneOptions"
                 size="sm"
                 class="w-48"
-               :search-input="false"/>
+                :search-input="false"
+              />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('timezone')" :loading="savingField === 'timezone'" />
               <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>

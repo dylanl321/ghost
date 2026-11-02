@@ -11,7 +11,7 @@
     class="w-full"
     :disabled="disabled"
    :search-input="{ placeholder: 'Search accounts...' }">
-    <template #label>
+    <template #default>
       <span v-if="!isReady" class="text-gray-500">Loading accounts...</span>
       <span v-else-if="selectedAccountData" class="flex items-center gap-2 min-w-0">
         <span class="truncate">{{ selectedAccountData.name }}</span>
@@ -19,7 +19,7 @@
       </span>
       <span v-else class="text-gray-500">{{ placeholder }}</span>
     </template>
-    <template #option="{ option }">
+    <template #item-label="{ item: option }">
       <div class="flex items-center justify-between w-full gap-2">
         <div class="min-w-0 flex-1">
           <div class="font-medium truncate">{{ option.name }}</div>

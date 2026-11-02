@@ -6,7 +6,6 @@
       :items="options"
       value-key="value"
       label-key="label"
-     
       multiple
       size="sm"
       :placeholder="`All ${label.toLowerCase()}s`"

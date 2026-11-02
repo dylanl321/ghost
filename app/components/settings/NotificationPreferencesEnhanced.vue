@@ -137,7 +137,8 @@
               label-key="label"
               value-key="value"
               class="w-36"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
 
           <div class="flex items-center justify-between">
@@ -151,7 +152,8 @@
               label-key="label"
               value-key="value"
               class="w-36"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
 
           <div v-if="prefs.emailDigestFrequency === 'weekly'" class="flex items-center justify-between">
@@ -165,7 +167,8 @@
               label-key="label"
               value-key="value"
               class="w-36"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
         </template>
       </div>

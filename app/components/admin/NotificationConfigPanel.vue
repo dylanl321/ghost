@@ -40,12 +40,12 @@
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Frequency</label>
-          <USelectMenu v-model="config.defaultDigestFrequency" :items="frequencyOptions" @change="saveConfig"  :search-input="false"/>
+          <USelectMenu value-key="value" v-model="config.defaultDigestFrequency" :items="frequencyOptions" @change="saveConfig" :search-input="false" />
         </div>
 
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Delivery Hour</label>
-          <USelectMenu v-model="config.defaultDigestHour" :items="hourOptions" @change="saveConfig"  :search-input="false"/>
+          <USelectMenu value-key="value" v-model="config.defaultDigestHour" :items="hourOptions" @change="saveConfig" :search-input="false" />
         </div>
       </div>
     </UCard>
@@ -112,7 +112,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
-          <USelectMenu v-model="testForm.severity" :items="severityOptions"  :search-input="false"/>
+          <USelectMenu value-key="value" v-model="testForm.severity" :items="severityOptions" :search-input="false" />
         </div>
         <UButton icon="i-heroicons-paper-airplane" @click="sendTest" :loading="sendingTest">
           Send Test
@@ -137,11 +137,11 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Months Back</label>
-            <USelectMenu v-model="backfillForm.months" :items="backfillMonthOptions"  :search-input="false"/>
+            <USelectMenu value-key="value" v-model="backfillForm.months" :items="backfillMonthOptions" :search-input="false" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Limit Per Month</label>
-            <USelectMenu v-model="backfillForm.limitPerMonth" :items="backfillLimitOptions"  :search-input="false"/>
+            <USelectMenu value-key="value" v-model="backfillForm.limitPerMonth" :items="backfillLimitOptions" :search-input="false" />
           </div>
         </div>
 

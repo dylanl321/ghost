@@ -10,7 +10,7 @@
     <UTable
       :data="sortedAccounts"
       :columns="toTableColumns(columns)"
-      @select="onRowClick"
+      @select="(_e, row) => onRowClick(row.original)"
       class="cursor-pointer"
     >
       <template #accountName-cell="{ row: { original: row } }">

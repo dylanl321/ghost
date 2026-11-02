@@ -261,7 +261,7 @@
                      
                      <div v-if="deliveryMode === 'schedule'" class="ml-6 space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                         <UFormField label="Frequency">
-                          <USelectMenu v-model="form.schedule.frequency" :items="frequencyOptions" value-key="value" label-key="label" size="sm"  :search-input="false"/>
+                          <USelectMenu v-model="form.schedule.frequency" :items="frequencyOptions" value-key="value" label-key="label" size="sm" :search-input="false" />
                         </UFormField>
                         <UFormField label="Recipients" :help="isAdmin ? 'Separate addresses with commas' : 'Reports will be sent to your email'">
                            <UInput v-if="isAdmin" v-model="recipientsText" placeholder="email@example.com" size="sm" />

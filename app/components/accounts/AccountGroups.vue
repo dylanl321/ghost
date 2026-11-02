@@ -375,12 +375,13 @@ watch([() => props.standardAccountId, () => props.govCloudAccountId], () => {
         />
       </div>
       <div class="flex items-center gap-2">
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedEnvironment"
           :items="environmentOptions"
           size="sm"
           class="min-w-[150px]"
-         :search-input="false"/>
+          :search-input="false"
+        />
         <UButton
           v-if="searchQuery || selectedEnvironment !== 'all'"
           @click="clearFilters"

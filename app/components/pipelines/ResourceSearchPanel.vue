@@ -19,7 +19,8 @@
         label-key="label"
         class="w-40"
         placeholder="Action"
-       :search-input="false"/>
+        :search-input="false"
+      />
       <USelectMenu
         v-model="appliedFilter"
         :items="appliedOptions"
@@ -27,7 +28,8 @@
         label-key="label"
         class="w-40"
         placeholder="Applied"
-       :search-input="false"/>
+        :search-input="false"
+      />
     </div>
 
     <!-- Loading state -->

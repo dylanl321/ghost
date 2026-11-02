@@ -59,7 +59,8 @@
             class="w-full"
             :loading="isLoadingTags"
             @update:model-value="selectedTag = $event ?? null"
-           :search-input="false"/>
+            :search-input="false"
+          />
         </div>
 
         <div class="flex flex-wrap items-center gap-2">

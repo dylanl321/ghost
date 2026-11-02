@@ -50,7 +50,6 @@
             :items="accountOptions"
             value-key="value"
             label-key="label"
-           
             multiple
             size="sm"
             placeholder="All enclaves"

@@ -503,7 +503,8 @@ const updateBreadcrumbs = () => {
             class="w-40"
             value-key="value"
             label-key="label"
-           :search-input="false"/>
+            :search-input="false"
+          />
 
           <!-- View Toggle -->
           <UButton

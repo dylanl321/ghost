@@ -17,7 +17,8 @@
           :items="withIndexValues(tabItems)"
           :ui="{ root: 'inline-flex', list: 'flex items-center gap-1 bg-gray-900/50 rounded-lg p-1', content: 'hidden' }"
           v-model="activeTab"
-         :unmount-on-hide="false"/>
+          :unmount-on-hide="false"
+        />
       </div>
     </div>
 
@@ -300,7 +301,8 @@
                   :items="withIndexValues(previewTabs)"
                   class="flex-1 flex flex-col min-h-0"
                   :ui="{ root: 'flex flex-col h-full min-h-0', list: 'border-b border-gray-700 bg-gray-900/30', indicator: 'bg-blue-500', content: 'flex-1 overflow-auto' }"
-                 :unmount-on-hide="false">
+                  :unmount-on-hide="false"
+                >
                   <template #content="{ item }">
                     <div class="p-4 overflow-auto">
                       <div v-if="previewErrors[item.key]" class="mb-4 border border-red-800 bg-red-950/30 rounded p-3 text-sm text-red-200">
@@ -311,7 +313,7 @@
                       </div>
                       <!-- Resource Type Filter (if multiple types exist) -->
                       <div v-if="getResourceTypesInTab(item.dataset).length > 1" class="mb-4 flex items-center gap-3">
-                        <USelectMenu
+                        <USelectMenu value-key="value"
                           v-model="selectedResourceType[item.dataset]"
                           :items="[
                             { label: 'All Types', value: '' },
@@ -320,7 +322,8 @@
                           placeholder="Filter by resource type"
                           size="sm"
                           class="w-80"
-                         :search-input="false"/>
+                          :search-input="false"
+                        />
                         <UBadge v-if="selectedResourceType[item.dataset]" color="blue" variant="soft" size="xs">
                           {{ getFilteredDatasetRows(item.dataset).length }} resources
                         </UBadge>
@@ -498,7 +501,8 @@
                   label-key="label"
                   size="sm"
                   class="w-full"
-                 :search-input="false"/>
+                  :search-input="false"
+                />
               </div>
 
               <!-- AI Insights Toggle -->
@@ -955,7 +959,7 @@
             <div v-for="match in interpretation.accountMatches" :key="match.reference" class="flex items-center justify-between gap-4">
               <span class="text-gray-300">{{ match.reference }}</span>
               <span v-if="match.accountId" class="text-white">{{ match.accountName }} ({{ match.accountId }})</span>
-              <USelectMenu v-else v-model="accountResolutions[match.reference]" :items="match.candidates || []" value-key="accountId" label-key="accountName" placeholder="Resolve account" class="w-72"  :search-input="false"/>
+              <USelectMenu v-else v-model="accountResolutions[match.reference]" :items="match.candidates || []" value-key="accountId" label-key="accountName" placeholder="Resolve account" class="w-72" :search-input="false" />
             </div>
           </div>
           <template #footer><div class="flex justify-end gap-2"><UButton color="neutral" variant="ghost" @click="showInterpretModal = false">Cancel</UButton><UButton :disabled="!canApplyInterpretation" @click="applyInterpretation">Apply Draft</UButton></div></template>

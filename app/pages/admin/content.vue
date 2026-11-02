@@ -30,7 +30,8 @@
       v-model="activeTab"
       :items="withIndexValues(tabs)"
       class="mb-6"
-     :unmount-on-hide="false"/>
+      :unmount-on-hide="false"
+    />
 
     <!-- Tab Content -->
     <div class="mt-6">

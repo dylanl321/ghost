@@ -15,14 +15,15 @@
         </UButton>
       </UFieldGroup>
 
-      <USelectMenu
+      <USelectMenu value-key="value"
         v-model="categoryFilter"
         :items="categoryOptions"
         placeholder="All Categories"
         size="sm"
         class="w-48"
         @change="loadFeed(true)"
-       :search-input="false"/>
+        :search-input="false"
+      />
     </div>
 
     <!-- Loading -->

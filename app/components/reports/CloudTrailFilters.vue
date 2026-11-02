@@ -21,7 +21,8 @@
         :items="lookbackOptions"
         placeholder="Select period..."
         value-key="value"
-       :search-input="false"/>
+        :search-input="false"
+      />
     </UFormField>
 
     <!-- Event Types -->
@@ -30,11 +31,10 @@
         v-model="selectedEventTypes"
         :items="eventTypeOptions"
         multiple
-       
         placeholder="Select event types..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedEventTypes || selectedEventTypes.length === 0">
             All event types
           </span>
@@ -51,11 +51,10 @@
         v-model="selectedEventNames"
         :items="eventNameOptions"
         multiple
-       
         placeholder="Select events..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedEventNames || selectedEventNames.length === 0">
             All events
           </span>
@@ -72,11 +71,10 @@
         v-model="selectedEventSources"
         :items="serviceOptions"
         multiple
-       
         placeholder="Select services..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedEventSources || selectedEventSources.length === 0">
             All services
           </span>

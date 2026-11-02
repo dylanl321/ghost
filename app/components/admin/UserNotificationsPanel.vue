@@ -13,11 +13,11 @@
         </div>
         <div class="w-40">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-          <USelectMenu v-model="filters.category" :items="categoryOptions" placeholder="All"  :search-input="false"/>
+          <USelectMenu value-key="value" v-model="filters.category" :items="categoryOptions" placeholder="All" :search-input="false" />
         </div>
         <div class="w-36">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-          <USelectMenu v-model="filters.status" :items="statusOptions" placeholder="All"  :search-input="false"/>
+          <USelectMenu value-key="value" v-model="filters.status" :items="statusOptions" placeholder="All" :search-input="false" />
         </div>
         <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications" :loading="loading">
           Search

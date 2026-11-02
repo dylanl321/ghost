@@ -68,9 +68,9 @@
           <!-- View Controls -->
           <div class="flex gap-2">
             <USwitch v-model="useProforma" :disabled="isLoading">
-              <template #default="{ checked }">
-                <span class="text-sm" :class="checked ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'">
-                  {{ checked ? 'Proforma' : 'Billable' }}
+              <template #label>
+                <span class="text-sm" :class="useProforma ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'">
+                  {{ useProforma ? 'Proforma' : 'Billable' }}
                 </span>
               </template>
             </USwitch>
@@ -117,7 +117,8 @@
                 multiple
                 placeholder="Select LOBs..."
                 size="sm"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </div>
             
             <!-- Department Filter -->
@@ -129,7 +130,8 @@
                 multiple
                 placeholder="Select Departments..."
                 size="sm"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </div>
             
             <!-- Budget Range -->

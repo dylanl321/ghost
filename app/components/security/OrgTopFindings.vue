@@ -7,7 +7,7 @@
       </div>
     </template>
 
-    <UTable :data="findings" :columns="toTableColumns(columns)" @select="onRowClick" class="cursor-pointer">
+    <UTable :data="findings" :columns="toTableColumns(columns)" @select="(_e, row) => onRowClick(row.original)" class="cursor-pointer">
       <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="subtle" size="sm">
           {{ row.severity }}

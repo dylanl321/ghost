@@ -14,7 +14,7 @@
       class="w-full"
       :disabled="disabled"
      :search-input="{ placeholder: 'Search log groups...' }">
-      <template #label>
+      <template #default>
         <span v-if="context.state.logGroupsLoading" class="text-gray-500">Loading log groups...</span>
         <span v-else-if="selectedLogGroupData" class="flex items-center gap-2 min-w-0">
           <Icon name="i-heroicons-document-text" class="w-4 h-4 text-orange-500 flex-shrink-0" />
@@ -22,7 +22,7 @@
         </span>
         <span v-else class="text-gray-500">{{ placeholder }}</span>
       </template>
-      <template #option="{ option }">
+      <template #item-label="{ item: option }">
         <div class="flex items-center gap-2 w-full">
           <Icon name="i-heroicons-document-text" class="w-4 h-4 text-orange-500 flex-shrink-0" />
           <div class="min-w-0 flex-1">

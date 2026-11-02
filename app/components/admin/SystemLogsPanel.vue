@@ -102,21 +102,23 @@
           class="flex-1"
         />
 
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedUsers"
           :items="userOptions"
           placeholder="Filter by user"
           multiple
           class="w-full sm:w-48"
-         :search-input="false"/>
+          :search-input="false"
+        />
 
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedTypes"
           :items="typeOptions"
           placeholder="Event type"
           multiple
           class="w-full sm:w-40"
-         :search-input="false"/>
+          :search-input="false"
+        />
 
         <USelect
           v-model="timeRange"

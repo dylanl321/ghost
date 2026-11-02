@@ -12,7 +12,7 @@
       </div>
       <p class="text-gray-600 dark:text-gray-400">Manage site-wide configuration and dashboard defaults</p>
     </div>
-    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
     <UAlert
       color="blue"
       variant="soft"

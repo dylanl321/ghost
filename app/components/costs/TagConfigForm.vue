@@ -124,7 +124,8 @@
         size="sm"
         class="w-full sm:w-64"
         @update:model-value="$emit('updateDefaultGroup', $event)"
-       :search-input="false"/>
+        :search-input="false"
+      />
     </div>
 
     <!-- Section 3: Tag Notes -->

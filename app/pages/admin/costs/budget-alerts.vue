@@ -13,7 +13,7 @@
       <p class="text-gray-600 dark:text-gray-400">Monitor budget alerts, view alert logs, and configure settings</p>
     </div>
 
-    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
 
     <div class="mt-6">
       <BudgetAlertsOverviewPanel v-if="activeTab === 0" @view-account="viewAccountAlerts" />

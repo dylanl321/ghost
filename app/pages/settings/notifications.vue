@@ -37,7 +37,8 @@
               value-key="value"
               placeholder="Category"
               class="w-40"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
 
           <!-- History Table -->

@@ -291,7 +291,6 @@ onUnmounted(() => {
           <UButton
             v-if="canRetry"
             color="neutral" variant="outline"
-           
             size="lg"
             :icon="statusCode === 401 ? 'i-heroicons-arrow-right-on-rectangle' : 'i-heroicons-arrow-path'"
             @click="handleRetry"

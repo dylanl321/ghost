@@ -54,7 +54,8 @@
           :items="groupByOptions"
           size="xs"
           class="w-40"
-         :search-input="false"/>
+          :search-input="false"
+        />
         
         <!-- Expand/Collapse All for Grouped View -->
         <div v-if="viewMode === 'grouped' && groupBy" class="flex gap-1">

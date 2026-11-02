@@ -2,7 +2,8 @@
   <UModal
     :open="modelValue"
     @update:open="$emit('update:modelValue', $event)"
-   scrollable>
+    scrollable
+  >
     <template #content>
       <div class="bg-gray-900 rounded-xl p-6 w-full max-w-md">
         <div class="flex items-center justify-between mb-5">

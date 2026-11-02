@@ -9,14 +9,15 @@
           icon="i-heroicons-magnifying-glass"
           class="w-full sm:w-48 md:w-64"
         />
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedColumns"
           :items="columnOptions"
           multiple
           placeholder="Select columns"
           class="w-48"
-         :search-input="false">
-          <template #label>
+          :search-input="false"
+        >
+          <template #default>
             {{ selectedColumns.length }} columns
           </template>
         </USelectMenu>
@@ -212,7 +213,8 @@
           v-model="pageSize"
           :items="[10, 25, 50, 100]"
           class="ml-4 w-20"
-         :search-input="false"/>
+          :search-input="false"
+        />
       </div>
     </div>
   </div>

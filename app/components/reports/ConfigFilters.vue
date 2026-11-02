@@ -14,11 +14,10 @@
         v-model="selectedResourceTypes"
         :items="resourceTypeOptions"
         multiple
-       
         placeholder="Select resource types..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedResourceTypes || selectedResourceTypes.length === 0">
             All resource types
           </span>
@@ -61,11 +60,10 @@
         v-model="selectedRegions"
         :items="regionOptions"
         multiple
-       
         placeholder="Select regions..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedRegions || selectedRegions.length === 0">
             All regions
           </span>

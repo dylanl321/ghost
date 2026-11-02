@@ -83,7 +83,7 @@ const filters: { key: FilterKey; label: string }[] = [
           v-for="f in filters"
           :key="f.key"
           :variant="activeFilter === f.key ? 'solid' : 'ghost'"
-          :color="activeFilter === f.key ? 'white' : 'gray'"
+          :color="activeFilter === f.key ? 'neutral' : 'gray'"
           size="xs"
           @click="activeFilter = f.key"
         >

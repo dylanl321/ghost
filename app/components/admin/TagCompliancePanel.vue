@@ -17,7 +17,8 @@
             label-key="label"
             size="sm"
             class="w-40"
-           :search-input="false"/>
+            :search-input="false"
+          />
           <USelectMenu
             :model-value="selectedTag ?? undefined"
           @update:model-value="onTagSelect($event ?? null)"
@@ -28,7 +29,8 @@
             size="sm"
             class="w-48"
             :loading="isLoadingTags"
-           :search-input="false"/>
+            :search-input="false"
+          />
           <UTooltip text="Refresh">
             <UButton
               color="neutral"

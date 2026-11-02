@@ -19,7 +19,8 @@
             value-key="value"
             label-key="label"
             class="w-40"
-           :search-input="false"/>
+            :search-input="false"
+          />
         </div>
       </div>
     </template>

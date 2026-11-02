@@ -96,8 +96,9 @@
               value-key="key"
               label-key="label"
               class="w-40"
-             :search-input="false">
-              <template #label>
+              :search-input="false"
+            >
+              <template #default>
                 <UIcon name="i-heroicons-eye" class="w-4 h-4 mr-1" />
                 <span class="text-xs">{{ selectedColumns.length }} of {{ availableColumns.length }}</span>
               </template>
@@ -446,7 +447,8 @@
                 :items="getFilterOptions(editingFilter.field)"
                 multiple
                 :placeholder="getFilterPlaceholder(editingFilter)"
-               :search-input="false"/>
+                :search-input="false"
+              />
               <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {{ getFilterHelperText(editingFilter) }}
               </div>
@@ -462,7 +464,8 @@
                 @update:model-value="setFilter(editingFilter.field, $event ? [$event] : [])"
                 :items="['', ...getFilterOptions(editingFilter.field)]"
                 :placeholder="getFilterPlaceholder(editingFilter)"
-               :search-input="false"/>
+                :search-input="false"
+              />
               <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {{ getFilterHelperText(editingFilter) }}
               </div>

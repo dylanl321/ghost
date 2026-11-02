@@ -100,7 +100,8 @@
                 placeholder="Select accounts (or leave empty for all)"
                 value-key="id"
                 label-key="name"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </UFormField>
 
             <UFormField label="Timeframe" required>

@@ -207,7 +207,8 @@
               v-model="maxRecentAccounts"
               :items="[5, 10, 15, 20, 25]"
               @change="saveAccountSettings"
-             :search-input="false"/>
+              :search-input="false"
+            />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               How many recent accounts to remember
             </p>

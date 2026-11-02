@@ -978,7 +978,7 @@ defineExpose({
         <!-- Role Filter (only show if controls are enabled) -->
         <div v-if="showControls && allRoles.length > 5" class="flex items-center gap-3">
           <span class="text-sm text-gray-400">Filter by role:</span>
-          <USelectMenu 
+          <USelectMenu value-key="value" 
             v-model="selectedRoleFilter" 
             :items="[
               { label: 'All Roles', value: '' },
@@ -986,7 +986,8 @@ defineExpose({
             ]"
             placeholder="All Roles"
             class="w-48"
-           :search-input="false"/>
+            :search-input="false"
+          />
           <UButton 
             v-if="selectedRoleFilter || showInactiveAccounts"
             @click="clearFilters"
@@ -1903,20 +1904,21 @@ defineExpose({
             <!-- File Format -->
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">File Format</label>
-              <USelectMenu
+              <USelectMenu value-key="value"
                 v-model="exportOptions.fileType"
                 :items="[
                   { label: 'CSV (Comma Separated)', value: 'csv' },
                   { label: 'JSON (JavaScript Object)', value: 'json' }
                 ]"
                 placeholder="Select format"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </div>
 
             <!-- Export Format (only for CSV) -->
             <div v-if="exportOptions.fileType === 'csv'">
               <label class="block text-sm font-medium text-gray-300 mb-2">Export Format</label>
-              <USelectMenu
+              <USelectMenu value-key="value"
                 v-model="exportOptions.format"
                 :items="[
                   { label: 'Detailed - All information', value: 'detailed' },
@@ -1924,7 +1926,8 @@ defineExpose({
                   { label: 'Compliance - Audit-focused data', value: 'compliance' }
                 ]"
                 placeholder="Select format"
-               :search-input="false"/>
+                :search-input="false"
+              />
             </div>
 
             <!-- Include Options -->

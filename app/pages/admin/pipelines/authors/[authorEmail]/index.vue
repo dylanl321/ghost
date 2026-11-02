@@ -52,7 +52,8 @@
           :items="timeRangeOptions"
           value-key="value"
           label-key="label"
-         :search-input="false"/>
+          :search-input="false"
+        />
       </div>
 
       <!-- Summary Stats -->

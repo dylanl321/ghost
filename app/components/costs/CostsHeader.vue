@@ -52,7 +52,8 @@
             value-key="value"
             label-key="label"
             size="xs"
-           :search-input="false"/>
+            :search-input="false"
+          />
         </div>
 
         <!-- Reports Menu -->
@@ -106,7 +107,8 @@
           placeholder="Time Period"
           value-key="value"
           label-key="label"
-         :search-input="false"/>
+          :search-input="false"
+        />
       </div>
 
       <!-- Compare two periods side by side (not available in Tag Analysis) -->

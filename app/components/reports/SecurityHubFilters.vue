@@ -46,11 +46,10 @@
         v-model="selectedProducts"
         :items="productOptions"
         multiple
-       
         placeholder="Select products..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedProducts || selectedProducts.length === 0">
             All products
           </span>
@@ -67,11 +66,10 @@
         v-model="selectedComplianceStandards"
         :items="complianceOptions"
         multiple
-       
         placeholder="Select standards..."
         value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedComplianceStandards || selectedComplianceStandards.length === 0">
             All standards
           </span>
@@ -89,7 +87,8 @@
         :items="lookbackOptions"
         placeholder="Select period..."
         value-key="value"
-       :search-input="false"/>
+        :search-input="false"
+      />
     </UFormField>
 
     <!-- Active Only -->

@@ -12,7 +12,7 @@
       </div>
       <p class="text-gray-600 dark:text-gray-400">Manage user preferences, roles, usage analytics, journeys, and feedback</p>
     </div>
-    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
     <div class="mt-6">
       <UserPreferencesPanel v-if="activeTab === 0" />
       <RolesPanel v-else-if="activeTab === 1" />

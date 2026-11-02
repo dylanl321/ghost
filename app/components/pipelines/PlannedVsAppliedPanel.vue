@@ -135,7 +135,6 @@
             placeholder="Select repository..."
             class="flex-1"
             size="sm"
-           
           />
           <UInput
             v-else

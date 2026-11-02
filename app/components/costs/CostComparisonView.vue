@@ -13,7 +13,8 @@
           size="sm"
           class="flex-1"
           @update:model-value="fetchComparison"
-         :search-input="false"/>
+          :search-input="false"
+        />
       </div>
 
       <!-- Center vs label -->
@@ -34,7 +35,8 @@
           size="sm"
           class="flex-1"
           @update:model-value="fetchComparison"
-         :search-input="false"/>
+          :search-input="false"
+        />
         <UBadge color="violet" variant="soft" size="sm" class="flex-shrink-0">B</UBadge>
       </div>
     </div>

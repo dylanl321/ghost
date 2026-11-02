@@ -146,7 +146,7 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
       @update:open="error = null"
     >
       <template #title>Failed to Load Pipeline Data</template>
@@ -498,11 +498,12 @@
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="font-semibold text-lg text-red-400">Error Details ({{ detailedErrors.length }})</h3>
-            <USelectMenu
+            <USelectMenu value-key="value"
               v-model="errorFilter"
               :items="errorFilterOptions"
               size="sm"
-             :search-input="false"/>
+              :search-input="false"
+            />
           </div>
         </template>
         <div class="space-y-4">

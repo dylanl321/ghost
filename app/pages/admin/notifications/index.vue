@@ -19,7 +19,7 @@
       <p class="text-gray-600 dark:text-gray-400">Monitor notification delivery, manage broadcasts, and configure the system</p>
     </div>
 
-    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
 
     <div class="mt-6">
       <NotificationDashboardPanel v-if="activeTab === 0" />
