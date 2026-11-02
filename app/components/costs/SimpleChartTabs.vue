@@ -230,6 +230,7 @@ import CostDashboardAlerts from './CostDashboardAlerts.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import { useTableRegistry } from '~/composables/useTableRegistry'
 import { useCostScenario } from '~/composables/useCostScenario'
+import type { Scenario } from '~/composables/useCostScenario'
 import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
 
 // Props
@@ -245,6 +246,8 @@ const props = defineProps<{
   accountsList?: any[]
   showAdvancedCharts?: boolean
   sidebarTab?: string
+  /** The page's scenario, so tables and charts always agree; derived locally when absent */
+  scenario?: Scenario
   warnings?: string[]
   costSummaryContext?: Record<string, any>
 }>()
@@ -271,7 +274,8 @@ const toggleAdvancedCharts = () => {
 // Get scenario for table selection -- use actual sidebar tab from parent
 const selectedAccountsRef = computed(() => props.selectedAccounts)
 const sidebarTabRef = computed(() => props.sidebarTab || 'all')
-const { scenario } = useCostScenario({ selectedAccounts: selectedAccountsRef, activeTab: sidebarTabRef })
+const { scenario: localScenario } = useCostScenario({ selectedAccounts: selectedAccountsRef, activeTab: sidebarTabRef })
+const scenario = computed<Scenario>(() => props.scenario ?? localScenario.value)
 
 // Get tables from registry
 const selectedTimeframeRef = computed(() => props.selectedTimeframe || 'thisMonth')

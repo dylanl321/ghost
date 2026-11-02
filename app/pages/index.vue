@@ -373,6 +373,7 @@ interface DashboardData {
   previousMonthToDateTotal: number;
   topAccounts: TopAccount[];
   allAccountCosts?: Record<string, number>;
+  accountBudgets?: Record<string, number>;
   rolling14Daily: DailyCost[];
   budgetHealth: BudgetHealth;
 }

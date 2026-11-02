@@ -64,6 +64,11 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
                     additionalProperties: { type: 'number' },
                     description: 'Map of all account IDs to their MTD costs'
                   },
+                  accountBudgets: {
+                    type: 'object',
+                    additionalProperties: { type: 'number' },
+                    description: 'Map of account IDs to their monthly budget (accounts without a budget are omitted)'
+                  },
                   rolling14Daily: {
                     type: 'array',
                     items: {
@@ -213,6 +218,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       burnRateVsBudget, // Positive means over budget, negative means under
       projectedMonthlySpend,
       accountsWithBudget,
+      accountBudgets: Object.fromEntries(budgetMap) as Record<string, number>,
     };
   } catch (error: any) {
     logger.error('Error calculating budget health:', {
@@ -231,6 +237,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       burnRateVsBudget: 0,
       projectedMonthlySpend: 0,
       accountsWithBudget: 0,
+      accountBudgets: {} as Record<string, number>,
     };
   }
 }
@@ -405,6 +412,9 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
 
   // ----- Transformations -----
 
+  // Per-account budgets go out as their own map; budgetHealth keeps its summary shape.
+  const { accountBudgets, ...budgetHealthSummary } = budgetHealth
+
   const mtdTotal = parseFloat(mtdMonthly.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount || "0");
 
   const rolling14Daily = dailySeries(rolling14DailyResponse)
@@ -440,8 +450,9 @@ async function getOverview(useProforma: boolean = false, days: number = 14) {
     previousMonthToDateTotal: prevMtdTotal,
     topAccounts: topAccounts,
     allAccountCosts,
+    accountBudgets,
     rolling14Daily,
-    budgetHealth,
+    budgetHealth: budgetHealthSummary,
   };
 }
 
