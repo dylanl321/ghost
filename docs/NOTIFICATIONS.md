@@ -408,7 +408,6 @@ To wire a new application event to the notification system:
 | `app/components/admin/UserNotificationsPanel.vue` | Admin: notification browser |
 | `app/components/admin/NotificationBroadcastPanel.vue` | Admin: broadcast sender |
 | `app/components/admin/NotificationConfigPanel.vue` | Admin: system config |
-| `app/components/admin/NotificationAnalyticsPanel.vue` | Admin: volume analytics |
 | `app/components/settings/NotificationPreferencesEnhanced.vue` | User preferences page |
 | `app/pages/admin/notifications/index.vue` | Admin notifications page |
 | `app/pages/settings/notifications.vue` | User notification settings page |
