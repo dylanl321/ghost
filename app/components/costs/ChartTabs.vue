@@ -156,6 +156,8 @@ const handleTabChange = (tabId: string) => {
 </script>
 
 <style scoped>
+@reference "~/assets/css/main.css";
+
 .chart-tabs-container {
   @apply w-full;
 }

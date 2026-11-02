@@ -51,6 +51,25 @@ export default defineNuxtConfig({
     "nuxt-echarts",
   ], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
 
+  ui: {
+    // No external font downloads; the app uses the system font stack
+    fonts: false,
+    theme: {
+      // Semantic colors plus the Tailwind palettes the app passes as `color` props
+      colors: [
+        'primary', 'secondary', 'success', 'info', 'warning', 'error',
+        'gray', 'blue', 'red', 'green', 'emerald', 'purple', 'yellow', 'amber',
+        'orange', 'indigo', 'violet', 'cyan', 'sky', 'teal', 'pink', 'rose', 'lime', 'fuchsia'
+      ]
+    }
+  },
+
+  icon: {
+    // Serve icons from the locally installed @iconify-json collections, never the public Iconify API
+    serverBundle: 'local',
+    fallbackToApi: false
+  },
+
   // Default to dark, but allow light/system (user preference) via @nuxtjs/color-mode
   colorMode: {
     preference: 'dark',

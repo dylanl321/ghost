@@ -241,6 +241,8 @@ function getHighlightColor(highlight: string): string {
 </script>
 
 <style scoped>
+@reference "~/assets/css/main.css";
+
 .changelog-content :deep(h3) {
   @apply text-sm font-semibold text-gray-700 dark:text-gray-300 mt-3 mb-1.5 first:mt-0;
 }

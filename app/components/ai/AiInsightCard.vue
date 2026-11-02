@@ -173,6 +173,8 @@ watch(contextString, () => {
 </script>
 
 <style scoped>
+@reference "~/assets/css/main.css";
+
 .ai-insight-content :deep(p) {
   @apply text-sm leading-relaxed mb-1.5 last:mb-0;
 }
