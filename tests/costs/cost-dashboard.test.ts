@@ -121,3 +121,10 @@ test('ungrouped tiles come back as one unnamed group', () => {
   assert.equal(groups[0]!.name, null)
   assert.equal(groups[0]!.tiles.every(t => !t.dimmed), true)
 })
+
+test('narrative supports a prorated budget noun and a no-budget note', () => {
+  const pace = buildCostNarrative({ periodPhrase: 'So far this month', scopeLabel: 'Project Echo 29', budgetNoun: 'budget to date', accounts: [accounts[2]!] })
+  assert.equal(pace.text, 'So far this month, Project Echo 29 spent $25.8K against a $3.7K budget to date, $22.1K over.')
+  const past = buildCostNarrative({ periodPhrase: 'Last month', scopeLabel: 'all 6 accounts', noBudgetText: 'Budgets are not compared for past periods.', accounts: accounts.map(a => ({ ...a, budget: 0 })) })
+  assert.equal(past.text, 'Last month, all 6 accounts spent $108.3K. Budgets are not compared for past periods.')
+})

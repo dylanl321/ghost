@@ -1,11 +1,10 @@
 <template>
-  <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 md:p-5 pt-0 md:pt-0" data-tour="costs-header">
-    <div class="flex justify-between items-center">
-      <div class="flex items-center gap-2">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Cost Analytics</h1>
-          <p class="text-gray-600 dark:text-gray-300 text-sm">Monitor and analyze account spending</p>
-        </div>
+  <div data-tour="costs-header">
+    <div class="flex flex-wrap justify-between items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <h1 class="m-0 mr-1 text-sm font-semibold uppercase tracking-widest text-gray-400">Costs</h1>
+        <!-- Scope picker (the account selector), supplied by the page -->
+        <slot name="scope" />
         <UTooltip text="Learn how to use the Cost Dashboard">
           <NuxtLink to="/support/docs?topic=cost-dashboard-guide" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
             <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
@@ -100,7 +99,7 @@
     </div>
 
     <div class="flex flex-wrap gap-3 mt-3 items-center">
-      <div class="w-full sm:w-64 md:w-72" data-tour="costs-timeframe">
+      <div class="w-full sm:w-56" data-tour="costs-timeframe">
         <USelectMenu
           v-model="modelSelectedTimeframe"
           :items="timeframeOptions"

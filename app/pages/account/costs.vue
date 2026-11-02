@@ -1,315 +1,7 @@
 <template>
-  <div class="flex h-full min-h-0 bg-gray-50 dark:bg-gray-950">
-    <!-- Sidebar -->
-    <div class="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 h-full min-h-0 flex flex-col overflow-hidden" data-tour="account-selector">
-      <div class="flex-1 bg-white dark:bg-gray-900 flex flex-col min-h-0">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Account Selector</h2>
-          <UButton 
-            size="xs" 
-            variant="ghost" 
-            color="neutral"
-            icon="i-heroicons-arrow-path"
-            :loading="isLoading"
-            @click="refreshData"
-          />
-        </div>
-
-        <!-- Selected Accounts Indicator -->
-        <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-          <UPopover mode="hover" :content="{ side: 'bottom', align: 'start', sideOffset: 4 }">
-            <button
-              class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
-            >
-              <Icon name="i-heroicons-check-circle" class="w-3.5 h-3.5 text-blue-400" />
-              <span class="font-medium">{{ selectedAccounts.length }} account{{ selectedAccounts.length !== 1 ? 's' : '' }} selected</span>
-              <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-500 dark:text-gray-400 ml-auto" />
-            </button>
-
-            <template #content>
-              <div class="p-2 w-72 max-h-64 overflow-y-auto">
-                <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Accounts</div>
-                <div class="space-y-1">
-                  <div
-                    v-for="account in displayedSelectedAccounts"
-                    :key="getAccountKey(account)"
-                    class="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded text-xs group"
-                  >
-                    <div class="flex-1 min-w-0">
-                      <div class="text-gray-900 dark:text-gray-200 truncate font-medium">
-                        {{ formatAccountDisplayName(account) }}
-                      </div>
-                      <div class="text-gray-600 dark:text-gray-400 text-[10px] truncate">
-                        {{ account.accountId || account.awsStandardAccountID || account.awsCommercialAccountID }}
-                      </div>
-                    </div>
-                    <button
-                      class="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                      @click.stop="toggleAccount(getAccountKey(account))"
-                    >
-                      <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div v-if="remainingSelectedCount > 0" class="px-2 py-1 text-xs text-blue-400">
-                    +{{ remainingSelectedCount }} more selected
-                  </div>
-                </div>
-
-                <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <UButton
-                    size="xs"
-                    color="neutral"
-                    variant="ghost"
-                    block
-                    @click="clearSelection"
-                  >
-                    Clear All Selections
-                  </UButton>
-                </div>
-              </div>
-            </template>
-          </UPopover>
-        </div>
-
-        <!-- Search -->
-        <div class="p-3 border-b border-gray-200 dark:border-gray-700" data-tour="account-search">
-          <UInput
-            v-model="searchTerm"
-            :placeholder="searchPlaceholder"
-            icon="i-heroicons-magnifying-glass"
-            size="sm"
-          >
-            <template #trailing>
-              <div class="flex items-center gap-1">
-                <!-- Search scope indicator -->
-                <UTooltip v-if="searchTerm" :text="searchScopeTooltip">
-                  <UBadge 
-                    :color="searchScope === 'global' ? 'blue' : 'gray'" 
-                    size="xs" 
-                    variant="soft"
-                    class="cursor-pointer"
-                    @click="toggleSearchScope"
-                  >
-                    {{ searchScope === 'global' ? 'All' : 'Tab' }}
-                  </UBadge>
-                </UTooltip>
-                
-                <UButton
-                  v-show="searchTerm !== ''"
-                  color="neutral"
-                  variant="link"
-                  size="xs"
-                  icon="i-heroicons-x-mark-20-solid"
-                  :ui="{ base: 'p-0' }"
-                  @click="clearSearch"
-                />
-              </div>
-            </template>
-          </UInput>
-          
-          <!-- Search info when active -->
-          <div v-if="searchTerm && searchResults.total > 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
-            <span v-if="searchScope === 'global'">
-              Found {{ searchResults.total }} results across all categories
-              <span v-if="searchResults.tabSpecific > 0">
-                ({{ searchResults.tabSpecific }} in {{ getTabLabel(activeTab) }})
-              </span>
-            </span>
-            <span v-else>
-              Found {{ searchResults.tabSpecific }} results in {{ getTabLabel(activeTab) }}
-              <button 
-                v-if="searchResults.total > searchResults.tabSpecific"
-                class="ml-1 text-blue-400 hover:text-blue-300 underline" 
-                @click="searchScope = 'global'"
-              >
-                ({{ searchResults.total - searchResults.tabSpecific }} more in other tabs)
-              </button>
-            </span>
-          </div>
-          
-          <!-- No results message -->
-          <div v-if="searchTerm && searchResults.total === 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
-            No results found. <button class="text-blue-400 hover:text-blue-300 underline" @click="searchScope = 'global'">Search all tabs?</button>
-          </div>
-        </div>
-
-        <!-- Tabs -->
-        <div class="border-b border-gray-200 dark:border-gray-700" data-tour="account-tabs">
-          <div class="flex">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1"
-              :class="{
-                'text-blue-600 dark:text-blue-400 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20': activeTab === tab.id,
-                'text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600': activeTab !== tab.id
-              }"
-              @click="activeTab = tab.id"
-            >
-              <Icon :name="tab.icon" class="w-3 h-3" />
-              <span class="leading-none">{{ tab.label }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Tabbed Content -->
-        <div class="flex-1 overflow-y-auto min-h-0">
-          
-          <!-- All Accounts Tab -->
-          <div v-if="activeTab === 'all'" class="p-3">
-            <div class="mb-3 flex justify-between items-center">
-              <span class="text-sm text-gray-900 dark:text-gray-300">All Accounts ({{ sortedFilteredAccounts.length }})</span>
-              <div class="flex gap-1 items-center">
-                <!-- Sort Popover -->
-                <UPopover mode="hover" :content="{ side: 'bottom', align: 'start' }">
-                  <UTooltip :text="`Sort: ${sortOptions.find(opt => opt.value === accountSortBy)?.label || 'Total Cost'}`" :content="{ side: 'top' }">
-                    <UButton 
-                      size="xs" 
-                      variant="ghost" 
-                      :color="accountSortBy !== 'cost' ? 'blue' : 'gray'"
-                      :icon="sortOptions.find(opt => opt.value === accountSortBy)?.icon || 'i-heroicons-bars-arrow-down'"
-                      class="p-1"
-                    />
-                  </UTooltip>
-                  
-                  <template #content="{ close }">
-                    <div class="p-2 w-44">
-                      <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Sort by</div>
-                      <div class="space-y-1">
-                        <button
-                          v-for="option in sortOptions"
-                          :key="option.value"
-                          class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                          :class="{ 
-                            'bg-blue-50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300': accountSortBy === option.value,
-                            'text-gray-700 dark:text-gray-300': accountSortBy !== option.value
-                          }"
-                          @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
-                        >
-                          <Icon :name="option.icon" class="w-3 h-3" />
-                          <span>{{ option.label }}</span>
-                          <Icon 
-                            v-if="accountSortBy === option.value"
-                            name="i-heroicons-check" 
-                            class="w-3 h-3 ml-auto text-blue-400" 
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  </template>
-                </UPopover>
-                
-                <UButton size="xs" variant="ghost" color="neutral" @click="selectAll">
-                  Select All
-                </UButton>
-                <UButton size="xs" variant="ghost" color="neutral" @click="clearSelection">
-                  Clear
-                </UButton>
-              </div>
-            </div>
-            
-            <div class="space-y-1">
-              <SidebarAccountItem
-                v-for="account in sortedFilteredAccounts"
-                :key="getAccountKey(account)"
-                :account="account"
-                :account-key="getAccountKey(account)"
-                :selected="selectedAccountSet.has(getAccountKey(account))"
-                :budget="getBudget(account)"
-                :spend="getSpend(account)"
-                :format-currency="formatCurrency"
-                :show-utilization="accountSortBy === 'utilization'"
-                :show-bold-name="true"
-                @toggle="toggleAccount"
-              />
-            </div>
-          </div>
-
-          <!-- Lines of Business Tab -->
-          <SidebarGroupList
-            v-else-if="activeTab === 'lob'"
-            :groups="lobGroups"
-            :expanded-groups="expandedGroups"
-            :selected-accounts="selectedAccounts"
-            :format-currency="formatCurrency"
-            group-type="lob"
-            label="Lines of Business"
-            default-icon="i-heroicons-briefcase"
-            default-icon-color="text-blue-400"
-            :get-account-key="getAccountKey"
-            :get-budget="getBudget"
-            :get-spend="getSpend"
-            @toggle-group="handleToggleGroup"
-            @select-group="handleSelectGroup"
-            @toggle-account="toggleAccount"
-          />
-
-          <!-- Departments Tab -->
-          <SidebarGroupList
-            v-else-if="activeTab === 'dept'"
-            :groups="departmentGroups"
-            :expanded-groups="expandedGroups"
-            :selected-accounts="selectedAccounts"
-            :format-currency="formatCurrency"
-            group-type="department"
-            label="Departments"
-            default-icon="i-heroicons-building-office"
-            default-icon-color="text-green-400"
-            :get-account-key="getAccountKey"
-            :get-budget="getBudget"
-            :get-spend="getSpend"
-            @toggle-group="handleToggleGroup"
-            @select-group="handleSelectGroup"
-            @toggle-account="toggleAccount"
-          />
-
-          <!-- Smart Groupings Tab -->
-          <SidebarGroupList
-            v-else-if="activeTab === 'smart'"
-            :groups="smartGroups"
-            :expanded-groups="expandedGroups"
-            :selected-accounts="selectedAccounts"
-            :format-currency="formatCurrency"
-            group-type="smart"
-            label="Smart Groupings"
-            :get-account-key="getAccountKey"
-            :get-budget="getBudget"
-            :get-spend="getSpend"
-            @toggle-group="handleToggleGroup"
-            @select-group="handleSelectGroup"
-            @toggle-account="toggleAccount"
-          />
-
-
-        </div>
-
-        <!-- Selection Summary -->
-        <div class="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-          <div class="space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-gray-700 dark:text-gray-300">
-                {{ selectedAccounts.length === 0 ? `Showing all ${accountsWithCosts.length} accounts` : `${selectedAccounts.length} of ${accountsWithCosts.length} selected` }}
-              </span>
-              <UButton 
-                v-show="selectedAccounts.length > 0" 
-                size="xs" 
-                color="neutral"
-                variant="link"
-                @click="clearSelection"
-              >
-                Clear
-              </UButton>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden min-h-0">
-      <!-- Header -->
+  <div class="h-full min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+    <!-- Dark header band: controls, the summary sentence and the key numbers -->
+    <section class="dark !bg-[#0f172a] px-4 pb-7 pt-4 !text-white md:px-8">
       <CostsHeader
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
@@ -328,53 +20,347 @@
         @start-tour="() => handleStartTour(true)"
         @view-alerts="navigateToBudgetAlerts"
         @load-preset="applyPreset"
+      >
+        <template #scope>
+          <UPopover v-model:open="scopeOpen" :content="{ align: 'start', side: 'bottom', sideOffset: 8 }">
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-heroicons-funnel"
+              trailing-icon="i-heroicons-chevron-down"
+              data-tour="account-selector"
+              :label="scopeButtonLabel"
+            />
+            <template #content>
+              <div class="w-[22rem] max-w-[calc(100vw-2rem)] h-[70vh] min-h-0 flex flex-col overflow-hidden">
+                <div class="flex-1 bg-white dark:bg-gray-900 flex flex-col min-h-0">
+                  <!-- Header -->
+                  <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h2 class="text-base font-semibold text-gray-900 dark:text-white">Choose accounts</h2>
+                    <UButton 
+                      size="xs" 
+                      variant="ghost" 
+                      color="neutral"
+                      icon="i-heroicons-arrow-path"
+                      :loading="isLoading"
+                      @click="refreshData"
+                    />
+                  </div>
+
+                  <!-- Selected Accounts Indicator -->
+                  <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <UPopover mode="hover" :content="{ side: 'bottom', align: 'start', sideOffset: 4 }">
+                      <button
+                        class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                      >
+                        <Icon name="i-heroicons-check-circle" class="w-3.5 h-3.5 text-blue-400" />
+                        <span class="font-medium">{{ selectedAccounts.length }} account{{ selectedAccounts.length !== 1 ? 's' : '' }} selected</span>
+                        <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-500 dark:text-gray-400 ml-auto" />
+                      </button>
+
+                      <template #content>
+                        <div class="p-2 w-72 max-h-64 overflow-y-auto">
+                          <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Accounts</div>
+                          <div class="space-y-1">
+                            <div
+                              v-for="account in displayedSelectedAccounts"
+                              :key="getAccountKey(account)"
+                              class="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded text-xs group"
+                            >
+                              <div class="flex-1 min-w-0">
+                                <div class="text-gray-900 dark:text-gray-200 truncate font-medium">
+                                  {{ formatAccountDisplayName(account) }}
+                                </div>
+                                <div class="text-gray-600 dark:text-gray-400 text-[10px] truncate">
+                                  {{ account.accountId || account.awsStandardAccountID || account.awsCommercialAccountID }}
+                                </div>
+                              </div>
+                              <button
+                                class="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                @click.stop="toggleAccount(getAccountKey(account))"
+                              >
+                                <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <div v-if="remainingSelectedCount > 0" class="px-2 py-1 text-xs text-blue-400">
+                              +{{ remainingSelectedCount }} more selected
+                            </div>
+                          </div>
+
+                          <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            <UButton
+                              size="xs"
+                              color="neutral"
+                              variant="ghost"
+                              block
+                              @click="clearSelection"
+                            >
+                              Clear All Selections
+                            </UButton>
+                          </div>
+                        </div>
+                      </template>
+                    </UPopover>
+                  </div>
+
+                  <!-- Search -->
+                  <div class="p-3 border-b border-gray-200 dark:border-gray-700" data-tour="account-search">
+                    <UInput
+                      v-model="searchTerm"
+                      :placeholder="searchPlaceholder"
+                      icon="i-heroicons-magnifying-glass"
+                      size="sm"
+                    >
+                      <template #trailing>
+                        <div class="flex items-center gap-1">
+                          <!-- Search scope indicator -->
+                          <UTooltip v-if="searchTerm" :text="searchScopeTooltip">
+                            <UBadge 
+                              :color="searchScope === 'global' ? 'blue' : 'gray'" 
+                              size="xs" 
+                              variant="soft"
+                              class="cursor-pointer"
+                              @click="toggleSearchScope"
+                            >
+                              {{ searchScope === 'global' ? 'All' : 'Tab' }}
+                            </UBadge>
+                          </UTooltip>
+                
+                          <UButton
+                            v-show="searchTerm !== ''"
+                            color="neutral"
+                            variant="link"
+                            size="xs"
+                            icon="i-heroicons-x-mark-20-solid"
+                            :ui="{ base: 'p-0' }"
+                            @click="clearSearch"
+                          />
+                        </div>
+                      </template>
+                    </UInput>
+          
+                    <!-- Search info when active -->
+                    <div v-if="searchTerm && searchResults.total > 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      <span v-if="searchScope === 'global'">
+                        Found {{ searchResults.total }} results across all categories
+                        <span v-if="searchResults.tabSpecific > 0">
+                          ({{ searchResults.tabSpecific }} in {{ getTabLabel(activeTab) }})
+                        </span>
+                      </span>
+                      <span v-else>
+                        Found {{ searchResults.tabSpecific }} results in {{ getTabLabel(activeTab) }}
+                        <button 
+                          v-if="searchResults.total > searchResults.tabSpecific"
+                          class="ml-1 text-blue-400 hover:text-blue-300 underline" 
+                          @click="searchScope = 'global'"
+                        >
+                          ({{ searchResults.total - searchResults.tabSpecific }} more in other tabs)
+                        </button>
+                      </span>
+                    </div>
+          
+                    <!-- No results message -->
+                    <div v-if="searchTerm && searchResults.total === 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      No results found. <button class="text-blue-400 hover:text-blue-300 underline" @click="searchScope = 'global'">Search all tabs?</button>
+                    </div>
+                  </div>
+
+                  <!-- Tabs -->
+                  <div class="border-b border-gray-200 dark:border-gray-700" data-tour="account-tabs">
+                    <div class="flex">
+                      <button
+                        v-for="tab in tabs"
+                        :key="tab.id"
+                        class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1"
+                        :class="{
+                          'text-blue-600 dark:text-blue-400 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20': activeTab === tab.id,
+                          'text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600': activeTab !== tab.id
+                        }"
+                        @click="activeTab = tab.id"
+                      >
+                        <Icon :name="tab.icon" class="w-3 h-3" />
+                        <span class="leading-none">{{ tab.label }}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Tabbed Content -->
+                  <div class="flex-1 overflow-y-auto min-h-0">
+          
+                    <!-- All Accounts Tab -->
+                    <div v-if="activeTab === 'all'" class="p-3">
+                      <div class="mb-3 flex justify-between items-center">
+                        <span class="text-sm text-gray-900 dark:text-gray-300">All Accounts ({{ sortedFilteredAccounts.length }})</span>
+                        <div class="flex gap-1 items-center">
+                          <!-- Sort Popover -->
+                          <UPopover mode="hover" :content="{ side: 'bottom', align: 'start' }">
+                            <UTooltip :text="`Sort: ${sortOptions.find(opt => opt.value === accountSortBy)?.label || 'Total Cost'}`" :content="{ side: 'top' }">
+                              <UButton 
+                                size="xs" 
+                                variant="ghost" 
+                                :color="accountSortBy !== 'cost' ? 'blue' : 'gray'"
+                                :icon="sortOptions.find(opt => opt.value === accountSortBy)?.icon || 'i-heroicons-bars-arrow-down'"
+                                class="p-1"
+                              />
+                            </UTooltip>
+                  
+                            <template #content="{ close }">
+                              <div class="p-2 w-44">
+                                <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Sort by</div>
+                                <div class="space-y-1">
+                                  <button
+                                    v-for="option in sortOptions"
+                                    :key="option.value"
+                                    class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                    :class="{ 
+                                      'bg-blue-50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300': accountSortBy === option.value,
+                                      'text-gray-700 dark:text-gray-300': accountSortBy !== option.value
+                                    }"
+                                    @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
+                                  >
+                                    <Icon :name="option.icon" class="w-3 h-3" />
+                                    <span>{{ option.label }}</span>
+                                    <Icon 
+                                      v-if="accountSortBy === option.value"
+                                      name="i-heroicons-check" 
+                                      class="w-3 h-3 ml-auto text-blue-400" 
+                                    />
+                                  </button>
+                                </div>
+                              </div>
+                            </template>
+                          </UPopover>
+                
+                          <UButton size="xs" variant="ghost" color="neutral" @click="selectAll">
+                            Select All
+                          </UButton>
+                          <UButton size="xs" variant="ghost" color="neutral" @click="clearSelection">
+                            Clear
+                          </UButton>
+                        </div>
+                      </div>
+            
+                      <div class="space-y-1">
+                        <SidebarAccountItem
+                          v-for="account in sortedFilteredAccounts"
+                          :key="getAccountKey(account)"
+                          :account="account"
+                          :account-key="getAccountKey(account)"
+                          :selected="selectedAccountSet.has(getAccountKey(account))"
+                          :budget="getBudget(account)"
+                          :spend="getSpend(account)"
+                          :format-currency="formatCurrency"
+                          :show-utilization="accountSortBy === 'utilization'"
+                          :show-bold-name="true"
+                          @toggle="toggleAccount"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Lines of Business Tab -->
+                    <SidebarGroupList
+                      v-else-if="activeTab === 'lob'"
+                      :groups="lobGroups"
+                      :expanded-groups="expandedGroups"
+                      :selected-accounts="selectedAccounts"
+                      :format-currency="formatCurrency"
+                      group-type="lob"
+                      label="Lines of Business"
+                      default-icon="i-heroicons-briefcase"
+                      default-icon-color="text-blue-400"
+                      :get-account-key="getAccountKey"
+                      :get-budget="getBudget"
+                      :get-spend="getSpend"
+                      @toggle-group="handleToggleGroup"
+                      @select-group="handleSelectGroup"
+                      @toggle-account="toggleAccount"
+                    />
+
+                    <!-- Departments Tab -->
+                    <SidebarGroupList
+                      v-else-if="activeTab === 'dept'"
+                      :groups="departmentGroups"
+                      :expanded-groups="expandedGroups"
+                      :selected-accounts="selectedAccounts"
+                      :format-currency="formatCurrency"
+                      group-type="department"
+                      label="Departments"
+                      default-icon="i-heroicons-building-office"
+                      default-icon-color="text-green-400"
+                      :get-account-key="getAccountKey"
+                      :get-budget="getBudget"
+                      :get-spend="getSpend"
+                      @toggle-group="handleToggleGroup"
+                      @select-group="handleSelectGroup"
+                      @toggle-account="toggleAccount"
+                    />
+
+                    <!-- Smart Groupings Tab -->
+                    <SidebarGroupList
+                      v-else-if="activeTab === 'smart'"
+                      :groups="smartGroups"
+                      :expanded-groups="expandedGroups"
+                      :selected-accounts="selectedAccounts"
+                      :format-currency="formatCurrency"
+                      group-type="smart"
+                      label="Smart Groupings"
+                      :get-account-key="getAccountKey"
+                      :get-budget="getBudget"
+                      :get-spend="getSpend"
+                      @toggle-group="handleToggleGroup"
+                      @select-group="handleSelectGroup"
+                      @toggle-account="toggleAccount"
+                    />
+
+
+                  </div>
+
+                  <!-- Selection Summary -->
+                  <div class="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                          {{ selectedAccounts.length === 0 ? `Showing all ${accountsWithCosts.length} accounts` : `${selectedAccounts.length} of ${accountsWithCosts.length} selected` }}
+                        </span>
+                        <UButton 
+                          v-show="selectedAccounts.length > 0" 
+                          size="xs" 
+                          color="neutral"
+                          variant="link"
+                          @click="clearSelection"
+                        >
+                          Clear
+                        </UButton>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </UPopover>
+          <UButton
+            v-if="selectedAccounts.length > 0"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            icon="i-heroicons-x-mark"
+            aria-label="Clear account selection"
+            @click="clearSelection"
+          />
+        </template>
+      </CostsHeader>
+      <CostsHero
+        v-if="!isTagAnalysis && !compareMode && hasAccounts"
+        class="mt-7"
+        :narrative="heroNarrative"
+        :stats="heroStats"
+        :pace="heroPace"
       />
+    </section>
 
-      <!-- Selected Account Context Banner -->
-      <div v-if="selectedAccounts.length > 0 && !isTagAnalysis" class="px-4 md:px-6 pt-4">
-        <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
-          <div class="flex items-center gap-3 min-w-0 flex-1">
-            <div class="flex-shrink-0 p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-              <Icon name="i-heroicons-funnel" class="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <template v-if="selectedAccounts.length === 1">
-                <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {{ getSelectedAccountName(selectedAccounts[0]) }}
-                </div>
-                <div class="text-xs text-blue-700 dark:text-blue-300">
-                  {{ selectedAccounts[0] }}
-                </div>
-              </template>
-              <template v-else-if="selectedAccounts.length <= 5">
-                <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ selectedAccounts.length }} accounts selected
-                </div>
-                <div class="text-xs text-blue-700 dark:text-blue-300 truncate">
-                  {{ selectedAccounts.map(id => getSelectedAccountName(id)).join(', ') }}
-                </div>
-              </template>
-              <template v-else>
-                <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ selectedAccounts.length }} accounts selected
-                </div>
-                <div class="text-xs text-blue-700 dark:text-blue-300">
-                  Filtered view — showing data for selected accounts only
-                </div>
-              </template>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
-              <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
-              Clear
-            </UButton>
-          </div>
-        </div>
-      </div>
-
-      <!-- Content Area -->
-      <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
+    <!-- Content -->
+    <div class="p-4 md:px-8 md:py-6">
         <!-- Comparison Mode -->
         <div v-if="compareMode && !isTagAnalysis">
           <div class="mb-4 flex items-center gap-3">
@@ -414,97 +400,39 @@
             <UButton size="xs" color="red" variant="soft" @click="refreshData">Retry</UButton>
           </div>
 
-          <!-- First Day of Month Notice -->
-          <div v-if="isFirstDayOfMonth && !isTagAnalysis" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
-            <div class="flex items-start gap-3">
-              <Icon name="i-heroicons-calendar" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-              <div class="flex-1">
-                <div class="flex items-start justify-between">
-                  <div class="flex-1">
-                    <h4 class="text-sm font-medium text-amber-800 dark:text-amber-300">Current Month Has No Observed Days Yet</h4>
-                    <p class="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                      This Month is empty because AWS Cost Explorer reports through yesterday and uses an exclusive end date. No prior-month charges are substituted.
+          <!-- Overview: account tiles (or the focused account) and the attention feed -->
+          <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-wrap items-start gap-6">
+            <div class="min-w-0 flex-[999_1_560px]">
+              <UCard v-if="focusedAccount" :ui="{ body: 'flex flex-col gap-4' }">
+                <div class="flex flex-wrap items-start gap-3">
+                  <div class="min-w-0 flex-1">
+                    <UBadge color="neutral" variant="subtle">Single account</UBadge>
+                    <h2 class="m-0 mt-2 text-xl font-bold text-gray-900 dark:text-white">{{ focusedAccount.name }}</h2>
+                    <p class="m-0 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                      {{ focusedAccount.id }}<template v-if="focusedAccount.lineOfBusiness"> · {{ focusedAccount.lineOfBusiness }}</template><template v-if="focusedAccount.department"> · {{ focusedAccount.department }}</template>
                     </p>
                   </div>
-                  <UButton
-                    color="amber"
-                    variant="soft"
-                    size="sm"
-                    class="ml-4 flex-shrink-0"
-                    @click="switchToLastMonth"
-                  >
-                    <Icon name="i-heroicons-arrow-left" class="w-4 h-4 mr-1" />
-                    View Full Last Month
-                  </UButton>
+                  <UButton color="neutral" variant="outline" @click="clearSelection">Show all accounts</UButton>
                 </div>
-              </div>
+                <dl class="m-0 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">Spend</dt><dd class="m-0 text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatCurrency(focusedAccount.spend) }}</dd></div>
+                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">{{ isHistoricalTimeframe ? 'Budget' : 'Budget to date' }}</dt><dd class="m-0 text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ focusedAccount.budget > 0 ? formatCurrency(focusedAccount.budget) : '—' }}</dd></div>
+                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">Utilization</dt><dd class="m-0 text-xl font-bold tabular-nums" :class="focusedAccount.budget > 0 && focusedAccount.spend > focusedAccount.budget ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ focusedAccount.budget > 0 ? Math.round(focusedAccount.spend / focusedAccount.budget * 100) + '%' : '—' }}</dd></div>
+                </dl>
+              </UCard>
+              <CostsAccountTiles
+                v-else
+                v-model:group-by="tileGroupBy"
+                :groups="accountTiles"
+                :format-currency="formatCurrency"
+                @toggle="toggleAccount"
+                @select-group="handleSelectGroup"
+              />
             </div>
-          </div>
-
-          <!-- Early Month Notice (days 2-5) -->
-          <div v-else-if="isEarlyInMonth && !isTagAnalysis" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
-            <div class="flex items-start gap-3">
-              <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-              <div class="flex-1">
-                <div class="flex items-start justify-between">
-                  <div class="flex-1">
-                    <h4 class="text-sm font-medium text-blue-800 dark:text-blue-300">Limited Data Available for Current Month</h4>
-                    <p class="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) }} is still accumulating.
-                      Data shown is through yesterday due to AWS Cost Explorer's 24-hour processing lag.
-                      For a complete view of recent spending patterns, you may want to review last month's data.
-                    </p>
-                  </div>
-                  <UButton
-                    color="blue"
-                    variant="soft"
-                    size="sm"
-                    class="ml-4 flex-shrink-0"
-                    @click="switchToLastMonth"
-                  >
-                    <Icon name="i-heroicons-arrow-left" class="w-4 h-4 mr-1" />
-                    View Last Month
-                  </UButton>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Historical Data Warning -->
-          <div v-if="isHistoricalTimeframe && !isTagAnalysis" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
-            <div class="flex items-start gap-3">
-              <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-              <div class="flex-1">
-                <h4 class="text-sm font-medium text-yellow-800 dark:text-yellow-300">Historical Data Limitations</h4>
-                <p class="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                  Budget comparisons and forecasts are not available for historical periods as budget data is only maintained for the current period.
-                  Additionally, some accounts may have been decommissioned and won't appear in historical views.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Budgets carried forward because this year's PEP budget isn't loaded yet -->
-          <div v-if="carriedForwardBudgets.count > 0 && !isHistoricalTimeframe && !isTagAnalysis"
-            class="flex items-start gap-3 rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-4 py-3 text-xs text-purple-800 dark:text-purple-300">
-            <Icon name="i-heroicons-information-circle" class="w-5 h-5 flex-shrink-0 text-purple-500" />
-            <span>
-              <span class="font-medium">{{ carriedForwardBudgets.year }} PEP budgets aren't loaded for {{ carriedForwardBudgets.count }} of {{ displayedAccounts.length }} accounts.</span>
-              Their budgets use the December {{ carriedForwardBudgets.from }} monthly amount until {{ carriedForwardBudgets.year }} values are supplied.
-            </span>
-          </div>
-
-          <!-- Summary Cards -->
-          <div v-if="!isTagAnalysis" data-tour="costs-summary">
-            <CostsSummaryCards
-              :total-accounts="selectedAccounts.length || accountsWithCosts.length"
-              :total-budget="isHistoricalTimeframe ? 0 : totalBudget"
-              :total-spend="totalSpend"
-              :utilization="isHistoricalTimeframe ? 0 : utilization"
-              :format-currency="formatCurrency"
-              :scenario="scenario"
-              :is-historical="isHistoricalTimeframe"
-              :timeframe="selectedTimeframe"
+            <CostsAttentionFeed
+              class="min-w-0 flex-[1_1_300px] lg:max-w-[420px]"
+              :items="attentionItems"
+              @action="handleAttentionAction"
             />
           </div>
 
@@ -569,13 +497,17 @@
           </div>
         </div>
       </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import CostsHeader from '~/components/costs/CostsHeader.vue'
-import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
+import CostsHero from '~/components/costs/CostsHero.vue'
+import type { HeroStat, HeroPace } from '~/components/costs/CostsHero.vue'
+import CostsAccountTiles from '~/components/costs/CostsAccountTiles.vue'
+import CostsAttentionFeed from '~/components/costs/CostsAttentionFeed.vue'
+import { buildAccountTiles, buildAttentionItems, buildCostNarrative } from '#shared/utils/cost-dashboard'
+import type { AttentionItem } from '#shared/utils/cost-dashboard'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
 import { useCostData } from '~/composables/useCostData'
@@ -585,7 +517,7 @@ import type { DataMode } from '~/types/costs'
 import type { BudgetAlert } from '#shared/types/budget-alerts'
 import { getCostTagWorkspaceQuery, normalizeCostTagCreatorView } from '~/utils/cost-tag-workspace'
 import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
-import { getTimeframeBudget } from '~/utils/cost-period'
+import { getCurrentPeriodWindow, getTimeframeBudget } from '~/utils/cost-period'
 import { getAnnualBudgetArray } from '#shared/utils/budget-utils'
 
 definePageMeta({
@@ -1400,6 +1332,163 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
 //    This determines which charts are most relevant to show
 const groupableAccounts = computed(() => toGroupableAccounts(accountsWithCosts.value))
 const { scenario } = useCostScenario({ selectedAccounts, activeTab, accounts: groupableAccounts })
+
+// =============================================================================
+// REDESIGN: header summary, account tiles and the "Needs attention" feed
+// =============================================================================
+// All three describe the same accounts as the charts (displayedAccounts) and
+// compare spend with the budget for the days that have data, so early in a
+// period accounts don't all look underutilized.
+
+const scopeOpen = ref(false)
+const tileGroupBy = ref<'lob' | 'department' | 'none'>('lob')
+
+const periodPhrases: Record<string, string> = {
+  thisMonth: 'So far this month',
+  thisQuarter: 'So far this quarter',
+  ytd: 'So far this year',
+  lastMonth: 'Last month',
+  lastQuarter: 'Last quarter',
+  lastYear: 'Last year',
+  last7days: 'In the last 7 days',
+  last30days: 'In the last 30 days',
+  last90days: 'In the last 90 days',
+  last12months: 'Over the last 12 months'
+}
+
+const currentWindow = computed(() => getCurrentPeriodWindow(selectedTimeframe.value))
+
+// Share of the period's budget that has elapsed (1 for windows without a current period)
+const paceRatio = computed(() => {
+  const w = currentWindow.value
+  return w && w.totalDays > 0 ? w.observedDays / w.totalDays : 1
+})
+
+const accountDisplayName = (account: Account): string =>
+  account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || getAccountKey(account)
+
+const toDashboardAccount = (account: Account) => ({
+  id: getAccountKey(account),
+  name: accountDisplayName(account),
+  spend: getSpend(account),
+  budget: isHistoricalTimeframe.value ? 0 : getBudget(account) * paceRatio.value,
+  lineOfBusiness: account.linesOfBusiness || account.lineOfBusiness || null,
+  department: (account as any).pepDepartment || account.departmentNumber || account.department || null
+})
+
+const dashboardAccounts = computed(() => displayedAccounts.value.map(toDashboardAccount))
+
+const scopeLabel = computed(() => {
+  const count = selectedAccounts.value.length
+  if (count === 0) return `all ${accountsWithCosts.value.length} accounts`
+  if (count === 1) return getSelectedAccountName(selectedAccounts.value[0])
+  if (scenario.value === 'lob-group' || scenario.value === 'department-group') {
+    const names = new Set(dashboardAccounts.value.map(a => scenario.value === 'lob-group' ? a.lineOfBusiness : a.department))
+    if (names.size === 1) {
+      const [name] = names
+      if (name) return name
+    }
+  }
+  return `${count} selected accounts`
+})
+
+const scopeButtonLabel = computed(() => {
+  const count = selectedAccounts.value.length
+  if (count === 0) return `All accounts (${accountsWithCosts.value.length})`
+  if (count === 1) return getSelectedAccountName(selectedAccounts.value[0])
+  return scopeLabel.value === `${count} selected accounts` ? `${count} accounts` : `${scopeLabel.value} · ${count}`
+})
+
+const heroNarrative = computed(() => buildCostNarrative({
+  periodPhrase: periodPhrases[selectedTimeframe.value] ?? 'In this period',
+  scopeLabel: scopeLabel.value,
+  accounts: dashboardAccounts.value,
+  budgetNoun: currentWindow.value ? 'budget to date' : 'budget',
+  noBudgetText: isHistoricalTimeframe.value
+    ? 'Budgets are not compared for past periods.'
+    : (currentWindow.value && currentWindow.value.observedDays === 0 ? 'No complete days of data yet this period.' : undefined),
+  format: formatCurrency
+}))
+
+const heroStats = computed<HeroStat[]>(() => {
+  const accountsInScope = dashboardAccounts.value
+  const spend = accountsInScope.reduce((sum, a) => sum + a.spend, 0)
+  const budgetToDate = accountsInScope.reduce((sum, a) => sum + (a.budget > 0 ? a.budget : 0), 0)
+  const overCount = accountsInScope.filter(a => a.budget > 0 && a.spend > a.budget).length
+  const timeframeLabel = timeframeOptions.find(t => t.value === selectedTimeframe.value)?.label ?? ''
+  const stats: HeroStat[] = [
+    { label: 'Spend', value: formatCurrency(spend), sub: timeframeLabel }
+  ]
+  if (isHistoricalTimeframe.value || budgetToDate <= 0) {
+    stats.push({ label: 'Budget', value: '—', sub: isHistoricalTimeframe.value ? 'Not compared for past periods' : 'No budget data yet' })
+  } else {
+    const variance = spend - budgetToDate
+    stats.push({ label: currentWindow.value ? 'Budget to date' : 'Budget', value: formatCurrency(budgetToDate), sub: `${Math.round(spend / budgetToDate * 100)}% used` })
+    stats.push({ label: variance > 0 ? 'Over budget' : 'Remaining', value: formatCurrency(Math.abs(variance)), sub: variance > 0 ? 'Spend above budget to date' : 'Budget to date not yet spent', tone: variance > 0 ? 'over' : 'under' })
+  }
+  stats.push({ label: 'Accounts', value: String(accountsInScope.length), sub: isHistoricalTimeframe.value ? (selectedAccounts.value.length ? 'Selected' : 'In view') : `${overCount} over budget` })
+  return stats
+})
+
+const heroPace = computed<HeroPace | null>(() => {
+  const w = currentWindow.value
+  if (!w || isHistoricalTimeframe.value || totalBudget.value <= 0) return null
+  const spend = totalSpend.value
+  const full = totalBudget.value
+  const toDate = full * paceRatio.value
+  return {
+    caption: `Day ${w.observedDays} of ${w.totalDays} in this ${w.label}`,
+    right: `${formatCurrency(spend)} of ${formatCurrency(full)}`,
+    aria: `${formatCurrency(spend)} spent of a ${formatCurrency(full)} budget; ${formatCurrency(toDate)} is budgeted to date`,
+    periodLabel: w.label,
+    spendRatio: spend / full,
+    markerRatio: paceRatio.value,
+    over: spend > toDate
+  }
+})
+
+// Tiles show every account in view so any of them can be added to the selection
+const accountTiles = computed(() => buildAccountTiles(
+  accountsWithCosts.value.map(toDashboardAccount),
+  { selectedIds: selectedAccounts.value, groupBy: tileGroupBy.value }
+))
+
+const focusedAccount = computed(() =>
+  selectedAccounts.value.length === 1 && dashboardAccounts.value.length === 1 ? dashboardAccounts.value[0] : null)
+
+const attentionItems = computed<AttentionItem[]>(() => buildAttentionItems({
+  accounts: dashboardAccounts.value,
+  alertsBySeverity: isHistoricalTimeframe.value ? undefined : alertsBySeverity.value,
+  currentDayOfMonth: selectedTimeframe.value === 'thisMonth' ? new Date().getUTCDate() : undefined,
+  isHistorical: isHistoricalTimeframe.value,
+  carriedForward: carriedForwardBudgets.value.count > 0 && carriedForwardBudgets.value.from !== undefined
+    ? { count: carriedForwardBudgets.value.count, year: carriedForwardBudgets.value.year, from: carriedForwardBudgets.value.from }
+    : undefined,
+  format: formatCurrency
+}))
+
+const handleAttentionAction = (item: AttentionItem) => {
+  switch (item.action.type) {
+    case 'focus-account':
+      if (item.action.accountId) selectedAccounts.value = [item.action.accountId]
+      break
+    case 'open-alerts':
+      navigateToBudgetAlerts()
+      break
+    case 'switch-to-last-month':
+      switchToLastMonth()
+      break
+    case 'switch-to-this-month':
+      selectedTimeframe.value = 'thisMonth'
+      break
+    case 'open-forecast-upload':
+      activeChartTab.value = 'forecast'
+      break
+    case 'open-tag-compliance':
+      navigateTo('/admin/costs/tag-compliance')
+      break
+  }
+}
 
 // Advanced charts toggle (persisted in localStorage)
 const showAdvancedCharts = ref(false)

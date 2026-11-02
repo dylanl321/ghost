@@ -92,6 +92,10 @@ export interface CostNarrativeInput {
   /** Who spent it, e.g. "all 40 accounts", "Mission Systems", "Project Falcon 14" */
   scopeLabel: string
   accounts: readonly NarrativeAccount[]
+  /** Noun for the budget, e.g. "budget to date" when budgets are prorated to the days with data */
+  budgetNoun?: string
+  /** Sentence used instead of "No budget is set…" when budgets don't apply, e.g. past periods */
+  noBudgetText?: string
   format?: (value: number) => string
 }
 
@@ -128,8 +132,8 @@ export function buildCostNarrative(input: CostNarrativeInput): CostNarrative {
   const lead = `${input.periodPhrase}, ${input.scopeLabel} spent ${format(spend)}`
 
   if (budget <= 0) {
-    const text = `${lead}. No budget is set for ${input.accounts.length === 1 ? 'this account' : 'these accounts'}.`
-    return { lead: `${lead}.`, emphasis: '', tail: ` No budget is set for ${input.accounts.length === 1 ? 'this account' : 'these accounts'}.`, tone: 'neutral', text }
+    const note = input.noBudgetText ?? `No budget is set for ${input.accounts.length === 1 ? 'this account' : 'these accounts'}.`
+    return { lead: `${lead}.`, emphasis: '', tail: ` ${note}`, tone: 'neutral', text: `${lead}. ${note}` }
   }
 
   const variance = spend - budget
@@ -138,7 +142,7 @@ export function buildCostNarrative(input: CostNarrativeInput): CostNarrative {
     .sort((a, b) => (b.spend - b.budget) - (a.spend - a.budget))
   const overTotal = over.reduce((sum, a) => sum + (a.spend - a.budget), 0)
 
-  const head = `${lead} against a ${format(budget)} budget, `
+  const head = `${lead} against a ${format(budget)} ${input.budgetNoun ?? 'budget'}, `
   let emphasis: string
   let tail: string
   let tone: CostNarrative['tone']
