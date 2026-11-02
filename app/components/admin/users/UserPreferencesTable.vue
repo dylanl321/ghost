@@ -168,29 +168,29 @@ function getActionItems(prefs: UserPreferences) {
       {
         label: 'View Details',
         icon: 'i-heroicons-eye',
-        click: () => navigateTo(`/admin/users/${encodeURIComponent(prefs.userId)}`)
+        onSelect: () => navigateTo(`/admin/users/${encodeURIComponent(prefs.userId)}`)
       },
       {
         label: 'Edit Preferences',
         icon: 'i-heroicons-pencil',
-        click: () => emit('edit', prefs)
+        onSelect: () => emit('edit', prefs)
       }
     ],
     [
       {
         label: 'Reset Welcome Banner',
         icon: 'i-heroicons-sparkles',
-        click: () => emit('resetBanner', prefs)
+        onSelect: () => emit('resetBanner', prefs)
       },
       {
         label: 'Reset Cost Tour',
         icon: 'i-heroicons-currency-dollar',
-        click: () => emit('resetCostTour', prefs)
+        onSelect: () => emit('resetCostTour', prefs)
       },
       {
         label: 'Reset Account Tour',
         icon: 'i-heroicons-building-office',
-        click: () => emit('resetAccountTour', prefs)
+        onSelect: () => emit('resetAccountTour', prefs)
       }
     ],
     [
@@ -198,7 +198,7 @@ function getActionItems(prefs: UserPreferences) {
         label: 'Delete Preferences',
         icon: 'i-heroicons-trash',
         class: 'text-red-500',
-        click: () => emit('delete', prefs)
+        onSelect: () => emit('delete', prefs)
       }
     ]
   ]

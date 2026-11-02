@@ -63,9 +63,9 @@
         <h4 class="text-sm font-semibold text-gray-300 mb-2">Breakdown by Resource Type</h4>
         <UTable
           :data="driftData.summary.byResourceType"
-          :columns="breakdownColumns"
+          :columns="toTableColumns(breakdownColumns)"
         >
-          <template #resource_type-data="{ row }">
+          <template #resource_type-cell="{ row: { original: row } }">
             <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded">
               {{ row.resource_type }}
             </code>
@@ -78,9 +78,9 @@
         <h4 class="text-sm font-semibold text-gray-300 mb-2">Unapplied Resources</h4>
         <UTable
           :data="paginatedUnapplied"
-          :columns="unappliedColumns"
+          :columns="toTableColumns(unappliedColumns)"
         >
-          <template #change_action-data="{ row }">
+          <template #change_action-cell="{ row: { original: row } }">
             <UBadge
               :color="getActionColor(row.change_action)"
               variant="soft"
@@ -90,23 +90,23 @@
             </UBadge>
           </template>
 
-          <template #resource_address-data="{ row }">
+          <template #resource_address-cell="{ row: { original: row } }">
             <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded break-all" :title="row.resource_address">
               {{ formatResourceAddress(row.resource_address) }}
             </code>
           </template>
 
-          <template #resource_type-data="{ row }">
+          <template #resource_type-cell="{ row: { original: row } }">
             <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded">
               {{ row.resource_type }}
             </code>
           </template>
 
-          <template #module_name-data="{ row }">
+          <template #module_name-cell="{ row: { original: row } }">
             <span class="text-sm text-gray-300">{{ row.module_name || '-' }}</span>
           </template>
 
-          <template #latest_timestamp-data="{ row }">
+          <template #latest_timestamp-cell="{ row: { original: row } }">
             <span class="text-sm text-gray-400">{{ formatTimestamp(row.latest_timestamp) }}</span>
           </template>
         </UTable>
@@ -173,32 +173,26 @@
         <div v-if="stateComparison && !stateLoading">
           <UAccordion
             :items="stateAccordionItems"
-            :ui="{ root: 'space-y-2' }"
+            :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }"
           >
-            <template #default="{ item, open }">
-              <UButton
-                color="neutral"
-                variant="ghost"
-                class="w-full"
-                :ui="{ base: 'rounded-lg p-3' }"
-              >
-                <template #leading>
+            <template #leading="{ item, open }">
                   <UIcon
                     name="i-heroicons-chevron-right"
                     class="w-5 h-5 transition-transform duration-200"
                     :class="[open && 'rotate-90']"
                   />
                 </template>
+            <template #default="{ item, open }">
                 <div class="flex items-center gap-2 w-full">
                   <span class="font-medium text-white">{{ item.label }}</span>
                   <UBadge :color="item.badgeColor" variant="soft" size="sm">
                     {{ item.count }}
                   </UBadge>
                 </div>
-              </UButton>
             </template>
+            <template #trailing="{ item, open }"><span /></template>
 
-            <template #item="{ item }">
+            <template #content="{ item }">
               <div class="p-3 bg-gray-800/50 rounded-lg">
                 <div v-if="item.resources.length === 0" class="text-sm text-gray-400 text-center py-2">
                   No resources in this category
@@ -304,7 +298,6 @@ const stateAccordionItems = computed(() => {
     {
       label: 'In State Only',
       slot: 'item',
-      defaultOpen: false,
       badgeColor: 'red' as const,
       count: stateComparison.value.inStateOnly.length,
       resources: stateComparison.value.inStateOnly.map(r => r.address)
@@ -312,7 +305,6 @@ const stateAccordionItems = computed(() => {
     {
       label: 'In Plan Only',
       slot: 'item',
-      defaultOpen: false,
       badgeColor: 'yellow' as const,
       count: stateComparison.value.inPlanOnly.length,
       resources: stateComparison.value.inPlanOnly.map(r => r.resource_address)
@@ -320,7 +312,6 @@ const stateAccordionItems = computed(() => {
     {
       label: 'Matched',
       slot: 'item',
-      defaultOpen: false,
       badgeColor: 'green' as const,
       count: stateComparison.value.matched.length,
       resources: stateComparison.value.matched.map(r => r.address)

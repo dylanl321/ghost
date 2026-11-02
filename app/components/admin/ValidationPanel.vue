@@ -152,15 +152,15 @@
 
       <UTable
         :data="validationResult.tests"
-        :columns="testColumns"
+        :columns="toTableColumns(testColumns)"
       >
-        <template #name-data="{ row }">
+        <template #name-cell="{ row: { original: row } }">
           <div class="font-medium text-gray-900 dark:text-white">
             {{ row.name }}
           </div>
         </template>
 
-        <template #passed-data="{ row }">
+        <template #passed-cell="{ row: { original: row } }">
           <UBadge
             :color="statusColor(row.status || (row.passed ? 'PASS' : 'FAIL'))"
             variant="soft"
@@ -169,13 +169,13 @@
           </UBadge>
         </template>
 
-        <template #message-data="{ row }">
+        <template #message-cell="{ row: { original: row } }">
           <div class="text-sm text-gray-600 dark:text-gray-400">
             {{ row.message }}
           </div>
         </template>
 
-        <template #details-data="{ row }">
+        <template #details-cell="{ row: { original: row } }">
           <div class="text-xs space-y-1">
             <div class="flex justify-between gap-4">
               <span class="text-gray-500">AWS:</span>
@@ -223,27 +223,27 @@
 
       <UTable
         :data="paginatedAccountComparisons"
-        :columns="accountColumns"
+        :columns="toTableColumns(accountColumns)"
       >
-        <template #accountId-data="{ row }">
+        <template #accountId-cell="{ row: { original: row } }">
           <div class="font-mono text-sm">{{ row.accountId }}</div>
         </template>
 
-        <template #accountName-data="{ row }">
+        <template #accountName-cell="{ row: { original: row } }">
           <div class="font-medium text-gray-900 dark:text-white">
             {{ row.accountName }}
           </div>
         </template>
 
-        <template #awsBillable-data="{ row }">
+        <template #awsBillable-cell="{ row: { original: row } }">
           <div class="font-mono text-sm">${{ row.awsBillable.toFixed(2) }}</div>
         </template>
 
-        <template #apiBillable-data="{ row }">
+        <template #apiBillable-cell="{ row: { original: row } }">
           <div class="font-mono text-sm">${{ row.apiBillable.toFixed(2) }}</div>
         </template>
 
-        <template #billableMatch-data="{ row }">
+        <template #billableMatch-cell="{ row: { original: row } }">
           <UBadge
             :color="row.billableMatch ? 'green' : 'red'"
             variant="soft"
@@ -253,17 +253,17 @@
           </UBadge>
         </template>
 
-        <template #awsProforma-data="{ row }">
+        <template #awsProforma-cell="{ row: { original: row } }">
           <div v-if="includeProforma" class="font-mono text-sm">${{ row.awsProforma.toFixed(2) }}</div>
           <div v-else class="text-gray-400 text-sm">N/A</div>
         </template>
 
-        <template #apiProforma-data="{ row }">
+        <template #apiProforma-cell="{ row: { original: row } }">
           <div v-if="includeProforma" class="font-mono text-sm">${{ row.apiProforma.toFixed(2) }}</div>
           <div v-else class="text-gray-400 text-sm">N/A</div>
         </template>
 
-        <template #proformaMatch-data="{ row }">
+        <template #proformaMatch-cell="{ row: { original: row } }">
           <UBadge
             v-if="includeProforma"
             :color="row.proformaMatch ? 'green' : 'red'"
@@ -275,7 +275,7 @@
           <div v-else class="text-gray-400 text-sm">N/A</div>
         </template>
 
-        <template #notes-data="{ row }">
+        <template #notes-cell="{ row: { original: row } }">
           <div class="text-xs text-gray-500">{{ row.notes || '-' }}</div>
         </template>
       </UTable>

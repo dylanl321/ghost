@@ -307,23 +307,23 @@ const detailData = computed(() => props.detail.data)
       :hide-retry="list.unavailable"
       @retry="emit('retry')"
     >
-      <UTable :data="applications" :columns="columns">
-        <template #name-data="{ row }">
+      <UTable :data="applications" :columns="toTableColumns(columns)">
+        <template #name-cell="{ row: { original: row } }">
           <div>
             <p class="font-medium text-gray-900 dark:text-white">{{ row.name || 'Unnamed client' }}</p>
             <code class="text-xs text-gray-500 dark:text-gray-400">{{ row.clientId }}</code>
           </div>
         </template>
-        <template #owner-data="{ row }">{{ ownerLabel(row) }}</template>
-        <template #lifecycle-data="{ row }">
+        <template #owner-cell="{ row: { original: row } }">{{ ownerLabel(row) }}</template>
+        <template #lifecycle-cell="{ row: { original: row } }">
           <UBadge :color="lifecycleMeta(row.lifecycle).color" variant="subtle" size="xs">
             {{ lifecycleMeta(row.lifecycle).label }}
           </UBadge>
         </template>
-        <template #observedUse-data="{ row }">
+        <template #observedUse-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-600 dark:text-gray-400">{{ observedUseLabel(row.observedUse) }}</span>
         </template>
-        <template #actions-data="{ row }">
+        <template #actions-cell="{ row: { original: row } }">
           <UButton size="xs" color="neutral" variant="soft" @click="openDetail(row)">Inspect</UButton>
         </template>
       </UTable>

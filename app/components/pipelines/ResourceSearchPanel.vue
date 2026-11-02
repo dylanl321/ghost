@@ -47,21 +47,21 @@
     <div v-else>
       <UTable
         :data="results"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
       >
-        <template #account_id-data="{ row }">
+        <template #account_id-cell="{ row: { original: row } }">
           <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded">
             {{ row.account_id }}
           </code>
         </template>
 
-        <template #resource_address-data="{ row }">
+        <template #resource_address-cell="{ row: { original: row } }">
           <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded break-all" :title="row.resource_address">
             {{ formatResourceAddress(row.resource_address) }}
           </code>
         </template>
 
-        <template #action-data="{ row }">
+        <template #action-cell="{ row: { original: row } }">
           <UBadge
             :color="getActionColor(row.action)"
             variant="soft"
@@ -71,7 +71,7 @@
           </UBadge>
         </template>
 
-        <template #applied-data="{ row }">
+        <template #applied-cell="{ row: { original: row } }">
           <UIcon
             :name="row.applied ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'"
             :class="row.applied ? 'text-green-400' : 'text-red-400'"
@@ -79,7 +79,7 @@
           />
         </template>
 
-        <template #timestamp-data="{ row }">
+        <template #timestamp-cell="{ row: { original: row } }">
           <div class="text-sm">
             <div class="text-white">{{ formatDateOnly(row.timestamp) }}</div>
             <div class="text-gray-400 text-xs">{{ formatTime(row.timestamp) }}</div>

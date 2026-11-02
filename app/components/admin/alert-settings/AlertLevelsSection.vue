@@ -350,7 +350,7 @@ async function saveAlertLevel() {
         title: 'Alert Level Updated',
         description: `${form.value.level} has been updated`,
         color: 'green',
-        timeout: 2000
+        duration: 2000
       })
     } else {
       await createAlertLevel({
@@ -365,7 +365,7 @@ async function saveAlertLevel() {
         title: 'Alert Level Created',
         description: `${form.value.level} has been created`,
         color: 'green',
-        timeout: 2000
+        duration: 2000
       })
     }
     showModal.value = false
@@ -390,7 +390,7 @@ async function deleteLevel() {
       title: 'Alert Level Deleted',
       description: `${levelToDelete.value.level} has been deleted`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     showDeleteModal.value = false
     levelToDelete.value = null

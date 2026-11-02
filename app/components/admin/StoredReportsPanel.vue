@@ -162,11 +162,11 @@
       <div v-else-if="filteredReports.length > 0" class="overflow-x-auto">
         <UTable
           :data="filteredReports"
-          :columns="columns"
+          :columns="toTableColumns(columns)"
           :loading="loading"
         >
           <!-- S3 Key -->
-          <template #s3Key-data="{ row }">
+          <template #s3Key-cell="{ row: { original: row } }">
             <div class="max-w-md">
               <code class="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
                 {{ row.s3Key }}
@@ -175,7 +175,7 @@
           </template>
 
           <!-- Type -->
-          <template #type-data="{ row }">
+          <template #type-cell="{ row: { original: row } }">
             <UBadge
               :color="row.type === 'scheduled' ? 'purple' : 'orange'"
               variant="soft"
@@ -186,21 +186,21 @@
           </template>
 
           <!-- Format -->
-          <template #format-data="{ row }">
+          <template #format-cell="{ row: { original: row } }">
             <UBadge color="neutral" variant="soft" size="xs" class="uppercase">
               {{ row.format }}
             </UBadge>
           </template>
 
           <!-- Size -->
-          <template #size-data="{ row }">
+          <template #size-cell="{ row: { original: row } }">
             <span class="text-sm text-gray-700 dark:text-gray-300">
               {{ formatBytes(row.size) }}
             </span>
           </template>
 
           <!-- Last Modified -->
-          <template #lastModified-data="{ row }">
+          <template #lastModified-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div class="text-gray-900 dark:text-white">{{ formatShortDateTime(row.lastModified) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -210,7 +210,7 @@
           </template>
 
           <!-- User ID -->
-          <template #userId-data="{ row }">
+          <template #userId-cell="{ row: { original: row } }">
             <div v-if="row.userId" class="flex items-center gap-2">
               <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.userId }}</span>
@@ -219,7 +219,7 @@
           </template>
 
           <!-- Actions -->
-          <template #actions-data="{ row }">
+          <template #actions-cell="{ row: { original: row } }">
             <UDropdownMenu :items="getRowActions(row)" :content="{ side: 'bottom', align: 'end' }">
               <UButton
                 icon="i-heroicons-ellipsis-vertical"
@@ -371,12 +371,12 @@ function getRowActions(report: StoredReport) {
     [{
       label: 'Download',
       icon: 'i-heroicons-arrow-down-tray',
-      click: () => handleDownload(report)
+      onSelect: () => handleDownload(report)
     }],
     [{
       label: 'Delete',
       icon: 'i-heroicons-trash',
-      click: () => handleDelete(report)
+      onSelect: () => handleDelete(report)
     }]
   ]
 }

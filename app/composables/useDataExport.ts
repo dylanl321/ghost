@@ -79,14 +79,14 @@ export function useDataExport() {
           title: 'Export Successful',
           description: `${format.toUpperCase()} file has been downloaded`,
           color: 'green',
-          timeout: 3000
+          duration: 3000
         })
       } else {
         toast.add({
           title: 'Export Failed',
           description: result.error || 'An unknown error occurred',
           color: 'red',
-          timeout: 5000
+          duration: 5000
         })
       }
 
@@ -108,7 +108,7 @@ export function useDataExport() {
         title: 'Export Error',
         description: errorResult.error,
         color: 'red',
-        timeout: 5000
+        duration: 5000
       })
 
       return errorResult

@@ -92,7 +92,7 @@
                   color="neutral"
                   variant="link"
                   icon="i-heroicons-x-mark-20-solid"
-                  :padded="false"
+                  :ui="{ base: 'p-0' }"
                   @click="accountSearch = ''"
                 />
               </template>
@@ -449,7 +449,7 @@ async function applyDevSettings() {
       description: `${selectedAccountIds.value.length} accounts with ${selectedRoles.value.length} roles`,
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } catch (error) {
     logger.error('Failed to apply dev settings:', error)

@@ -156,7 +156,7 @@ async function onCopyToClipboard() {
       title: 'Copied to clipboard',
       description: `${exportRows.value.length} users copied. Paste into the SSP user access list.`,
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } catch (err) {
     logger.error('Clipboard copy failed:', err)
@@ -174,17 +174,17 @@ const exportMenuItems = computed(() => [
     {
       label: 'Copy to clipboard',
       icon: 'i-heroicons-clipboard-document',
-      click: onCopyToClipboard
+      onSelect: onCopyToClipboard
     },
     {
       label: 'Download CSV',
       icon: 'i-heroicons-document-text',
-      click: () => onExport('csv')
+      onSelect: () => onExport('csv')
     },
     {
       label: 'Download Excel',
       icon: 'i-heroicons-table-cells',
-      click: () => onExport('xlsx')
+      onSelect: () => onExport('xlsx')
     }
   ]
 ])

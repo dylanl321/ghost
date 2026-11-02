@@ -108,7 +108,7 @@
       </div>
 
       <!-- Tabbed Content -->
-      <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
+      <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
 
       <div class="mt-6">
         <!-- Preferences Tab -->

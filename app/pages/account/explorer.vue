@@ -132,17 +132,17 @@
     <div class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-900">
       <ClientOnly>
         <div class="flex-1 overflow-auto px-4">
-          <UTable :data="paginatedRows" :columns="columns" :loading="loading">
+          <UTable :data="paginatedRows" :columns="toTableColumns(columns)" :loading="loading">
 
           <!-- Request ID column -->
-          <template #requestId-data="{ row }">
+          <template #requestId-cell="{ row: { original: row } }">
             <span class="font-mono text-sm text-gray-600 dark:text-gray-400">
               {{ row.requestID ?? row.requestId ?? '—' }}
             </span>
           </template>
 
           <!-- Project Name column -->
-          <template #projectName-data="{ row }">
+          <template #projectName-cell="{ row: { original: row } }">
             <NuxtLink :to="`/account/${row.awsStandardAccountID}`" class="hover:underline">
               <div class="flex items-center gap-2 mb-2">
                 <span class="w-3 h-3 rounded-full"
@@ -154,7 +154,7 @@
           </template>
 
           <!-- Account IDs column -->
-          <template #accountIds-data="{ row }">
+          <template #accountIds-cell="{ row: { original: row } }">
             <div class="flex flex-col gap-1">
               <span>
                 <UBadge color="orange" variant="subtle">Comm</UBadge>
@@ -168,7 +168,7 @@
           </template>
 
           <!-- Platform info column -->
-          <template #platformInfo-data="{ row }">
+          <template #platformInfo-cell="{ row: { original: row } }">
             <div class="flex flex-col gap-1">
               <UTooltip :text="row.awsGovCloudAccountID ? 'GovCloud Paired' : 'Commercial Only'">
                 <p>{{ row.awsGovCloudAccountID ? "GovCloud" : "Commercial" }}</p>
@@ -187,7 +187,7 @@
           </template>
 
           <!-- Admins column -->
-          <template #admins-data="{ row }">
+          <template #admins-cell="{ row: { original: row } }">
             <div v-if="row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ')"
               class="flex items-center">
               <UIcon name="i-heroicons-user" class="mr-1" />
@@ -205,27 +205,27 @@
           </template>
 
           <!-- LOB column -->
-          <template #lineOfBusiness-data="{ row }">
+          <template #lineOfBusiness-cell="{ row: { original: row } }">
             <p>{{ row.linesOfBusiness || "IT" }}</p>
           </template>
 
           <!-- Cost Center column -->
-          <template #costCenter-data="{ row }">
+          <template #costCenter-cell="{ row: { original: row } }">
             <p>{{ row.costCenter || '—' }}</p>
           </template>
 
           <!-- Department column -->
-          <template #departmentNumber-data="{ row }">
+          <template #departmentNumber-cell="{ row: { original: row } }">
             <p>{{ row.departmentNumber || '—' }}</p>
           </template>
 
           <!-- Region column -->
-          <template #region-data="{ row }">
+          <template #region-cell="{ row: { original: row } }">
             <p>{{ row.region || '—' }}</p>
           </template>
 
           <!-- Platform Type column -->
-          <template #platformType-data="{ row }">
+          <template #platformType-cell="{ row: { original: row } }">
             <UBadge v-if="row.platformType" color="blue" variant="subtle" size="xs">
               {{ row.platformType }}
             </UBadge>
@@ -233,7 +233,7 @@
           </template>
 
           <!-- Project Type column -->
-          <template #projectType-data="{ row }">
+          <template #projectType-cell="{ row: { original: row } }">
             <UBadge v-if="row.projectType" color="purple" variant="subtle" size="xs">
               {{ row.projectType }}
             </UBadge>
@@ -241,29 +241,29 @@
           </template>
 
           <!-- Technical Contact column -->
-          <template #technicalContact-data="{ row }">
+          <template #technicalContact-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.technicalContact || '—' }}</p>
           </template>
 
           <!-- Business Contact column -->
-          <template #businessContact-data="{ row }">
+          <template #businessContact-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.businessContact || '—' }}</p>
           </template>
 
           <!-- Intended Use column -->
-          <template #intendedUse-data="{ row }">
+          <template #intendedUse-cell="{ row: { original: row } }">
             <p class="text-sm truncate max-w-xs" :title="row.intendedUse">
               {{ row.intendedUse || '—' }}
             </p>
           </template>
 
           <!-- Modified Date column -->
-          <template #modifiedDate-data="{ row }">
+          <template #modifiedDate-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.modifiedDate ? new Date(row.modifiedDate).toLocaleDateString() : '—' }}</p>
           </template>
 
           <!-- Actions column -->
-          <template #actions-data="{ row }">
+          <template #actions-cell="{ row: { original: row } }">
             <div class="flex items-center gap-1">
               <!-- Favorite button -->
               <UButton
@@ -718,7 +718,7 @@ const getActionItems = (account: AWSEnclaveData) => {
     utilityActions.push({
       label: 'View Record',
       icon: 'i-heroicons-arrow-top-right-on-square',
-      click: () => window.open(account.recordLink, '_blank'),
+      onSelect: () => window.open(account.recordLink, '_blank'),
       description: 'Open source record in new tab'
     })
   }

@@ -206,7 +206,7 @@ async function updateThresholdField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -259,7 +259,7 @@ async function saveThresholdField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {
@@ -281,7 +281,7 @@ async function updateMlField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -316,7 +316,7 @@ async function saveMlField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {

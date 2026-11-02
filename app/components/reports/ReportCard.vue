@@ -107,20 +107,20 @@ const actions = computed(() => {
     [{
       label: 'Edit',
       icon: 'i-heroicons-pencil',
-      click: () => emit('edit', props.report)
+      onSelect: () => emit('edit', props.report)
     }],
     [{
       label: props.report.status === 'active' ? 'Pause' : 'Resume',
       icon: props.report.status === 'active' ? 'i-heroicons-pause' : 'i-heroicons-play',
-      click: () => emit('togglePause', props.report)
+      onSelect: () => emit('togglePause', props.report)
     }, {
       label: 'Send Test',
       icon: 'i-heroicons-paper-airplane',
-      click: () => emit('test', props.report)
+      onSelect: () => emit('test', props.report)
     }, {
       label: 'View History',
       icon: 'i-heroicons-clock',
-      click: () => emit('viewHistory', props.report)
+      onSelect: () => emit('viewHistory', props.report)
     }]
   ]
 
@@ -129,7 +129,7 @@ const actions = computed(() => {
     items[1].push({
       label: 'Run Now',
       icon: 'i-heroicons-bolt',
-      click: () => emit('runNow', props.report)
+      onSelect: () => emit('runNow', props.report)
     })
   }
 
@@ -137,7 +137,7 @@ const actions = computed(() => {
   items.push([{
     label: 'Delete',
     icon: 'i-heroicons-trash',
-    click: () => emit('delete', props.report)
+    onSelect: () => emit('delete', props.report)
   }])
 
   return items

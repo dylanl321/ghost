@@ -14,10 +14,10 @@
 
         <!-- Right: Tab Navigation -->
         <UTabs
-          :items="tabItems"
+          :items="withIndexValues(tabItems)"
           :ui="{ root: 'inline-flex', list: 'flex items-center gap-1 bg-gray-900/50 rounded-lg p-1', content: 'hidden' }"
           v-model="activeTab"
-        />
+         :unmount-on-hide="false"/>
       </div>
     </div>
 
@@ -54,9 +54,8 @@
           <div class="flex-1 overflow-y-auto min-h-0">
             <UAccordion
               v-model="openAccordionIndex"
-              :items="accordionItems"
+              :items="withIndexValues(accordionItems)"
               :ui="{ root: 'flex flex-col', item: 'border-b border-gray-700' }"
-              :multiple="false"
             >
               <!-- Section 1: Select Accounts -->
               <template #accounts>
@@ -298,11 +297,11 @@
               <!-- Tabbed Dataset Preview -->
               <div class="flex-1 min-h-0 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden flex flex-col">
                 <UTabs
-                  :items="previewTabs"
+                  :items="withIndexValues(previewTabs)"
                   class="flex-1 flex flex-col min-h-0"
                   :ui="{ root: 'flex flex-col h-full min-h-0', list: 'border-b border-gray-700 bg-gray-900/30', indicator: 'bg-blue-500', content: 'flex-1 overflow-auto' }"
-                >
-                  <template #item="{ item }">
+                 :unmount-on-hide="false">
+                  <template #content="{ item }">
                     <div class="p-4 overflow-auto">
                       <div v-if="previewErrors[item.key]" class="mb-4 border border-red-800 bg-red-950/30 rounded p-3 text-sm text-red-200">
                         {{ previewErrors[item.key] }}
@@ -892,7 +891,7 @@
             </div>
 
             <!-- Full configuration (collapsible) -->
-            <UAccordion :items="[{ label: 'Full Configuration (JSON)', slot: 'config', defaultOpen: false }]">
+            <UAccordion :items="[{ label: 'Full Configuration (JSON)', slot: 'config' }]">
               <template #config>
                 <pre class="bg-gray-950 rounded p-4 text-xs text-gray-300 overflow-auto max-h-96">{{ JSON.stringify(selectedResourceForDetails, null, 2) }}</pre>
               </template>

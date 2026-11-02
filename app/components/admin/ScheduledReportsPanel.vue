@@ -220,11 +220,11 @@
       <div v-else-if="filteredReports.length > 0" class="overflow-x-auto">
         <UTable
           :data="filteredReports"
-          :columns="columns"
+          :columns="toTableColumns(columns)"
           :loading="loading"
         >
           <!-- Report Name -->
-          <template #reportName-data="{ row }">
+          <template #reportName-cell="{ row: { original: row } }">
             <div>
               <div class="font-medium text-gray-900 dark:text-white">{{ row.reportName }}</div>
               <div v-if="row.description" class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
@@ -234,7 +234,7 @@
           </template>
 
           <!-- Owner -->
-          <template #createdBy-data="{ row }">
+          <template #createdBy-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.createdBy }}</span>
@@ -242,12 +242,12 @@
           </template>
 
           <!-- Frequency -->
-          <template #frequency-data="{ row }">
+          <template #frequency-cell="{ row: { original: row } }">
             <ScheduleDisplay :schedule="row.schedule" text-class="text-sm text-gray-700 dark:text-gray-300" />
           </template>
 
           <!-- Next Run -->
-          <template #nextRunTime-data="{ row }">
+          <template #nextRunTime-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div class="text-gray-900 dark:text-white">{{ formatDateInTimezone(row.nextRunTime, row.schedule.timezone) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -257,12 +257,12 @@
           </template>
 
           <!-- Status -->
-          <template #status-data="{ row }">
+          <template #status-cell="{ row: { original: row } }">
             <ReportStatusBadge :status="row.status" show-icon />
           </template>
 
           <!-- Last Run -->
-          <template #lastRunStatus-data="{ row }">
+          <template #lastRunStatus-cell="{ row: { original: row } }">
             <div v-if="row.lastRunTime" class="text-sm">
               <UBadge
                 :color="row.lastRunStatus === 'success' ? 'green' : 'red'"
@@ -279,7 +279,7 @@
           </template>
 
           <!-- Actions -->
-          <template #actions-data="{ row }">
+          <template #actions-cell="{ row: { original: row } }">
             <UDropdownMenu :items="getRowActions(row)" :content="{ side: 'bottom', align: 'end' }">
               <UButton
                 icon="i-heroicons-ellipsis-vertical"
@@ -667,20 +667,20 @@ function getRowActions(report: ScheduledReport) {
     [{
       label: 'View Details',
       icon: 'i-heroicons-eye',
-      click: () => handleViewDetails(report)
+      onSelect: () => handleViewDetails(report)
     }],
     [{
       label: 'Execute Now',
       icon: 'i-heroicons-bolt',
-      click: () => handleRunNow(report)
+      onSelect: () => handleRunNow(report)
     }, {
       label: 'View History',
       icon: 'i-heroicons-clock',
-      click: () => handleViewHistory(report)
+      onSelect: () => handleViewHistory(report)
     }, {
       label: report.status === 'paused' ? 'Resume' : 'Pause',
       icon: report.status === 'paused' ? 'i-heroicons-play' : 'i-heroicons-pause',
-      click: () => handleTogglePause(report)
+      onSelect: () => handleTogglePause(report)
     }]
   ]
 }
@@ -891,7 +891,7 @@ async function resumeAllPaused() {
       title: 'Reports Resumed',
       description: `Successfully resumed ${results.succeeded} report(s)${results.failed > 0 ? `, ${results.failed} failed` : ''}`,
       color: results.failed > 0 ? 'orange' : 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 

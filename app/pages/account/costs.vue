@@ -102,7 +102,7 @@
                   variant="link"
                   size="xs"
                   icon="i-heroicons-x-mark-20-solid"
-                  :padded="false"
+                  :ui="{ base: 'p-0' }"
                   @click="clearSearch"
                 />
               </div>

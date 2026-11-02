@@ -769,7 +769,7 @@ const generateDetailedReport = () => {
       title: 'Report Generated',
       description: `Detailed report for ${selectedAccountsData.length} accounts has been downloaded`,
       color: 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 }
@@ -966,7 +966,7 @@ const exportToPDFHandler = async () => {
       title: 'PDF Exported',
       description: `Cost report has been exported for ${dataToExport.length} accounts`,
       color: 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 }

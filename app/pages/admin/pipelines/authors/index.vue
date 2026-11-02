@@ -68,12 +68,12 @@
       <!-- Table -->
       <UTable
         :data="filteredAuthors"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
         :loading="pending"
-        :empty-state="{ icon: 'i-heroicons-users', label: 'No authors found' }"
+        empty="No authors found"
       >
         <!-- Author Column -->
-        <template #author-data="{ row }">
+        <template #author-cell="{ row: { original: row } }">
           <div class="flex items-center gap-3">
             <!-- Avatar with Initials -->
             <div class="flex-shrink-0">
@@ -99,17 +99,17 @@
         </template>
 
         <!-- Contact Icons Column -->
-        <template #contact-data="{ row }">
+        <template #contact-cell="{ row: { original: row } }">
           <PipelinesAuthorContactIcons :email="row.author_email" />
         </template>
 
         <!-- Total Runs Column -->
-        <template #total_runs-data="{ row }">
+        <template #total_runs-cell="{ row: { original: row } }">
           <span class="font-medium">{{ row.total_runs.toLocaleString() }}</span>
         </template>
 
         <!-- Success Rate Column -->
-        <template #success_rate-data="{ row }">
+        <template #success_rate-cell="{ row: { original: row } }">
           <div class="flex items-center gap-2">
             <div class="flex-1">
               <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -125,12 +125,12 @@
         </template>
 
         <!-- Accounts Column -->
-        <template #total_accounts-data="{ row }">
+        <template #total_accounts-cell="{ row: { original: row } }">
           <span class="text-gray-700 dark:text-gray-300">{{ row.total_accounts.toLocaleString() }}</span>
         </template>
 
         <!-- Last Run Column -->
-        <template #last_run-data="{ row }">
+        <template #last_run-cell="{ row: { original: row } }">
           <span class="text-sm text-gray-600 dark:text-gray-400">
             {{ formatRelativeTime(row.last_run) }}
           </span>

@@ -657,9 +657,9 @@ const chartContainerRef = ref<HTMLElement>()
 // View mode dropdown items
 const viewModeItems = [
   [
-    { label: 'Overview', click: () => viewMode.value = 'overview' },
-    { label: 'Detail View', click: () => viewMode.value = 'detail' },
-    { label: 'Minimap', click: () => viewMode.value = 'minimap' }
+    { label: 'Overview', onSelect: () => viewMode.value = 'overview' },
+    { label: 'Detail View', onSelect: () => viewMode.value = 'detail' },
+    { label: 'Minimap', onSelect: () => viewMode.value = 'minimap' }
   ]
 ]
 

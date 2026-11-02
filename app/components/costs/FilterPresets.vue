@@ -143,7 +143,7 @@ const dropdownItems = computed(() => {
       presetItems.push({
         label: preset.name,
         icon: 'i-heroicons-bookmark-solid',
-        click: () => loadPreset(preset)
+        onSelect: () => loadPreset(preset)
       })
     }
     items.push(presetItems)
@@ -154,7 +154,7 @@ const dropdownItems = computed(() => {
       mgmtItems.push({
         label: `Rename "${preset.name}"`,
         icon: 'i-heroicons-pencil-square',
-        click: () => {
+        onSelect: () => {
           editingPresetId.value = preset.id
           presetName.value = preset.name
           showSaveModal.value = true
@@ -163,7 +163,7 @@ const dropdownItems = computed(() => {
       mgmtItems.push({
         label: `Delete "${preset.name}"`,
         icon: 'i-heroicons-trash',
-        click: () => {
+        onSelect: () => {
           deletingPresetId.value = preset.id
           deletingPresetName.value = preset.name
           showDeleteModal.value = true
@@ -178,7 +178,7 @@ const dropdownItems = computed(() => {
     {
       label: 'Save Current View as Preset',
       icon: 'i-heroicons-plus-circle',
-      click: () => {
+      onSelect: () => {
         editingPresetId.value = null
         presetName.value = ''
         showSaveModal.value = true

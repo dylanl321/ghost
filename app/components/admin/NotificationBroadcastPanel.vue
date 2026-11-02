@@ -34,8 +34,8 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Audience</label>
           <div class="flex gap-4">
-            <URadio v-model="form.targetAudience" value="all" label="All Users" />
-            <URadio v-model="form.targetAudience" value="list" label="Specific Users" />
+            <RadioOption v-model="form.targetAudience" value="all" label="All Users" />
+            <RadioOption v-model="form.targetAudience" value="list" label="Specific Users" />
           </div>
         </div>
 
@@ -102,19 +102,19 @@
         </div>
       </template>
 
-      <UTable :data="broadcasts" :columns="historyColumns" :loading="loadingHistory" :empty-state="{ icon: 'i-heroicons-megaphone', label: 'No broadcasts sent yet' }">
-        <template #targetAudience-data="{ row }">
+      <UTable :data="broadcasts" :columns="toTableColumns(historyColumns)" :loading="loadingHistory" empty="No broadcasts sent yet">
+        <template #targetAudience-cell="{ row: { original: row } }">
           <UBadge color="neutral" variant="subtle" size="xs">{{ row.targetAudience }}</UBadge>
         </template>
-        <template #delivered-data="{ row }">
+        <template #delivered-cell="{ row: { original: row } }">
           <span class="text-sm">{{ row.deliveredCount }}/{{ row.totalCount }}</span>
         </template>
-        <template #status-data="{ row }">
+        <template #status-cell="{ row: { original: row } }">
           <UBadge :color="row.status === 'complete' ? 'green' : row.status === 'in-progress' ? 'yellow' : 'gray'" variant="subtle" size="xs">
             {{ row.status }}
           </UBadge>
         </template>
-        <template #createdAt-data="{ row }">
+        <template #createdAt-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </UTable>

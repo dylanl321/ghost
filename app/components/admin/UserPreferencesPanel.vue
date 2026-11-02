@@ -64,8 +64,11 @@
             />
           </div>
           <div class="w-full sm:w-64">
-            <USelect
+            <!-- USelectMenu: v4 USelect rejects an empty-string item value -->
+            <USelectMenu
               v-model="timezoneFilter"
+              value-key="value"
+              :search-input="false"
               :items="[{ label: 'All Timezones', value: '' }, ...timezoneOptions]"
               size="lg"
               placeholder="Filter by timezone"

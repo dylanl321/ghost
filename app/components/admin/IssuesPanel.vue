@@ -46,28 +46,28 @@
 
       <UTable
         :data="paginatedItems"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
         :loading="loading"
         class="min-w-full"
       >
-        <template #description-data="{ row }">
+        <template #description-cell="{ row: { original: row } }">
           <p class="whitespace-pre-wrap">{{ row.description }}</p>
         </template>
 
-        <template #source-data="{ row }">
+        <template #source-cell="{ row: { original: row } }">
           <UBadge :color="row.source === 'mcp-connections' ? 'amber' : 'gray'" variant="soft" size="xs">
             {{ feedbackSourceLabel(row.source) }}
           </UBadge>
         </template>
 
-        <template #resolved-data="{ row }">
+        <template #resolved-cell="{ row: { original: row } }">
           <UBadge :color="row.resolved ? 'green' : 'gray'">
             {{ row.resolved ? 'Yes' : 'No' }}
           </UBadge>
         </template>
 
         <!-- Actions column -->
-        <template #actions-data="{ row }">
+        <template #actions-cell="{ row: { original: row } }">
           <UDropdownMenu :items="getActionItems(row)">
             <UButton color="neutral" variant="ghost" icon="i-heroicons-ellipsis-vertical" />
           </UDropdownMenu>
@@ -128,8 +128,8 @@ function feedbackSourceLabel(source?: string) {
 const getActionItems = (row: any) => [
   [
     row.resolved
-      ? { label: 'Reopen Issue', icon: 'i-heroicons-arrow-path', click: () => toggleResolved(row, false) }
-      : { label: 'Mark as Resolved', icon: 'i-heroicons-check-circle', click: () => toggleResolved(row, true) }
+      ? { label: 'Reopen Issue', icon: 'i-heroicons-arrow-path', onSelect: () => toggleResolved(row, false) }
+      : { label: 'Mark as Resolved', icon: 'i-heroicons-check-circle', onSelect: () => toggleResolved(row, true) }
   ]
 ]
 

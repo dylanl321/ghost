@@ -901,24 +901,24 @@ defineExpose({
               [{
                 label: 'Detailed CSV',
                 icon: 'i-heroicons-document-text',
-                click: exportDetailed
+                onSelect: exportDetailed
               }, {
                 label: 'Summary CSV',
                 icon: 'i-heroicons-document-chart-bar',
-                click: exportSummary
+                onSelect: exportSummary
               }, {
                 label: 'Compliance CSV',
                 icon: 'i-heroicons-shield-check',
-                click: exportCompliance
+                onSelect: exportCompliance
               }],
               [{
                 label: 'JSON Export',
                 icon: 'i-heroicons-code-bracket',
-                click: exportJSON
+                onSelect: exportJSON
               }, {
                 label: 'Custom Export...',
                 icon: 'i-heroicons-cog-6-tooth',
-                click: () => showExportModal = true
+                onSelect: () => showExportModal = true
               }]
             ]" :content="{ side: 'bottom', align: 'end' }">
               <UButton 

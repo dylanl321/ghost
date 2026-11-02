@@ -320,48 +320,48 @@ const reportsMenuItems = computed(() => [[
   {
     label: 'Export as PDF',
     icon: 'i-heroicons-document',
-    click: () => handleExport('pdf'),
+    onSelect: () => handleExport('pdf'),
     disabled: isExporting.value
   },
   {
     label: 'Export as CSV',
     icon: 'i-heroicons-table-cells',
-    click: () => handleExport('csv'),
+    onSelect: () => handleExport('csv'),
     disabled: isExporting.value
   },
   {
     label: 'Export as Excel',
     icon: 'i-heroicons-document-chart-bar',
-    click: () => handleExport('xlsx'),
+    onSelect: () => handleExport('xlsx'),
     disabled: isExporting.value
   },
   {
     label: 'Export as BOM',
     icon: 'i-heroicons-document-duplicate',
-    click: () => handleBomExport(),
+    onSelect: () => handleBomExport(),
     disabled: isExporting.value
   },
   {
     label: 'Proforma vs Billable Comparison',
     icon: 'i-heroicons-scale',
-    click: () => handleProformaBillableExport(),
+    onSelect: () => handleProformaBillableExport(),
     disabled: isExporting.value
   }
 ], [
   {
     label: 'Schedule Report',
     icon: 'i-heroicons-calendar-days',
-    click: openScheduleModal
+    onSelect: openScheduleModal
   },
   {
     label: 'Generate Shareable Link',
     icon: 'i-heroicons-link',
-    click: openShareLinkModal
+    onSelect: openShareLinkModal
   },
   {
     label: 'Generate One-Time Report',
     icon: 'i-heroicons-document-arrow-down',
-    click: () => {
+    onSelect: () => {
       // Capture current page state before opening modal
       currentConfig.value = captureViewState({
         selectedAccounts: props.selectedAccounts,
@@ -388,7 +388,7 @@ const helpMenuItems = computed(() => [[
   {
     label: 'Start Guided Tour',
     icon: 'i-heroicons-sparkles',
-    click: emitStartTour
+    onSelect: emitStartTour
   },
   {
     label: 'Cost Dashboard Guide',
@@ -583,7 +583,7 @@ async function handleExport(format: ExportFormat) {
     title: 'Generating Export',
     description: `Creating ${formatLabels[format]} file...`,
     icon: 'i-heroicons-arrow-path',
-    timeout: 0,
+    duration: 0,
     id: 'export-progress'
   })
 
@@ -747,7 +747,7 @@ async function handleBomExport() {
     title: 'Generating BOM Export',
     description: `Creating ${exportType}...`,
     icon: 'i-heroicons-arrow-path',
-    timeout: 0,
+    duration: 0,
     id: 'bom-export-progress'
   })
 

@@ -38,9 +38,9 @@
       <div v-else>
         <UTable
           :data="paginatedAccounts"
-          :columns="accountTableColumns"
+          :columns="toTableColumns(accountTableColumns)"
         >
-          <template #success_rate-data="{ row }">
+          <template #success_rate-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <div class="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
                 <div class="h-full bg-green-500 rounded-full" :style="{ width: `${row.success_rate || 0}%` }" />

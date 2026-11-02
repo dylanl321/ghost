@@ -264,7 +264,7 @@ const userMenuItems = computed<UserMenuItem[][]>(() => {
     {
       label: 'Sign Out',
       icon: 'i-heroicons-arrow-right-on-rectangle',
-      click: () => logout()
+      onSelect: () => logout()
     }
   ])
 

@@ -246,7 +246,7 @@ async function saveField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {

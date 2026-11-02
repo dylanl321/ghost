@@ -7,26 +7,26 @@
       </div>
     </template>
 
-    <UTable :data="findings" :columns="columns" @select="onRowClick" class="cursor-pointer">
-      <template #severity-data="{ row }">
+    <UTable :data="findings" :columns="toTableColumns(columns)" @select="onRowClick" class="cursor-pointer">
+      <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="subtle" size="sm">
           {{ row.severity }}
         </UBadge>
       </template>
 
-      <template #title-data="{ row }">
+      <template #title-cell="{ row: { original: row } }">
         <div class="max-w-xs truncate text-sm text-gray-900 dark:text-white" :title="row.title">
           {{ row.title }}
         </div>
       </template>
 
-      <template #accountName-data="{ row }">
+      <template #accountName-cell="{ row: { original: row } }">
         <NuxtLink :to="`/account/${row.accountId}?tab=3`" class="text-sm text-primary-600 dark:text-primary-400 hover:underline" @click.stop>
           {{ row.accountName }}
         </NuxtLink>
       </template>
 
-      <template #resourceType-data="{ row }">
+      <template #resourceType-cell="{ row: { original: row } }">
         <div class="text-sm text-gray-500 dark:text-gray-400 font-mono text-xs">
           {{ shortResourceType(row.resourceType) }}
         </div>

@@ -178,27 +178,27 @@ function openDetail(issue: OAuthIssue) {
       :hide-retry="list.unavailable"
       @retry="emit('retry')"
     >
-      <UTable :data="issues" :columns="columns">
-        <template #category-data="{ row }">
+      <UTable :data="issues" :columns="toTableColumns(columns)">
+        <template #category-cell="{ row: { original: row } }">
           <div>
             <p class="text-sm font-medium capitalize text-gray-900 dark:text-white">{{ row.category.replaceAll('-', ' ') }}</p>
             <UBadge v-if="row.unverified" color="amber" variant="subtle" size="xs">Unverified cause</UBadge>
           </div>
         </template>
-        <template #severity-data="{ row }">
+        <template #severity-cell="{ row: { original: row } }">
           <UBadge :color="severityMeta(row.severity).color" variant="subtle" size="xs">{{ severityMeta(row.severity).label }}</UBadge>
         </template>
-        <template #count-data="{ row }">{{ row.count }}</template>
-        <template #affected-data="{ row }">
+        <template #count-cell="{ row: { original: row } }">{{ row.count }}</template>
+        <template #affected-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-600 dark:text-gray-400">
             {{ row.identifiedCount }} user(s) · {{ row.anonymousCount }} anon
           </span>
         </template>
-        <template #disposition-data="{ row }">
+        <template #disposition-cell="{ row: { original: row } }">
           <UBadge color="neutral" variant="subtle" size="xs">{{ dispositionLabel(row.disposition) }}</UBadge>
         </template>
-        <template #lastObservedAt-data="{ row }">{{ formatTimestamp(row.lastObservedAt) }}</template>
-        <template #actions-data="{ row }">
+        <template #lastObservedAt-cell="{ row: { original: row } }">{{ formatTimestamp(row.lastObservedAt) }}</template>
+        <template #actions-cell="{ row: { original: row } }">
           <UButton size="xs" color="neutral" variant="soft" @click="openDetail(row)">Inspect</UButton>
         </template>
       </UTable>

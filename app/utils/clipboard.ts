@@ -18,7 +18,7 @@ export async function copyToClipboard(text: string, successMessage?: string): Pr
       title: successMessage || 'Copied to clipboard',
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
 
     return true
@@ -30,7 +30,7 @@ export async function copyToClipboard(text: string, successMessage?: string): Pr
       description: 'Unable to copy to clipboard',
       icon: 'i-heroicons-x-circle',
       color: 'red',
-      timeout: 3000
+      duration: 3000
     })
 
     return false

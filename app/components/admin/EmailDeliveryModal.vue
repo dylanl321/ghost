@@ -86,10 +86,10 @@
             <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
               <UTable
                 :data="execution.emailDelivery.recipients"
-                :columns="recipientColumns"
+                :columns="toTableColumns(recipientColumns)"
               >
                 <!-- Email Column -->
-                <template #email-data="{ row }">
+                <template #email-cell="{ row: { original: row } }">
                   <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
                     <span class="text-sm text-gray-900 dark:text-white font-mono">{{ row.email }}</span>
@@ -104,7 +104,7 @@
                 </template>
 
                 <!-- Status Column -->
-                <template #status-data="{ row }">
+                <template #status-cell="{ row: { original: row } }">
                   <UBadge
                     :color="row.status === 'sent' ? 'green' : 'red'"
                     variant="soft"
@@ -115,14 +115,14 @@
                 </template>
 
                 <!-- Timestamp Column -->
-                <template #timestamp-data="{ row }">
+                <template #timestamp-cell="{ row: { original: row } }">
                   <span class="text-sm text-gray-600 dark:text-gray-400">
                     {{ formatTime(row.timestamp) }}
                   </span>
                 </template>
 
                 <!-- Error Column -->
-                <template #error-data="{ row }">
+                <template #error-cell="{ row: { original: row } }">
                   <div v-if="row.error" class="max-w-md">
                     <UTooltip :text="row.error">
                       <span class="text-sm text-red-600 dark:text-red-400 truncate cursor-help block">
@@ -304,7 +304,7 @@ function copyToClipboard(text: string, label: string = 'Text') {
       description: `${label} copied to clipboard`,
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   }).catch(() => {
     toast.add({

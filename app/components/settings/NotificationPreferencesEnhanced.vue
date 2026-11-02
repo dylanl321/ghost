@@ -288,9 +288,9 @@ const dayOptions = [
 ]
 
 const muteOptions = [[
-  { label: '1 hour', click: () => mute('1h') },
-  { label: '4 hours', click: () => mute('4h') },
-  { label: 'Until tomorrow', click: () => mute('24h') }
+  { label: '1 hour', onSelect: () => mute('1h') },
+  { label: '4 hours', onSelect: () => mute('4h') },
+  { label: 'Until tomorrow', onSelect: () => mute('24h') }
 ]]
 
 function formatMuteTime(iso: string): string {

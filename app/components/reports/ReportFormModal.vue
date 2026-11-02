@@ -112,12 +112,12 @@
 
             <UFormField label="Data Mode" required>
               <div class="flex gap-4">
-                <URadio
+                <RadioOption
                   v-model="form.reportConfig.dataMode"
                   value="billable"
                   label="Billable (Raw AWS costs)"
                 />
-                <URadio
+                <RadioOption
                   v-model="form.reportConfig.dataMode"
                   value="proforma"
                   label="Proforma (With savings plans)"
@@ -127,7 +127,7 @@
 
             <UFormField label="Report Format" required>
               <div class="grid grid-cols-2 gap-3">
-                <URadio
+                <RadioOption
                   v-for="format in formatOptions"
                   :key="format.value"
                   v-model="form.reportConfig.format"

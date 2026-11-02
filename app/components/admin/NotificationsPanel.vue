@@ -49,34 +49,34 @@
 
       <UTable
         :data="paginatedItems"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
         :loading="loading"
         class="min-w-full"
       >
-        <template #type-data="{ row }">
+        <template #type-cell="{ row: { original: row } }">
           <UBadge :color="getTypeColor(row.type)" variant="subtle">
             {{ row.type }}
           </UBadge>
         </template>
 
-        <template #status-data="{ row }">
+        <template #status-cell="{ row: { original: row } }">
           <UBadge :color="row.status === 'SENT' ? 'green' : 'red'">
             {{ row.status }}
           </UBadge>
         </template>
 
-        <template #timestamp-data="{ row }">
+        <template #timestamp-cell="{ row: { original: row } }">
           {{ formatDateTime(row.timestamp) }}
         </template>
 
-        <template #recipients-data="{ row }">
+        <template #recipients-cell="{ row: { original: row } }">
           <div class="text-sm">
             {{ row.recipients.length }} recipient{{ row.recipients.length !== 1 ? 's' : '' }}
           </div>
         </template>
 
         <!-- Actions column -->
-        <template #actions-data="{ row }">
+        <template #actions-cell="{ row: { original: row } }">
           <UButton color="neutral" variant="ghost" icon="i-heroicons-eye" @click="viewNotification(row)">
             View
           </UButton>

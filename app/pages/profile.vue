@@ -14,7 +14,7 @@
         <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
       </div>
     </template>
-    <UTabs v-model="selectedTab" :items="profileTabs" class="space-y-6">
+    <UTabs v-model="selectedTab" :items="withIndexValues(profileTabs)" class="space-y-6" :unmount-on-hide="false">
       <!-- Profile & Overview Tab -->
       <template #profile>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
@@ -164,14 +164,14 @@
           </div>
         </template>
 
-        <UAccordion :items="permissionAccordionItems" :ui="{ root: 'space-y-2' }">
-          <template #default="{ item, open }">
-            <UButton color="neutral" variant="ghost" class="w-full">
-              <template #leading>
+        <UAccordion :items="permissionAccordionItems" :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }">
+          <template #leading="{ item, open }">
                 <Icon :name="item.icon" class="w-5 h-5" />
               </template>
+          <template #default="{ item, open }">
               <span class="flex-1 text-left">{{ item.label }}</span>
-              <template #trailing>
+          </template>
+          <template #trailing="{ item, open }">
                 <UBadge color="blue" variant="soft" size="xs">
                   {{ item.count }}
                 </UBadge>
@@ -181,9 +181,7 @@
                   :class="{ 'transform rotate-180': open }"
                 />
               </template>
-            </UButton>
-          </template>
-          <template #item="{ item }">
+          <template #content="{ item }">
             <div class="space-y-1 p-3">
               <div
                 v-for="permission in item.permissions"
@@ -254,14 +252,14 @@
             </div>
           </template>
 
-          <UAccordion :items="groupAccordionItems" :ui="{ root: 'space-y-2' }">
-            <template #default="{ item, open }">
-              <UButton color="neutral" variant="ghost" class="w-full">
-                <template #leading>
+          <UAccordion :items="groupAccordionItems" default-value="0" :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }">
+            <template #leading="{ item, open }">
                   <Icon :name="item.icon" class="w-5 h-5" />
                 </template>
+            <template #default="{ item, open }">
                 <span class="flex-1 text-left">{{ item.label }}</span>
-                <template #trailing>
+            </template>
+            <template #trailing="{ item, open }">
                   <UBadge :color="item.color" variant="soft" size="xs">
                     {{ item.count }}
                   </UBadge>
@@ -271,9 +269,7 @@
                     :class="{ 'transform rotate-180': open }"
                   />
                 </template>
-              </UButton>
-            </template>
-            <template #item="{ item }">
+            <template #content="{ item }">
               <div class="flex flex-wrap gap-2 p-3">
                 <UBadge
                   v-for="group in item.groups"
@@ -952,8 +948,7 @@ const permissionAccordionItems = computed(() => {
       label: category.label,
       icon: categoryIcons[key] || 'i-heroicons-lock-closed',
       count: categoryPermissions.length,
-      permissions: categoryPermissions,
-      defaultOpen: false
+      permissions: categoryPermissions
     }
   }).filter(cat => cat.count > 0)
 
@@ -963,8 +958,7 @@ const permissionAccordionItems = computed(() => {
       label: 'All Permissions',
       icon: 'i-heroicons-lock-closed',
       count: sortedPermissions.value.length,
-      permissions: sortedPermissions.value,
-      defaultOpen: false
+      permissions: sortedPermissions.value
     }]
   }
 
@@ -982,8 +976,7 @@ const groupAccordionItems = computed(() => {
       color: 'blue',
       badgeColor: 'blue',
       count: roleGroupNames.value.length,
-      groups: roleGroupNames.value,
-      defaultOpen: true
+      groups: roleGroupNames.value
     })
   }
 
@@ -994,8 +987,7 @@ const groupAccordionItems = computed(() => {
       color: 'purple',
       badgeColor: 'purple',
       count: distributionGroupNames.value.length,
-      groups: distributionGroupNames.value,
-      defaultOpen: false
+      groups: distributionGroupNames.value
     })
   }
 

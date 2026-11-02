@@ -146,12 +146,12 @@
               Time Format
             </label>
             <div class="flex gap-4">
-              <URadio
+              <RadioOption
                 v-model="timeFormat"
                 value="12h"
                 label="12-hour (3:30 PM)"
               />
-              <URadio
+              <RadioOption
                 v-model="timeFormat"
                 value="24h"
                 label="24-hour (15:30)"

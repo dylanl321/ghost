@@ -19,22 +19,16 @@
     <div v-else>
       <UAccordion
         :items="accordionItems"
-        :ui="{ root: 'space-y-2' }"
+        :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }"
       >
-        <template #default="{ item, open }">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            class="w-full"
-            :ui="{ base: 'rounded-lg p-3' }"
-          >
-            <template #leading>
+        <template #leading="{ item, open }">
               <UIcon
                 name="i-heroicons-chevron-right"
                 class="w-5 h-5 transition-transform duration-200"
                 :class="[open && 'rotate-90']"
               />
             </template>
+        <template #default="{ item, open }">
 
             <div class="flex items-center gap-3 w-full">
               <UIcon name="i-heroicons-folder" class="text-purple-400 flex-shrink-0 w-5 h-5" />
@@ -64,10 +58,10 @@
                 </div>
               </div>
             </div>
-          </UButton>
         </template>
+        <template #trailing="{ item, open }"><span /></template>
 
-        <template #item="{ item }">
+        <template #content="{ item }">
           <div class="space-y-3 p-4 bg-gray-800/50 rounded-lg">
             <!-- Quick Stats -->
             <div class="grid grid-cols-4 gap-4 pb-3 border-b border-gray-700">
@@ -260,8 +254,7 @@ const accordionItems = computed(() => {
     pipelineSuccessRate: repo.pipelineSuccessRate,
     lastRun: repo.lastRun,
     projectUrl: repo.projectUrl,
-    slot: 'item',
-    defaultOpen: false
+    slot: 'item'
   }))
 })
 

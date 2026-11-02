@@ -83,7 +83,7 @@ export function useRecentAccounts() {
           description: `${accountName} removed from recent accounts`,
           icon: 'i-heroicons-clock',
           color: 'gray',
-          timeout: 2000
+          duration: 2000
         })
       }
 
@@ -95,7 +95,7 @@ export function useRecentAccounts() {
         description: 'Please try again',
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
       return false
     }
@@ -112,7 +112,7 @@ export function useRecentAccounts() {
           title: 'Recent accounts cleared',
           icon: 'i-heroicons-clock',
           color: 'gray',
-          timeout: 2000
+          duration: 2000
         })
       }
       return success

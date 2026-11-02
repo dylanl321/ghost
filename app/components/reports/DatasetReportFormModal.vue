@@ -247,7 +247,7 @@
                  <div class="grid grid-cols-2 gap-6 border-t border-gray-200 dark:border-gray-700 pt-6">
                    <div>
                      <div class="flex items-center gap-2 mb-4">
-                       <URadio v-model="deliveryMode" value="run_now" label="Run Immediately" />
+                       <RadioOption v-model="deliveryMode" value="run_now" label="Run Immediately" />
                        <UBadge size="xs" color="blue" variant="subtle">One-time</UBadge>
                      </div>
                      <p class="text-sm text-gray-500 ml-6 mb-2">Generate this report right now and download the results.</p>
@@ -255,7 +255,7 @@
 
                    <div>
                      <div class="flex items-center gap-2 mb-4">
-                       <URadio v-model="deliveryMode" value="schedule" label="Create Schedule" />
+                       <RadioOption v-model="deliveryMode" value="schedule" label="Create Schedule" />
                        <UBadge size="xs" color="green" variant="subtle">Recurring</UBadge>
                      </div>
                      

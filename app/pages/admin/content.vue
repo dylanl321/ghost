@@ -28,9 +28,9 @@
     <!-- Tabs -->
     <UTabs
       v-model="activeTab"
-      :items="tabs"
+      :items="withIndexValues(tabs)"
       class="mb-6"
-    />
+     :unmount-on-hide="false"/>
 
     <!-- Tab Content -->
     <div class="mt-6">

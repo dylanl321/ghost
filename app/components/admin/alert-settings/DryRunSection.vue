@@ -29,7 +29,7 @@
               size="xs"
               color="yellow"
               variant="ghost"
-              :padded="false"
+              :ui="{ base: 'p-0' }"
               @click="removeEmail(email)"
             />
           </span>
@@ -162,7 +162,7 @@ async function updateField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -204,7 +204,7 @@ async function addEmail() {
       title: 'Email Added',
       description: `${newEmail.value} added to test recipients`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     newEmail.value = ''
     showAddEmailModal.value = false
@@ -230,7 +230,7 @@ async function removeEmail(emailToRemove: string) {
       title: 'Email Removed',
       description: `${emailToRemove} removed from test recipients`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({

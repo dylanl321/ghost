@@ -148,7 +148,7 @@ onMounted(async () => {
     </UCard>
 
     <!-- Tabs -->
-    <UTabs v-else-if="instance" v-model="selectedTab" :items="tabs" class="w-full">
+    <UTabs v-else-if="instance" v-model="selectedTab" :items="withIndexValues(tabs)" class="w-full" :unmount-on-hide="false">
       <template #overview>
         <InstanceOverview
           :instance="instance"

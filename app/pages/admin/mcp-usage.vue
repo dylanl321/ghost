@@ -301,12 +301,12 @@ onMounted(load)
 
     <UCard>
       <template #header><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="panel-title">Tool performance</h2><p class="panel-subtitle">Adoption, reliability, and latency by MCP tool.</p></div><UInput v-model="toolSearch" icon="i-heroicons-magnifying-glass" placeholder="Filter tools" size="sm" class="w-full sm:w-64" /></div></template>
-      <UTable :data="filteredTools" :columns="toolColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-wrench-screwdriver', label: toolSearch ? 'No tools match this filter' : 'No tool activity in this period' }">
-        <template #tool-data="{ row }"><code class="text-xs text-emerald-700 dark:text-emerald-300">{{ shortToolName(row.tool) }}</code></template>
-        <template #successRate-data="{ row }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
-        <template #averageLatencyMs-data="{ row }">{{ formatDuration(row.averageLatencyMs) }}</template>
-        <template #errorCount-data="{ row }"><span :class="row.errorCount ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.errorCount }}</span></template>
-        <template #lastUsedAt-data="{ row }">{{ formatTimestamp(row.lastUsedAt) }}</template>
+      <UTable :data="filteredTools" :columns="toTableColumns(toolColumns)" :loading="loading" :empty="toolSearch ? 'No tools match this filter' : 'No tool activity in this period'">
+        <template #tool-cell="{ row: { original: row } }"><code class="text-xs text-emerald-700 dark:text-emerald-300">{{ shortToolName(row.tool) }}</code></template>
+        <template #successRate-cell="{ row: { original: row } }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
+        <template #averageLatencyMs-cell="{ row: { original: row } }">{{ formatDuration(row.averageLatencyMs) }}</template>
+        <template #errorCount-cell="{ row: { original: row } }"><span :class="row.errorCount ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.errorCount }}</span></template>
+        <template #lastUsedAt-cell="{ row: { original: row } }">{{ formatTimestamp(row.lastUsedAt) }}</template>
       </UTable>
     </UCard>
 
@@ -317,27 +317,27 @@ onMounted(load)
 
     <UCard>
       <template #header><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="panel-title">Attribution</h2><p class="panel-subtitle">Call volume and reliability by user, reported client, and successful backend source.</p></div><USelect v-model="breakdownView" :items="breakdownOptions" label-key="label" value-key="value" class="w-full sm:w-36" /></div></template>
-      <UTable :data="breakdownRows" :columns="breakdownColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-chart-pie', label: 'No attribution data in this period' }">
-        <template #label-data="{ row }"><div><p class="font-medium text-gray-900 dark:text-white">{{ row.label }}</p><p v-if="row.detail && row.detail !== row.label" class="text-xs text-gray-500">{{ row.detail }}</p></div></template>
-        <template #successRate-data="{ row }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
-        <template #errorCount-data="{ row }"><span :class="row.errorCount ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.errorCount }}</span></template>
-        <template #topTools-data="{ row }"><span class="block max-w-sm truncate text-xs" :title="topTools(row.topTools)">{{ topTools(row.topTools) }}</span></template>
-        <template #lastActivity-data="{ row }">{{ formatTimestamp(row.lastActivity) }}</template>
+      <UTable :data="breakdownRows" :columns="toTableColumns(breakdownColumns)" :loading="loading" empty="No attribution data in this period">
+        <template #label-cell="{ row: { original: row } }"><div><p class="font-medium text-gray-900 dark:text-white">{{ row.label }}</p><p v-if="row.detail && row.detail !== row.label" class="text-xs text-gray-500">{{ row.detail }}</p></div></template>
+        <template #successRate-cell="{ row: { original: row } }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
+        <template #errorCount-cell="{ row: { original: row } }"><span :class="row.errorCount ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.errorCount }}</span></template>
+        <template #topTools-cell="{ row: { original: row } }"><span class="block max-w-sm truncate text-xs" :title="topTools(row.topTools)">{{ topTools(row.topTools) }}</span></template>
+        <template #lastActivity-cell="{ row: { original: row } }">{{ formatTimestamp(row.lastActivity) }}</template>
       </UTable>
     </UCard>
 
     <UCard>
       <template #header><div><h2 class="panel-title">Recent activity</h2><p class="panel-subtitle">Sanitized metadata from the latest 50 tool calls.</p></div></template>
-      <UTable :data="summary?.recentActivity || []" :columns="activityColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-clock', label: 'No recent MCP activity' }">
-        <template #timestamp-data="{ row }">{{ formatTimestamp(row.timestamp) }}</template>
-        <template #user-data="{ row }"><div><p class="font-medium">{{ row.user }}</p><p class="text-xs text-gray-500">{{ row.email }}</p></div></template>
-        <template #tool-data="{ row }"><code class="text-xs">{{ shortToolName(row.tool) }}</code></template>
-        <template #client-data="{ row }"><span :title="row.clientName">{{ clientLabel(row.client) }}</span></template>
-        <template #source-data="{ row }"><span class="block max-w-40 truncate" :title="row.source">{{ row.source }}</span></template>
-        <template #status-data="{ row }"><span class="status-badge" :class="`status-${row.status}`">{{ row.status.replaceAll('_', ' ') }}</span></template>
-        <template #errorCode-data="{ row }"><code v-if="row.errorCode" class="text-xs text-red-600 dark:text-red-400">{{ row.errorCode }}</code><span v-else class="text-gray-400">-</span></template>
-        <template #errorExplanation-data="{ row }"><span v-if="row.errorExplanation" class="block max-w-xs whitespace-normal text-xs" :title="row.errorExplanation">{{ row.errorExplanation }}</span><span v-else class="text-gray-400">-</span></template>
-        <template #actions-data="{ row }"><UTooltip v-if="row.rawErrorCaptured" text="View raw error"><UButton icon="i-heroicons-code-bracket-square" color="neutral" variant="ghost" size="xs" square @click="openRawError(row)" /></UTooltip></template>
+      <UTable :data="summary?.recentActivity || []" :columns="toTableColumns(activityColumns)" :loading="loading" empty="No recent MCP activity">
+        <template #timestamp-cell="{ row: { original: row } }">{{ formatTimestamp(row.timestamp) }}</template>
+        <template #user-cell="{ row: { original: row } }"><div><p class="font-medium">{{ row.user }}</p><p class="text-xs text-gray-500">{{ row.email }}</p></div></template>
+        <template #tool-cell="{ row: { original: row } }"><code class="text-xs">{{ shortToolName(row.tool) }}</code></template>
+        <template #client-cell="{ row: { original: row } }"><span :title="row.clientName">{{ clientLabel(row.client) }}</span></template>
+        <template #source-cell="{ row: { original: row } }"><span class="block max-w-40 truncate" :title="row.source">{{ row.source }}</span></template>
+        <template #status-cell="{ row: { original: row } }"><span class="status-badge" :class="`status-${row.status}`">{{ row.status.replaceAll('_', ' ') }}</span></template>
+        <template #errorCode-cell="{ row: { original: row } }"><code v-if="row.errorCode" class="text-xs text-red-600 dark:text-red-400">{{ row.errorCode }}</code><span v-else class="text-gray-400">-</span></template>
+        <template #errorExplanation-cell="{ row: { original: row } }"><span v-if="row.errorExplanation" class="block max-w-xs whitespace-normal text-xs" :title="row.errorExplanation">{{ row.errorExplanation }}</span><span v-else class="text-gray-400">-</span></template>
+        <template #actions-cell="{ row: { original: row } }"><UTooltip v-if="row.rawErrorCaptured" text="View raw error"><UButton icon="i-heroicons-code-bracket-square" color="neutral" variant="ghost" size="xs" square @click="openRawError(row)" /></UTooltip></template>
       </UTable>
     </UCard>
 

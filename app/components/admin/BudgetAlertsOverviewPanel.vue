@@ -148,12 +148,12 @@
       <UTable
         v-else
         :data="paginatedAccounts"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
         class="min-w-full"
-        :sort="{ column: 'currentSpend', direction: 'desc' }"
+        v-model:sorting="sorting"
       >
         <!-- Account Name Column -->
-        <template #accountName-data="{ row }">
+        <template #accountName-cell="{ row: { original: row } }">
           <NuxtLink
             :to="`/account/${row.accountId}`"
             class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
@@ -163,7 +163,7 @@
         </template>
 
         <!-- Alert Status Column (OK / Exceeded) with Popover -->
-        <template #alertStatus-data="{ row }">
+        <template #alertStatus-cell="{ row: { original: row } }">
           <UPopover v-if="row.alertsThisMonth > 0 || row.hasOverspend" mode="hover">
             <div class="flex items-center gap-1.5 cursor-pointer">
               <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-400" />
@@ -209,7 +209,7 @@
         </template>
 
         <!-- Health Column -->
-        <template #health-data="{ row }">
+        <template #health-cell="{ row: { original: row } }">
           <div class="flex items-center gap-1.5">
             <UIcon
               :name="getHealthIcon(row.status)"
@@ -221,24 +221,24 @@
         </template>
 
         <!-- Budget Column -->
-        <template #budget-data="{ row }">
+        <template #budget-cell="{ row: { original: row } }">
           <span v-if="row.budget">{{ formatCurrency(row.budget, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
         <!-- Current Spend Column -->
-        <template #currentSpend-data="{ row }">
+        <template #currentSpend-cell="{ row: { original: row } }">
           <span>{{ formatCurrency(row.currentSpend, 0) }}</span>
         </template>
 
         <!-- Forecast Column -->
-        <template #forecastedSpend-data="{ row }">
+        <template #forecastedSpend-cell="{ row: { original: row } }">
           <span v-if="row.forecastedSpend">{{ formatCurrency(row.forecastedSpend, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
         <!-- Utilization Progress Bar Column -->
-        <template #budgetUtilization-data="{ row }">
+        <template #budgetUtilization-cell="{ row: { original: row } }">
           <div v-if="row.budget && row.budget > 0" class="w-24">
             <UProgress
               :model-value="Math.min(row.budgetUtilization || 0, 100)"
@@ -273,6 +273,7 @@ const emit = defineEmits<{
 
 // State
 const loading = ref(false)
+const sorting = ref([{ id: 'currentSpend', desc: true }])
 const error = ref<string | null>(null)
 const overview = ref<any>(null)
 

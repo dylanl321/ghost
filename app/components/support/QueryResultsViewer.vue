@@ -246,12 +246,12 @@ const exportMenuItems = computed(() => [
   [{
     label: 'Copy as JSON',
     icon: 'i-heroicons-clipboard-document',
-    click: () => copyToClipboard('json')
+    onSelect: () => copyToClipboard('json')
   }],
   [{
     label: 'Copy as CSV',
     icon: 'i-heroicons-table-cells',
-    click: () => copyToClipboard('csv')
+    onSelect: () => copyToClipboard('csv')
   }]
 ])
 

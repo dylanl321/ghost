@@ -37,7 +37,7 @@ export function useAccountNotes(accountId: string) {
         description: error.value,
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
     } finally {
       loading.value = false
@@ -72,7 +72,7 @@ export function useAccountNotes(accountId: string) {
           description: 'Your note has been saved',
           icon: 'i-heroicons-check-circle',
           color: 'green',
-          timeout: 3000
+          duration: 3000
         })
         
         return true
@@ -87,7 +87,7 @@ export function useAccountNotes(accountId: string) {
         description: error.value,
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
       return false
     } finally {
@@ -116,7 +116,7 @@ export function useAccountNotes(accountId: string) {
         description: 'The note has been removed',
         icon: 'i-heroicons-trash',
         color: 'gray',
-        timeout: 2000
+        duration: 2000
       })
       
       return true
@@ -128,7 +128,7 @@ export function useAccountNotes(accountId: string) {
         description: error.value,
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
       return false
     } finally {

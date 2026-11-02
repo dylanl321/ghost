@@ -51,9 +51,9 @@
       <div v-if="showAllTable" class="border-t border-gray-700 mt-4 pt-4">
         <UTable
           :data="paginatedTableRows"
-          :columns="tableColumns"
+          :columns="toTableColumns(tableColumns)"
         >
-          <template #action-data="{ row }">
+          <template #action-cell="{ row: { original: row } }">
             <UBadge
               :color="getActionColor(row.action)"
               variant="soft"

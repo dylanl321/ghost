@@ -97,7 +97,7 @@
     </div>
 
     <!-- Tabs -->
-    <UTabs v-model="selectedTab" :items="tabs" :unmount="true" data-tour="account-tabs">
+    <UTabs v-model="selectedTab" :items="withIndexValues(tabs)" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 row-auto">

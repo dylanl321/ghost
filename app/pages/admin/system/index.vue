@@ -13,7 +13,7 @@
       <p class="text-gray-600 dark:text-gray-400">Monitor system health, view logs, and manage operational concerns</p>
     </div>
 
-    <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6"  :unmount-on-hide="false"/>
 
     <div class="mt-6">
       <SystemHealthPanel v-if="activeTab === 0" />

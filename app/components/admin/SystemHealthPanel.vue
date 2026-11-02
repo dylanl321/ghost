@@ -314,7 +314,7 @@
         variant="soft"
         :title="error"
         :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
-        @close="error = null"
+        @update:open="error = null"
       />
     </div>
   </UCard>

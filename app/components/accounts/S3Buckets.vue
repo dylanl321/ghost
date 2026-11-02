@@ -70,9 +70,9 @@
 
       <!-- Buckets Table -->
       <div class="overflow-y-auto" style="max-height: 500px;">
-        <UTable :data="filteredBuckets" :columns="columns">
+        <UTable :data="filteredBuckets" :columns="toTableColumns(columns)">
           <!-- Bucket Details -->
-          <template #resourceId-data="{ row }">
+          <template #resourceId-cell="{ row: { original: row } }">
             <div class="py-2">
               <!-- Top Row: Name + Type Badge + Region + Date -->
               <div class="flex items-center gap-3 flex-wrap mb-2">

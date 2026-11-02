@@ -61,7 +61,7 @@
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
       :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
-      @close="error = null"
+      @update:open="error = null"
     >
       <template #title>Failed to Load Repository Data</template>
       <template #description>{{ error }}</template>
@@ -173,16 +173,16 @@
         <div v-if="pipelineRuns.length === 0" class="text-center py-8 text-gray-400">
           No pipeline runs found for this repository
         </div>
-        <UTable v-else :data="pipelineRuns" :columns="columns">
+        <UTable v-else :data="pipelineRuns" :columns="toTableColumns(columns)">
           <!-- Status -->
-          <template #status-data="{ row }">
+          <template #status-cell="{ row: { original: row } }">
             <UBadge :color="getStatusColor(row.status)" variant="soft" size="sm">
               {{ formatStatus(row.status) }}
             </UBadge>
           </template>
 
           <!-- Pipeline ID -->
-          <template #pipeline_id-data="{ row }">
+          <template #pipeline_id-cell="{ row: { original: row } }">
             <NuxtLink
               :to="`/admin/pipelines/${projectName}/${row.pipeline_id}`"
               class="text-blue-400 hover:text-blue-300 font-mono text-xs"
@@ -192,7 +192,7 @@
           </template>
 
           <!-- Job Name -->
-          <template #job_name-data="{ row }">
+          <template #job_name-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <span>{{ row.job_name }}</span>
               <a
@@ -208,12 +208,12 @@
           </template>
 
           <!-- Duration -->
-          <template #duration_total_seconds-data="{ row }">
+          <template #duration_total_seconds-cell="{ row: { original: row } }">
             {{ formatDuration(row.duration_total_seconds) }}
           </template>
 
           <!-- Timestamp -->
-          <template #timestamp_start-data="{ row }">
+          <template #timestamp_start-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div>{{ formatDate(row.timestamp_start) }}</div>
               <div class="text-gray-400 text-xs">{{ formatTime(row.timestamp_start) }}</div>
@@ -221,7 +221,7 @@
           </template>
 
           <!-- Account Count -->
-          <template #account_count-data="{ row }">
+          <template #account_count-cell="{ row: { original: row } }">
             <UTooltip
               v-if="row.account_count === 0"
               text="This pipeline run targeted all accounts"
@@ -236,7 +236,7 @@
           </template>
 
           <!-- Commit Author -->
-          <template #commit_author-data="{ row }">
+          <template #commit_author-cell="{ row: { original: row } }">
             <PipelinesAuthorBadge
               v-if="row.commit_author"
               :author-field="row.commit_author"

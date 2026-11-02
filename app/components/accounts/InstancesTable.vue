@@ -46,9 +46,9 @@
       No instances found
     </div>
     <div v-else class="overflow-x-auto overflow-y-auto relative" style="max-height: 600px;">
-      <UTable :data="filteredInstances" :columns="columns" :ui="{ root: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
+      <UTable :data="filteredInstances" :columns="toTableColumns(columns)" :ui="{ root: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
-      <template #instanceName-data="{ row }">
+      <template #instanceName-cell="{ row: { original: row } }">
         <NuxtLink v-if="row.resourceId" :to="`/account/${accountId}/instance/${row.resourceId}`" class="flex items-center gap-2 hover:text-primary-500 transition-colors">
           <UIcon
             :name="row.instanceState === 'running' ? 'i-heroicons-play-circle' : 'i-heroicons-stop-circle'"
@@ -68,12 +68,12 @@
       </template>
 
       <!-- Instance Type -->
-      <template #instanceType-data="{ row }">
+      <template #instanceType-cell="{ row: { original: row } }">
         <UBadge color="neutral" variant="soft">{{ row.instanceType }}</UBadge>
       </template>
 
       <!-- State -->
-      <template #instanceState-data="{ row }">
+      <template #instanceState-cell="{ row: { original: row } }">
         <UBadge
           :color="getStateColor(row.instanceState)"
           variant="soft"
@@ -83,7 +83,7 @@
       </template>
 
       <!-- Utilization -->
-      <template #utilization-data="{ row }">
+      <template #utilization-cell="{ row: { original: row } }">
         <template v-if="getUtilizationEntry(row.resourceId)">
           <UTooltip :text="getUtilizationTooltip(row.resourceId)">
             <UBadge
@@ -99,7 +99,7 @@
       </template>
 
       <!-- IP Addresses -->
-      <template #ipAddresses-data="{ row }">
+      <template #ipAddresses-cell="{ row: { original: row } }">
         <div class="text-sm space-y-1">
           <div v-if="row.networkInfo?.privateIpAddress" class="text-gray-700 dark:text-gray-300">
             <span class="text-gray-500">Private:</span> {{ row.networkInfo.privateIpAddress }}
@@ -114,7 +114,7 @@
       </template>
 
       <!-- Last State Change -->
-      <template #configurationItemCaptureTime-data="{ row }">
+      <template #configurationItemCaptureTime-cell="{ row: { original: row } }">
         <div v-if="row.configurationItemCaptureTime" class="text-sm">
           {{ formatDateOnly(row.configurationItemCaptureTime) }}
         </div>
@@ -122,7 +122,7 @@
       </template>
 
       <!-- Pricing -->
-      <template #pricing-data="{ row }">
+      <template #pricing-cell="{ row: { original: row } }">
         <div v-if="row.pricingInfo" class="text-sm">
           <div class="font-medium text-green-400">
             ${{ row.pricingInfo.monthlyEstimate?.toFixed(2) }}
@@ -135,7 +135,7 @@
       </template>
 
       <!-- Schedule -->
-      <template #schedule-data="{ row }">
+      <template #schedule-cell="{ row: { original: row } }">
         <div v-if="row.schedulingInfo?.hasSchedule" class="space-y-1 w-[180px] min-w-[180px] max-w-[180px]">
           <UTooltip v-if="row.schedulingInfo.scheduleName" :text="row.schedulingInfo.scheduleName">
             <div class="text-sm truncate">{{ row.schedulingInfo.scheduleName }}</div>
@@ -150,7 +150,7 @@
       </template>
 
       <!-- Tags -->
-      <template #tags-data="{ row }">
+      <template #tags-cell="{ row: { original: row } }">
         <div class="flex flex-wrap gap-1">
           <UBadge
             v-if="row.metadata?.tags?.SWFactory === 'true'"
@@ -190,7 +190,7 @@
       </template>
 
       <!-- Region -->
-      <template #region-data="{ row }">
+      <template #region-cell="{ row: { original: row } }">
         <div class="text-sm text-gray-600 dark:text-gray-400">{{ row.region }}</div>
       </template>
     </UTable>

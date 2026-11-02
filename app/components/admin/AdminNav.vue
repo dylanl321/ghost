@@ -40,7 +40,7 @@
               color="neutral"
               variant="link"
               icon="i-heroicons-x-mark"
-              :padded="false"
+              :ui="{ base: 'p-0' }"
               size="xs"
               @click="clearSearch"
             />

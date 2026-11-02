@@ -85,7 +85,7 @@
       />
 
       <!-- Tabbed Sections -->
-      <UTabs v-model="activeTab" :items="tabs">
+      <UTabs v-model="activeTab" :items="withIndexValues(tabs)" :unmount-on-hide="false">
         <!-- Overview Tab -->
         <template #overview>
           <div class="space-y-6 pt-4">

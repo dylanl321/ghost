@@ -731,7 +731,7 @@ function getLogActions(log: EnrichedLog) {
     actions.push([{
       label: `Filter by ${log.parsed.user}`,
       icon: 'i-heroicons-funnel',
-      click: () => {
+      onSelect: () => {
         if (!selectedUsers.value.includes(log.parsed.user!)) {
           selectedUsers.value.push(log.parsed.user!)
         }
@@ -743,14 +743,14 @@ function getLogActions(log: EnrichedLog) {
     actions.push([{
       label: 'Go to page',
       icon: 'i-heroicons-arrow-top-right-on-square',
-      click: () => navigateTo(log.parsed.path!)
+      onSelect: () => navigateTo(log.parsed.path!)
     }])
   }
 
   actions.push([{
     label: 'Copy raw message',
     icon: 'i-heroicons-clipboard-document',
-    click: () => navigator.clipboard.writeText(log.message)
+    onSelect: () => navigator.clipboard.writeText(log.message)
   }])
 
   return actions

@@ -147,7 +147,7 @@
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
       :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
-      @close="error = null"
+      @update:open="error = null"
     >
       <template #title>Failed to Load Pipeline Data</template>
       <template #description>{{ error }}</template>
@@ -241,9 +241,9 @@
         <template #header>
           <h3 class="font-semibold text-lg">Account Plans ({{ accountPlans.length }})</h3>
         </template>
-        <UTable :data="accountPlans" :columns="accountPlanColumns">
+        <UTable :data="accountPlans" :columns="toTableColumns(accountPlanColumns)">
           <!-- Account Name -->
-          <template #account_name-data="{ row }">
+          <template #account_name-cell="{ row: { original: row } }">
             <div>
               <div class="font-semibold text-white">{{ row.account_name }}</div>
               <div class="text-xs text-gray-400 font-mono">{{ row.account_id }}</div>
@@ -251,7 +251,7 @@
           </template>
 
           <!-- Changes -->
-          <template #changes_total-data="{ row }">
+          <template #changes_total-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <UBadge color="neutral" variant="subtle" size="sm">
                 {{ row.changes_total }} total
@@ -260,7 +260,7 @@
           </template>
 
           <!-- Change Details -->
-          <template #change_details-data="{ row }">
+          <template #change_details-cell="{ row: { original: row } }">
             <div class="flex gap-2 text-xs">
               <span v-if="row.changes_create > 0" class="text-green-400">+{{ row.changes_create }}</span>
               <span v-if="row.changes_update > 0" class="text-blue-400">~{{ row.changes_update }}</span>
@@ -269,7 +269,7 @@
           </template>
 
           <!-- Status -->
-          <template #plan_status-data="{ row }">
+          <template #plan_status-cell="{ row: { original: row } }">
             <UBadge
               :color="getPlanStatusColor(row.plan_status)"
               variant="soft"
@@ -280,7 +280,7 @@
           </template>
 
           <!-- Completed/Failed At -->
-          <template #completed_at-data="{ row }">
+          <template #completed_at-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div v-if="row.plan_status === 'applied' && row.applied_at" class="text-gray-300">
                 {{ formatDateTime(row.applied_at) }}
@@ -444,23 +444,23 @@
             />
           </div>
         </template>
-        <UTable :data="filteredResources" :columns="resourceColumns">
+        <UTable :data="filteredResources" :columns="toTableColumns(resourceColumns)">
           <!-- Resource Address -->
-          <template #resource_address-data="{ row }">
+          <template #resource_address-cell="{ row: { original: row } }">
             <div class="font-mono text-xs text-gray-300 max-w-md truncate" :title="row.resource_address">
               {{ row.resource_address }}
             </div>
           </template>
 
           <!-- Resource Type -->
-          <template #resource_type-data="{ row }">
+          <template #resource_type-cell="{ row: { original: row } }">
             <UBadge color="blue" variant="soft" size="xs">
               {{ row.resource_type }}
             </UBadge>
           </template>
 
           <!-- Action -->
-          <template #change_action-data="{ row }">
+          <template #change_action-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <UIcon
                 :name="getActionIcon(row.change_action)"
@@ -472,12 +472,12 @@
           </template>
 
           <!-- Module -->
-          <template #module_name-data="{ row }">
+          <template #module_name-cell="{ row: { original: row } }">
             <span class="text-sm text-gray-400">{{ row.module_name || 'root' }}</span>
           </template>
 
           <!-- Status -->
-          <template #apply_success-data="{ row }">
+          <template #apply_success-cell="{ row: { original: row } }">
             <UBadge
               v-if="row.applied"
               :color="row.apply_success ? 'green' : 'red'"

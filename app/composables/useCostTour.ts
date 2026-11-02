@@ -68,7 +68,7 @@ export function useCostTour() {
         description: 'Waiting for page to finish loading...',
         color: 'blue',
         icon: 'i-heroicons-clock',
-        timeout: 2000
+        duration: 2000
       })
 
       let attempts = 0

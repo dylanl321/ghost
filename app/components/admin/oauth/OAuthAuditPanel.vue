@@ -117,14 +117,14 @@ const columns = [
       :hide-retry="state.unavailable"
       @retry="emit('retry')"
     >
-      <UTable :data="records" :columns="columns">
-        <template #timestamp-data="{ row }">{{ formatTimestamp(row.timestamp) }}</template>
-        <template #environment-data="{ row }">
+      <UTable :data="records" :columns="toTableColumns(columns)">
+        <template #timestamp-cell="{ row: { original: row } }">{{ formatTimestamp(row.timestamp) }}</template>
+        <template #environment-cell="{ row: { original: row } }">
           <UBadge color="neutral" variant="subtle" size="xs">{{ row.deployment }}</UBadge>
         </template>
-        <template #actor-data="{ row }"><code class="text-xs">{{ row.actor }}</code></template>
-        <template #capability-data="{ row }"><code class="text-xs">{{ row.capability }}</code></template>
-        <template #reference-data="{ row }">
+        <template #actor-cell="{ row: { original: row } }"><code class="text-xs">{{ row.actor }}</code></template>
+        <template #capability-cell="{ row: { original: row } }"><code class="text-xs">{{ row.capability }}</code></template>
+        <template #reference-cell="{ row: { original: row } }">
           <div>
             <UBadge :color="referenceKindMeta(row.referenceKind).color" variant="subtle" size="xs">
               {{ referenceKindMeta(row.referenceKind).label }}
@@ -132,10 +132,10 @@ const columns = [
             <code class="ml-1 text-xs text-gray-500 dark:text-gray-400">{{ row.referenceId }}</code>
           </div>
         </template>
-        <template #outcome-data="{ row }">
+        <template #outcome-cell="{ row: { original: row } }">
           <UBadge :color="outcomeMeta(row.outcome).color" variant="subtle" size="xs">{{ outcomeMeta(row.outcome).label }}</UBadge>
         </template>
-        <template #changes-data="{ row }">
+        <template #changes-cell="{ row: { original: row } }">
           <div class="space-y-1">
             <div v-if="changedFields(row).length" class="flex flex-wrap gap-1">
               <UBadge
@@ -157,7 +157,7 @@ const columns = [
             <span v-if="!changedFields(row).length && !evidenceEntries(row).length" class="text-xs text-gray-400">—</span>
           </div>
         </template>
-        <template #reason-data="{ row }">
+        <template #reason-cell="{ row: { original: row } }">
           <span class="block max-w-xs truncate text-xs text-gray-600 dark:text-gray-400" :title="row.reason">{{ row.reason || '—' }}</span>
         </template>
       </UTable>

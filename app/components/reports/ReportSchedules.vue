@@ -285,12 +285,12 @@ function getDropdownItems(report: ScheduledReport) {
     [{
       label: 'View History',
       icon: 'i-heroicons-clock',
-      click: () => emit('view-history', report)
+      onSelect: () => emit('view-history', report)
     }],
     [{
       label: 'Delete',
       icon: 'i-heroicons-trash',
-      click: () => emit('delete', report)
+      onSelect: () => emit('delete', report)
     }]
   ]
 }

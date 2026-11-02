@@ -36,17 +36,17 @@
     <UTable
       v-else
       :data="alerts"
-      :columns="columns"
+      :columns="toTableColumns(columns)"
       class="min-w-full"
       :ui="{ td: 'py-2' }"
     >
       <!-- Date Column -->
-      <template #created_at-data="{ row }">
+      <template #created_at-cell="{ row: { original: row } }">
         <span class="text-sm">{{ formatShortDateTime(row.created_at) }}</span>
       </template>
 
       <!-- Account Column -->
-      <template #account_name-data="{ row }">
+      <template #account_name-cell="{ row: { original: row } }">
         <NuxtLink
           :to="`/account/${row.account_id}`"
           class="text-sm text-blue-400 hover:text-blue-300 hover:underline truncate block max-w-[150px]"
@@ -57,21 +57,21 @@
       </template>
 
       <!-- Level Column -->
-      <template #alert_level-data="{ row }">
+      <template #alert_level-cell="{ row: { original: row } }">
         <UBadge :color="getLevelColor(row.alert_level)" variant="subtle" size="xs">
           {{ row.alert_level }}
         </UBadge>
       </template>
 
       <!-- Type Column -->
-      <template #alert_type-data="{ row }">
+      <template #alert_type-cell="{ row: { original: row } }">
         <UBadge :color="getTypeColor(row.alert_type)" variant="subtle" size="xs">
           {{ row.alert_type }}
         </UBadge>
       </template>
 
       <!-- Spend/Budget Column -->
-      <template #overspend-data="{ row }">
+      <template #overspend-cell="{ row: { original: row } }">
         <span v-if="row.overspend_amount" class="text-red-400 font-medium text-sm">
           +{{ formatCurrency(row.overspend_amount, 0) }} over
         </span>
@@ -81,14 +81,14 @@
       </template>
 
       <!-- Status Column -->
-      <template #delivery_status-data="{ row }">
+      <template #delivery_status-cell="{ row: { original: row } }">
         <UBadge :color="getStatusColor(row.delivery_status)" variant="subtle" size="xs">
           {{ row.delivery_status }}
         </UBadge>
       </template>
 
       <!-- Actions Column -->
-      <template #actions-data="{ row }">
+      <template #actions-cell="{ row: { original: row } }">
         <UButton
           v-if="row.email_body_s3_uri"
           color="neutral"

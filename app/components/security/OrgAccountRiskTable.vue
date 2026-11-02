@@ -9,28 +9,28 @@
 
     <UTable
       :data="sortedAccounts"
-      :columns="columns"
+      :columns="toTableColumns(columns)"
       @select="onRowClick"
       class="cursor-pointer"
     >
-      <template #accountName-data="{ row }">
+      <template #accountName-cell="{ row: { original: row } }">
         <div class="font-medium text-gray-900 dark:text-white">{{ row.accountName }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">{{ row.accountId }}</div>
       </template>
 
-      <template #riskScore-data="{ row }">
+      <template #riskScore-cell="{ row: { original: row } }">
         <UBadge :color="riskColor(row.riskLevel)" variant="subtle" size="sm">
           {{ row.riskScore }} &mdash; {{ row.riskLevel }}
         </UBadge>
       </template>
 
-      <template #criticalCount-data="{ row }">
+      <template #criticalCount-cell="{ row: { original: row } }">
         <span :class="row.criticalCount > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-400'">
           {{ row.criticalCount }}
         </span>
       </template>
 
-      <template #highCount-data="{ row }">
+      <template #highCount-cell="{ row: { original: row } }">
         <span :class="row.highCount > 0 ? 'text-orange-600 dark:text-orange-400 font-semibold' : 'text-gray-500 dark:text-gray-400'">
           {{ row.highCount }}
         </span>

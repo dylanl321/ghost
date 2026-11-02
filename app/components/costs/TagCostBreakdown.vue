@@ -421,7 +421,7 @@ async function copyValue(value: string) {
       description: value.length > 60 ? `${value.substring(0, 60)}...` : value,
       icon: 'i-heroicons-clipboard-document-check',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch {
     // Fallback for older browsers

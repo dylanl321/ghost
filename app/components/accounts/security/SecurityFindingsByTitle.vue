@@ -3,18 +3,18 @@
     <UTable
       v-if="groups.length > 0"
       :data="paginatedRows"
-      :columns="columns"
+      :columns="toTableColumns(columns)"
       :ui="{ td: 'text-xs', th: 'text-xs' }"
     >
-      <template #title-data="{ row }">
+      <template #title-cell="{ row: { original: row } }">
         <span class="line-clamp-2">{{ row.title }}</span>
       </template>
-      <template #severity-data="{ row }">
+      <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="soft" size="xs">
           {{ row.severity }}
         </UBadge>
       </template>
-      <template #productName-data="{ row }">
+      <template #productName-cell="{ row: { original: row } }">
         <span class="text-gray-600 dark:text-gray-400">{{ row.productName }}</span>
       </template>
     </UTable>

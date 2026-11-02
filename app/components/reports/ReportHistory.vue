@@ -467,12 +467,12 @@ function getDropdownItems(report: ScheduledReport) {
     [{
       label: 'Clone Configuration',
       icon: 'i-heroicons-document-duplicate',
-      click: () => logger.info('Clone:', report.reportId)
+      onSelect: () => logger.info('Clone:', report.reportId)
     }],
     [{
       label: 'View Logs',
       icon: 'i-heroicons-document-text',
-      click: () => logger.info('View logs:', report.reportId)
+      onSelect: () => logger.info('View logs:', report.reportId)
     }]
   ]
 }

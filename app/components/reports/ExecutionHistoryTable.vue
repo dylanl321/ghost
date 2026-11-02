@@ -43,11 +43,11 @@
     <div v-else-if="executions.length > 0" class="overflow-x-auto">
       <UTable
         :data="executions"
-        :columns="columns"
+        :columns="toTableColumns(columns)"
         :loading="loading"
       >
         <!-- Status Column -->
-        <template #status-data="{ row }">
+        <template #status-cell="{ row: { original: row } }">
           <div class="flex items-center gap-2">
             <div :class="['w-2 h-2 rounded-full', statusColor(row.status)]"></div>
             <UBadge
@@ -61,7 +61,7 @@
         </template>
 
         <!-- Execution Time Column -->
-        <template #executionTime-data="{ row }">
+        <template #executionTime-cell="{ row: { original: row } }">
           <div class="text-sm">
             <div class="text-gray-900 dark:text-white">
               {{ formatShortDateTime(row.executionTime) }}
@@ -73,7 +73,7 @@
         </template>
 
         <!-- Duration Column -->
-        <template #duration-data="{ row }">
+        <template #duration-cell="{ row: { original: row } }">
           <span v-if="row.duration" class="text-sm text-gray-700 dark:text-gray-300">
             {{ formatDurationMs(row.duration) }}
           </span>
@@ -81,7 +81,7 @@
         </template>
 
         <!-- Emails Column -->
-        <template #emails-data="{ row }">
+        <template #emails-cell="{ row: { original: row } }">
           <div class="text-sm">
             <span v-if="row.emailsSent || row.emailsFailed" class="text-gray-700 dark:text-gray-300">
               <span class="text-green-600 dark:text-green-400">{{ row.emailsSent || 0 }}</span>
@@ -94,7 +94,7 @@
         </template>
 
         <!-- Error Column -->
-        <template #error-data="{ row }">
+        <template #error-cell="{ row: { original: row } }">
           <div v-if="row.error" class="max-w-xs">
             <UTooltip :text="row.error" class="cursor-help">
               <div class="text-sm text-red-600 dark:text-red-400 truncate">
@@ -106,7 +106,7 @@
         </template>
 
         <!-- Actions Column -->
-        <template #actions-data="{ row }">
+        <template #actions-cell="{ row: { original: row } }">
           <div class="flex items-center gap-1">
             <UButton
               v-if="row.s3Url"

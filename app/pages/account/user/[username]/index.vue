@@ -399,7 +399,7 @@ const updateBreadcrumbs = () => {
                       [{
                         label: 'Share Profile',
                         icon: 'i-heroicons-share',
-                        click: () => {} // UserShareButton functionality would go here
+                        onSelect: () => {} // UserShareButton functionality would go here
                       }]
                     ]">
                       <UButton icon="i-heroicons-ellipsis-horizontal" variant="outline" size="sm">
@@ -527,20 +527,20 @@ const updateBreadcrumbs = () => {
             [{
               label: 'Detailed CSV',
               icon: 'i-heroicons-document-text',
-              click: () => userAccessRef?.exportDetailed()
+              onSelect: () => userAccessRef?.exportDetailed()
             }, {
               label: 'Summary CSV',
               icon: 'i-heroicons-document-chart-bar',
-              click: () => userAccessRef?.exportSummary()
+              onSelect: () => userAccessRef?.exportSummary()
             }],
             [{
               label: 'JSON Export',
               icon: 'i-heroicons-code-bracket',
-              click: () => userAccessRef?.exportJSON()
+              onSelect: () => userAccessRef?.exportJSON()
             }, {
               label: 'User CSV',
               icon: 'i-heroicons-user',
-              click: handleExportCSV
+              onSelect: handleExportCSV
             }]
           ]" :content="{ side: 'bottom', align: 'end' }">
             <UButton

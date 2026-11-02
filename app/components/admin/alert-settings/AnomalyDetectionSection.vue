@@ -200,7 +200,7 @@ async function updateAnomalyField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -245,7 +245,7 @@ async function saveAnomalyField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {
@@ -267,7 +267,7 @@ async function updateStandaloneField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -322,7 +322,7 @@ async function saveStandaloneField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {

@@ -454,30 +454,30 @@
           <div class="overflow-x-auto">
             <UTable
               :data="loginEvents.slice(0, 50)"
-              :columns="[
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'sourceIPAddress', label: 'Source IP' },
                 { key: 'userAgent', label: 'User Agent' },
                 { key: 'status', label: 'Status' }
-              ]"
+              ])"
               class="w-full min-w-[800px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #sourceIPAddress-data="{ row }">
+              <template #sourceIPAddress-cell="{ row: { original: row } }">
                 <span class="text-sm text-blue-400 font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
               </template>
-              <template #userAgent-data="{ row }">
+              <template #userAgent-cell="{ row: { original: row } }">
                 <span class="text-xs text-gray-400 truncate max-w-[200px] block" :title="row.userAgent">
                   {{ row.userAgent || 'N/A' }}
                 </span>
               </template>
-              <template #status-data="{ row }">
+              <template #status-cell="{ row: { original: row } }">
                 <UBadge
                   :color="row.errorCode ? 'red' : 'green'"
                   variant="subtle"
@@ -607,25 +607,25 @@
           </template>
           <UTable
             :data="serviceAnalytics.topServices"
-            :columns="[
+            :columns="toTableColumns([
               { key: 'name', label: 'Service', sortable: true },
               { key: 'count', label: 'API Calls', sortable: true },
               { key: 'errors', label: 'Errors', sortable: true },
               { key: 'errorRate', label: 'Error Rate', sortable: true },
               { key: 'lastUsed', label: 'Last Used', sortable: true }
-            ]"
+            ])"
             class="w-full overflow-x-auto"
           >
-            <template #name-data="{ row }">
+            <template #name-cell="{ row: { original: row } }">
               <span class="font-medium text-white">{{ row.name }}</span>
             </template>
-            <template #count-data="{ row }">
+            <template #count-cell="{ row: { original: row } }">
               <span class="text-blue-400 font-medium">{{ row.count.toLocaleString() }}</span>
             </template>
-            <template #errors-data="{ row }">
+            <template #errors-cell="{ row: { original: row } }">
               <span :class="row.errors > 0 ? 'text-red-400' : 'text-gray-400'">{{ row.errors }}</span>
             </template>
-            <template #errorRate-data="{ row }">
+            <template #errorRate-cell="{ row: { original: row } }">
               <UBadge
                 :color="row.errorRate > 10 ? 'red' : row.errorRate > 5 ? 'yellow' : 'green'"
                 variant="subtle"
@@ -634,7 +634,7 @@
                 {{ row.errorRate }}%
               </UBadge>
             </template>
-            <template #lastUsed-data="{ row }">
+            <template #lastUsed-cell="{ row: { original: row } }">
               <span class="text-sm text-gray-400">{{ formatTimeAgo(row.lastUsed) }}</span>
             </template>
           </UTable>
@@ -759,28 +759,28 @@
           <div class="overflow-x-auto">
             <UTable
               :data="securityEvents.slice(0, 50)"
-              :columns="[
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'sourceIPAddress', label: 'Source IP' },
                 { key: 'errorCode', label: 'Error Code' },
                 { key: 'riskLevel', label: 'Risk Level' }
-              ]"
+              ])"
               class="w-full min-w-[700px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #sourceIPAddress-data="{ row }">
+              <template #sourceIPAddress-cell="{ row: { original: row } }">
                 <span class="text-sm text-blue-400 font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
               </template>
-              <template #errorCode-data="{ row }">
+              <template #errorCode-cell="{ row: { original: row } }">
                 <span class="text-sm text-red-400">{{ row.errorCode || 'None' }}</span>
               </template>
-              <template #riskLevel-data="{ row }">
+              <template #riskLevel-cell="{ row: { original: row } }">
                 <UBadge
                   :color="getRiskColor(row) as any"
                   variant="subtle"
@@ -888,28 +888,28 @@
           <div class="overflow-x-auto">
             <UTable
               :data="complianceEvents.slice(0, 100)"
-              :columns="[
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'eventSource', label: 'Service', sortable: true },
                 { key: 'awsRegion', label: 'Region' },
                 { key: 'complianceCategory', label: 'Category' }
-              ]"
+              ])"
               class="w-full min-w-[700px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #eventSource-data="{ row }">
+              <template #eventSource-cell="{ row: { original: row } }">
                 <span class="text-blue-400 text-sm">{{ getCleanServiceName(row.eventSource) }}</span>
               </template>
-              <template #awsRegion-data="{ row }">
+              <template #awsRegion-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-400">{{ row.awsRegion || 'N/A' }}</span>
               </template>
-              <template #complianceCategory-data="{ row }">
+              <template #complianceCategory-cell="{ row: { original: row } }">
                 <UBadge
                   :color="getComplianceColor(row) as any"
                   variant="subtle"
@@ -926,30 +926,30 @@
         <div class="overflow-x-auto">
           <UTable 
             :data="complianceEvents" 
-            :columns="[
+            :columns="toTableColumns([
               { key: 'eventTime', label: 'Time', sortable: true },
               { key: 'eventName', label: 'Event', sortable: true },
               { key: 'eventSource', label: 'Service', sortable: true },
               { key: 'category', label: 'Category', sortable: true },
               { key: 'sourceIPAddress', label: 'IP Address', sortable: true }
-            ]"
+            ])"
             class="w-full min-w-[700px]"
           >
-            <template #eventTime-data="{ row }">
+            <template #eventTime-cell="{ row: { original: row } }">
               <span class="whitespace-nowrap text-sm">{{ formatTimeAgo(row.eventTime) }}</span>
             </template>
-            <template #eventName-data="{ row }">
+            <template #eventName-cell="{ row: { original: row } }">
               <span class="truncate max-w-[200px] block">{{ row.eventName }}</span>
             </template>
-            <template #eventSource-data="{ row }">
+            <template #eventSource-cell="{ row: { original: row } }">
               <span class="text-sm">{{ getCleanServiceName(row.eventSource) }}</span>
             </template>
-            <template #category-data="{ row }">
+            <template #category-cell="{ row: { original: row } }">
               <UBadge :color="getComplianceColor(getComplianceCategory(row.eventName)) as any" variant="subtle">
                 {{ getComplianceCategory(row.eventName) }}
               </UBadge>
             </template>
-            <template #sourceIPAddress-data="{ row }">
+            <template #sourceIPAddress-cell="{ row: { original: row } }">
               <span class="text-sm font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
             </template>
           </UTable>

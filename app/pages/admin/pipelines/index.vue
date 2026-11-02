@@ -71,7 +71,7 @@
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
       :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
-      @close="error = null"
+      @update:open="error = null"
     >
       <template #title>Failed to Load Pipeline Data</template>
       <template #description>{{ error }}</template>

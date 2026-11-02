@@ -55,30 +55,30 @@
     <UTable
       v-else
       :data="filteredAlerts"
-      :columns="columns"
+      :columns="toTableColumns(columns)"
       class="min-w-full"
     >
       <!-- Date Column -->
-      <template #created_at-data="{ row }">
+      <template #created_at-cell="{ row: { original: row } }">
         {{ formatDateTime(row.created_at) }}
       </template>
 
       <!-- Level Column -->
-      <template #alert_level-data="{ row }">
+      <template #alert_level-cell="{ row: { original: row } }">
         <UBadge :color="getLevelColor(row.alert_level)" variant="subtle">
           {{ row.alert_level }}
         </UBadge>
       </template>
 
       <!-- Type Column -->
-      <template #alert_type-data="{ row }">
+      <template #alert_type-cell="{ row: { original: row } }">
         <UBadge :color="getTypeColor(row.alert_type)" variant="subtle">
           {{ row.alert_type }}
         </UBadge>
       </template>
 
       <!-- Overspend Column -->
-      <template #overspend-data="{ row }">
+      <template #overspend-cell="{ row: { original: row } }">
         <span v-if="row.overspend_amount" class="text-red-400 font-medium">
           +{{ formatCurrency(row.overspend_amount, 0) }}
         </span>
@@ -88,14 +88,14 @@
       </template>
 
       <!-- Status Column -->
-      <template #delivery_status-data="{ row }">
+      <template #delivery_status-cell="{ row: { original: row } }">
         <UBadge :color="getStatusColor(row.delivery_status)" variant="subtle">
           {{ row.delivery_status }}
         </UBadge>
       </template>
 
       <!-- Actions Column -->
-      <template #actions-data="{ row }">
+      <template #actions-cell="{ row: { original: row } }">
         <UButton
           v-if="row.email_body_s3_uri"
           color="neutral"
