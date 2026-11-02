@@ -103,7 +103,7 @@
               </div>
               <UButton
                 size="xs"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 icon="i-heroicons-globe-alt"
                 :loading="crossAccountLoading === idx"
@@ -137,8 +137,8 @@
         <!-- Error pagination -->
         <div v-if="healthData.recurringErrors.length > errorPageSize" class="flex justify-end mt-3">
           <UPagination
-            v-model="errorPage"
-            :page-count="errorPageSize"
+            v-model:page="errorPage"
+            :items-per-page="errorPageSize"
             :total="healthData.recurringErrors.length"
           />
         </div>

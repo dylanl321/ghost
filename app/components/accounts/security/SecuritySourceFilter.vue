@@ -1,5 +1,5 @@
 <template>
-  <UButtonGroup size="sm">
+  <UFieldGroup size="sm">
     <UButton
       v-for="opt in options"
       :key="opt.value"
@@ -9,7 +9,7 @@
     >
       {{ opt.label }}
     </UButton>
-  </UButtonGroup>
+  </UFieldGroup>
 </template>
 
 <script setup lang="ts">

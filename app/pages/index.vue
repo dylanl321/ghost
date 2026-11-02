@@ -106,14 +106,14 @@
           </template>
         </ClientOnly>
 
-        <UPopover v-model:open="showSpotlight" :popper="{ placement: 'bottom-end' }" :disabled="customizeDashboardSeen">
+        <UPopover v-model:open="showSpotlight" :content="{ side: 'bottom', align: 'end' }" :disabled="customizeDashboardSeen">
           <UTooltip text="Customize dashboard">
             <div class="relative" @click.capture="handleCustomizeClick">
               <UButton
                 icon="i-heroicons-cog-6-tooth"
                 size="xs"
                 variant="ghost"
-                color="gray"
+                color="neutral"
               />
               <span v-if="!customizeDashboardSeen"
                 class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -122,7 +122,7 @@
               </span>
             </div>
           </UTooltip>
-          <template #panel>
+          <template #content>
             <div class="p-3 max-w-xs">
               <p class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Customize Your Dashboard</p>
               <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
@@ -130,7 +130,7 @@
               </p>
               <div class="flex gap-2">
                 <UButton size="xs" color="primary" @click="handleSpotlightTryIt">Try it</UButton>
-                <UButton size="xs" variant="ghost" color="gray" @click="handleSpotlightDismiss">Dismiss</UButton>
+                <UButton size="xs" variant="ghost" color="neutral" @click="handleSpotlightDismiss">Dismiss</UButton>
               </div>
             </div>
           </template>

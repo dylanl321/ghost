@@ -9,7 +9,7 @@
           </UBadge>
         </div>
         <UButton
-          color="gray"
+          color="neutral"
           variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="loading"
@@ -35,10 +35,10 @@
     <!-- Alerts Table -->
     <UTable
       v-else
-      :rows="alerts"
+      :data="alerts"
       :columns="columns"
       class="min-w-full"
-      :ui="{ td: { base: 'py-2' } }"
+      :ui="{ td: 'py-2' }"
     >
       <!-- Date Column -->
       <template #created_at-data="{ row }">
@@ -91,7 +91,7 @@
       <template #actions-data="{ row }">
         <UButton
           v-if="row.email_body_s3_uri"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="xs"
           icon="i-heroicons-envelope"
@@ -104,43 +104,45 @@
     </UTable>
 
     <!-- Email Preview Slideover -->
-    <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex flex-col h-full">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="showEmailModal = false"
-          />
-        </div>
-
-        <!-- Loading -->
-        <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
-        </div>
-
-        <!-- Email Content -->
-        <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
-          <div class="bg-white rounded-lg h-full">
-            <iframe
-              :srcdoc="emailHtml"
-              class="w-full h-full rounded-lg"
-              sandbox="allow-same-origin"
+    <USlideover v-model:open="showEmailModal" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex flex-col h-full">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
+              <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="showEmailModal = false"
             />
           </div>
-        </div>
 
-        <!-- Error State -->
-        <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          <!-- Loading -->
+          <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+          </div>
+
+          <!-- Email Content -->
+          <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
+            <div class="bg-white rounded-lg h-full">
+              <iframe
+                :srcdoc="emailHtml"
+                class="w-full h-full rounded-lg"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div v-else class="flex-1 flex items-center justify-center">
+            <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </UCard>
 </template>

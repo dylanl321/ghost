@@ -5,10 +5,10 @@
       <label class="text-xs font-medium text-gray-400">AWS Roles</label>
       <USelectMenu
         v-model="selectedRoles"
-        :options="roleOptions"
+        :items="roleOptions"
         :loading="optionsLoading"
         multiple
-        searchable
+       
         placeholder="All roles..."
         size="sm"
         class="w-full"
@@ -45,10 +45,10 @@
         <label class="text-xs text-gray-500">Signed in within</label>
         <USelectMenu
           v-model="selectedLookbackDays"
-          :options="lookbackOptions"
+          :items="lookbackOptions"
           size="sm"
           class="w-full"
-        />
+         :search-input="false"/>
       </div>
     </div>
 
@@ -57,10 +57,10 @@
       <label class="text-xs font-medium text-gray-400">Departments</label>
       <USelectMenu
         v-model="selectedDepartments"
-        :options="departmentOptions"
+        :items="departmentOptions"
         :loading="optionsLoading"
         multiple
-        searchable
+       
         placeholder="All departments..."
         size="sm"
         class="w-full"
@@ -79,7 +79,7 @@
       <div class="flex flex-wrap gap-2">
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-shield-check"
           @click="setAdminUsers"
@@ -88,7 +88,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-clock"
           @click="setInactiveUsers"
@@ -97,7 +97,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-arrow-path"
           @click="clearFilters"

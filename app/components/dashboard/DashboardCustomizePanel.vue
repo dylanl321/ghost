@@ -19,7 +19,7 @@
           <UIcon name="i-heroicons-cog-6-tooth" class="w-5 h-5 text-gray-500" />
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Customize Dashboard</h2>
         </div>
-        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="gray" @click="isOpen = false" />
+        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="isOpen = false" />
       </div>
 
       <!-- Content -->
@@ -65,7 +65,7 @@
               </div>
 
               <!-- Visibility toggle -->
-              <UToggle
+              <USwitch
                 :model-value="section.visible"
                 size="sm"
                 @update:model-value="toggleSection(section.id)"
@@ -84,7 +84,7 @@
               class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
             >
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ METRIC_CARD_LABELS[cardId] }}</span>
-              <UToggle
+              <USwitch
                 :model-value="isMetricCardVisible(cardId)"
                 size="sm"
                 @update:model-value="toggleMetricCard(cardId)"
@@ -119,7 +119,7 @@
         <UButton
           label="Reset to Default"
           variant="ghost"
-          color="gray"
+          color="neutral"
           size="sm"
           icon="i-heroicons-arrow-path"
           block

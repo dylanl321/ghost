@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
       <div class="beta-notice">
         <UIcon name="i-heroicons-beaker" aria-hidden="true" />
         <span>Features may change, and connections may occasionally fail.</span>
-        <UButton icon="i-heroicons-chat-bubble-left-right" color="gray" variant="link" size="xs" @click="provideFeedback">Provide feedback</UButton>
+        <UButton icon="i-heroicons-chat-bubble-left-right" color="neutral" variant="link" size="xs" @click="provideFeedback">Provide feedback</UButton>
       </div>
     </header>
 
@@ -302,24 +302,24 @@ onBeforeUnmount(() => {
               @focusout="handlePromptFocusOut"
             >
               <div class="prompt-toolbar">
-                <UFormGroup label="Question category" class="prompt-category">
+                <UFormField label="Question category" class="prompt-category">
                   <USelect
                     v-model="selectedPromptCategory"
-                    :options="promptCategoryOptions"
-                    option-attribute="label"
-                    value-attribute="value"
+                    :items="promptCategoryOptions"
+                    label-key="label"
+                    value-key="value"
                     size="sm"
                   />
-                </UFormGroup>
+                </UFormField>
                 <div class="prompt-controls" role="group" aria-label="Example question controls">
                   <UTooltip text="Previous example">
-                    <UButton icon="i-heroicons-chevron-left" color="gray" variant="ghost" size="xs" square aria-label="Previous example" @click="showRelativePrompt(-1)" />
+                    <UButton icon="i-heroicons-chevron-left" color="neutral" variant="ghost" size="xs" square aria-label="Previous example" @click="showRelativePrompt(-1)" />
                   </UTooltip>
                   <UTooltip :text="prefersReducedMotion ? 'Automatic examples disabled by reduced motion setting' : promptRotationPaused ? 'Resume automatic examples' : 'Pause automatic examples'">
-                    <UButton :icon="promptRotationPaused ? 'i-heroicons-play' : 'i-heroicons-pause'" color="gray" variant="ghost" size="xs" square :disabled="prefersReducedMotion" :aria-label="prefersReducedMotion ? 'Automatic examples disabled by reduced motion setting' : promptRotationPaused ? 'Resume automatic examples' : 'Pause automatic examples'" @click="togglePromptRotation" />
+                    <UButton :icon="promptRotationPaused ? 'i-heroicons-play' : 'i-heroicons-pause'" color="neutral" variant="ghost" size="xs" square :disabled="prefersReducedMotion" :aria-label="prefersReducedMotion ? 'Automatic examples disabled by reduced motion setting' : promptRotationPaused ? 'Resume automatic examples' : 'Pause automatic examples'" @click="togglePromptRotation" />
                   </UTooltip>
                   <UTooltip text="Next example">
-                    <UButton icon="i-heroicons-chevron-right" color="gray" variant="ghost" size="xs" square aria-label="Next example" @click="showRelativePrompt(1)" />
+                    <UButton icon="i-heroicons-chevron-right" color="neutral" variant="ghost" size="xs" square aria-label="Next example" @click="showRelativePrompt(1)" />
                   </UTooltip>
                 </div>
               </div>
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
                     <blockquote :key="examplePrompt">{{ examplePrompt }}</blockquote>
                   </Transition>
                 </div>
-                <UButton :icon="isCopied(examplePrompt) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="gray" variant="soft" @click="copy(examplePrompt, 'Example prompt')">{{ isCopied(examplePrompt) ? 'Copied' : 'Copy example' }}</UButton>
+                <UButton :icon="isCopied(examplePrompt) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="neutral" variant="soft" @click="copy(examplePrompt, 'Example prompt')">{{ isCopied(examplePrompt) ? 'Copied' : 'Copy example' }}</UButton>
               </div>
             </div>
           </div>
@@ -358,8 +358,8 @@ onBeforeUnmount(() => {
       <details class="advanced-section">
         <summary><span>Help, capabilities, and manual configuration</span><UIcon name="i-heroicons-chevron-down" /></summary>
         <div class="advanced-links">
-          <UButton to="/support/docs?topic=mcp-connections-guide" icon="i-heroicons-lifebuoy" color="gray" variant="ghost">Help and troubleshooting</UButton>
-          <UButton to="/mcp-connections/details" icon="i-heroicons-command-line" color="gray" variant="ghost">View capabilities</UButton>
+          <UButton to="/support/docs?topic=mcp-connections-guide" icon="i-heroicons-lifebuoy" color="neutral" variant="ghost">Help and troubleshooting</UButton>
+          <UButton to="/mcp-connections/details" icon="i-heroicons-command-line" color="neutral" variant="ghost">View capabilities</UButton>
         </div>
         <div v-if="config" class="advanced-content">
           <section><h3>Reconnect GHOST</h3><p class="advanced-copy">Authorizations last 90 days. If Codex reports that reauthentication is required, authenticate the GHOST connection in MCP settings or run these commands.</p><div class="command-list"><CommandBlock :value="config.codex.resetCommands[0]" label="Logout command" wrap :copied="isCopied(config.codex.resetCommands[0])" @copy="copy(config.codex.resetCommands[0], 'Logout command')" /><CommandBlock :value="config.codex.loginCommand" label="Login command" wrap :copied="isCopied(config.codex.loginCommand)" @copy="copy(config.codex.loginCommand, 'Login command')" /></div></section>

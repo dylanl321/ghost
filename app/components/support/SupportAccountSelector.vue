@@ -1,16 +1,16 @@
 <template>
   <USelectMenu
     v-model="selectedAccount"
-    :options="filteredAccounts"
+    :items="filteredAccounts"
     :loading="!isReady"
-    searchable
-    searchable-placeholder="Search accounts..."
+   
+   
     :placeholder="placeholder"
-    :search-attributes="['label', 'name', 'value']"
-    value-attribute="value"
+    :filter-fields="['label', 'name', 'value']"
+    value-key="value"
     class="w-full"
     :disabled="disabled"
-  >
+   :search-input="{ placeholder: 'Search accounts...' }">
     <template #label>
       <span v-if="!isReady" class="text-gray-500">Loading accounts...</span>
       <span v-else-if="selectedAccountData" class="flex items-center gap-2 min-w-0">

@@ -22,7 +22,7 @@
         >
           {{ role.name }}
         </UBadge>
-        <UBadge v-if="userRoles.length === 0" color="gray" variant="soft" size="sm">
+        <UBadge v-if="userRoles.length === 0" color="neutral" variant="soft" size="sm">
           No roles assigned
         </UBadge>
       </div>
@@ -58,7 +58,7 @@
             :key="group"
             size="xs"
             variant="outline"
-            color="gray"
+            color="neutral"
           >
             {{ group }}
           </UBadge>

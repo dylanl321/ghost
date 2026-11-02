@@ -261,10 +261,10 @@ onMounted(load)
       <div class="flex items-center gap-2">
         <div v-if="summary" class="mr-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
           <span>Raw errors</span>
-          <UToggle :model-value="summary.rawErrorsEnabled" :disabled="savingRawErrors" @update:model-value="updateRawErrorCapture" />
+          <USwitch :model-value="summary.rawErrorsEnabled" :disabled="savingRawErrors" @update:model-value="updateRawErrorCapture" />
         </div>
-        <USelect v-model="selectedDays" :options="rangeOptions" option-attribute="label" value-attribute="value" class="w-36" />
-        <UTooltip text="Refresh usage data"><UButton icon="i-heroicons-arrow-path" color="gray" variant="soft" square :loading="loading" @click="load" /></UTooltip>
+        <USelect v-model="selectedDays" :items="rangeOptions" label-key="label" value-key="value" class="w-36" />
+        <UTooltip text="Refresh usage data"><UButton icon="i-heroicons-arrow-path" color="neutral" variant="soft" square :loading="loading" @click="load" /></UTooltip>
       </div>
     </header>
 
@@ -301,7 +301,7 @@ onMounted(load)
 
     <UCard>
       <template #header><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="panel-title">Tool performance</h2><p class="panel-subtitle">Adoption, reliability, and latency by MCP tool.</p></div><UInput v-model="toolSearch" icon="i-heroicons-magnifying-glass" placeholder="Filter tools" size="sm" class="w-full sm:w-64" /></div></template>
-      <UTable :rows="filteredTools" :columns="toolColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-wrench-screwdriver', label: toolSearch ? 'No tools match this filter' : 'No tool activity in this period' }">
+      <UTable :data="filteredTools" :columns="toolColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-wrench-screwdriver', label: toolSearch ? 'No tools match this filter' : 'No tool activity in this period' }">
         <template #tool-data="{ row }"><code class="text-xs text-emerald-700 dark:text-emerald-300">{{ shortToolName(row.tool) }}</code></template>
         <template #successRate-data="{ row }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
         <template #averageLatencyMs-data="{ row }">{{ formatDuration(row.averageLatencyMs) }}</template>
@@ -316,8 +316,8 @@ onMounted(load)
     </section>
 
     <UCard>
-      <template #header><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="panel-title">Attribution</h2><p class="panel-subtitle">Call volume and reliability by user, reported client, and successful backend source.</p></div><USelect v-model="breakdownView" :options="breakdownOptions" option-attribute="label" value-attribute="value" class="w-full sm:w-36" /></div></template>
-      <UTable :rows="breakdownRows" :columns="breakdownColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-chart-pie', label: 'No attribution data in this period' }">
+      <template #header><div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="panel-title">Attribution</h2><p class="panel-subtitle">Call volume and reliability by user, reported client, and successful backend source.</p></div><USelect v-model="breakdownView" :items="breakdownOptions" label-key="label" value-key="value" class="w-full sm:w-36" /></div></template>
+      <UTable :data="breakdownRows" :columns="breakdownColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-chart-pie', label: 'No attribution data in this period' }">
         <template #label-data="{ row }"><div><p class="font-medium text-gray-900 dark:text-white">{{ row.label }}</p><p v-if="row.detail && row.detail !== row.label" class="text-xs text-gray-500">{{ row.detail }}</p></div></template>
         <template #successRate-data="{ row }"><span :class="row.successRate < 0.95 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">{{ percent(row.successRate) }}</span></template>
         <template #errorCount-data="{ row }"><span :class="row.errorCount ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.errorCount }}</span></template>
@@ -328,7 +328,7 @@ onMounted(load)
 
     <UCard>
       <template #header><div><h2 class="panel-title">Recent activity</h2><p class="panel-subtitle">Sanitized metadata from the latest 50 tool calls.</p></div></template>
-      <UTable :rows="summary?.recentActivity || []" :columns="activityColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-clock', label: 'No recent MCP activity' }">
+      <UTable :data="summary?.recentActivity || []" :columns="activityColumns" :loading="loading" :empty-state="{ icon: 'i-heroicons-clock', label: 'No recent MCP activity' }">
         <template #timestamp-data="{ row }">{{ formatTimestamp(row.timestamp) }}</template>
         <template #user-data="{ row }"><div><p class="font-medium">{{ row.user }}</p><p class="text-xs text-gray-500">{{ row.email }}</p></div></template>
         <template #tool-data="{ row }"><code class="text-xs">{{ shortToolName(row.tool) }}</code></template>
@@ -337,23 +337,25 @@ onMounted(load)
         <template #status-data="{ row }"><span class="status-badge" :class="`status-${row.status}`">{{ row.status.replaceAll('_', ' ') }}</span></template>
         <template #errorCode-data="{ row }"><code v-if="row.errorCode" class="text-xs text-red-600 dark:text-red-400">{{ row.errorCode }}</code><span v-else class="text-gray-400">-</span></template>
         <template #errorExplanation-data="{ row }"><span v-if="row.errorExplanation" class="block max-w-xs whitespace-normal text-xs" :title="row.errorExplanation">{{ row.errorExplanation }}</span><span v-else class="text-gray-400">-</span></template>
-        <template #actions-data="{ row }"><UTooltip v-if="row.rawErrorCaptured" text="View raw error"><UButton icon="i-heroicons-code-bracket-square" color="gray" variant="ghost" size="xs" square @click="openRawError(row)" /></UTooltip></template>
+        <template #actions-data="{ row }"><UTooltip v-if="row.rawErrorCaptured" text="View raw error"><UButton icon="i-heroicons-code-bracket-square" color="neutral" variant="ghost" size="xs" square @click="openRawError(row)" /></UTooltip></template>
       </UTable>
     </UCard>
 
-    <USlideover v-model="rawDrawerOpen" side="right" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex h-full flex-col">
-        <header class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700"><div><h2 class="font-semibold text-gray-950 dark:text-white">Raw MCP error</h2><p class="text-xs text-gray-500">Sensitive diagnostic context, retained for 30 days.</p></div><UTooltip text="Close"><UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" square @click="rawDrawerOpen = false" /></UTooltip></header>
-        <div class="min-h-0 flex-1 overflow-y-auto p-5">
-          <div v-if="rawLoading" class="empty-state"><UIcon name="i-heroicons-arrow-path" class="size-7 animate-spin" /><p>Loading raw error context</p></div>
-          <UAlert v-else-if="rawUnavailable" color="amber" variant="soft" icon="i-heroicons-clock" title="Raw context unavailable" description="The record has expired, was not captured, or is no longer available." />
-          <template v-else-if="rawRecord">
-            <UAlert v-if="rawRecord.truncated" class="mb-4" color="amber" variant="soft" icon="i-heroicons-exclamation-triangle" title="Record truncated" :description="`${rawRecord.storedSizeBytes.toLocaleString()} of ${rawRecord.originalSizeBytes.toLocaleString()} bytes retained.`" />
-            <div class="mb-3 flex items-center justify-between"><p class="text-xs text-gray-500">Expires {{ formatTimestamp(rawRecord.expiresAt) }}</p><UButton :icon="copiedRaw ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" :label="copiedRaw ? 'Copied' : 'Copy'" color="gray" variant="soft" size="xs" @click="copyRawError" /></div>
-            <pre class="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-950 p-4 text-xs leading-5 text-gray-100">{{ rawRecord.rawJson }}</pre>
-          </template>
+    <USlideover v-model:open="rawDrawerOpen" side="right" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex h-full flex-col">
+          <header class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700"><div><h2 class="font-semibold text-gray-950 dark:text-white">Raw MCP error</h2><p class="text-xs text-gray-500">Sensitive diagnostic context, retained for 30 days.</p></div><UTooltip text="Close"><UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" square @click="rawDrawerOpen = false" /></UTooltip></header>
+          <div class="min-h-0 flex-1 overflow-y-auto p-5">
+            <div v-if="rawLoading" class="empty-state"><UIcon name="i-heroicons-arrow-path" class="size-7 animate-spin" /><p>Loading raw error context</p></div>
+            <UAlert v-else-if="rawUnavailable" color="amber" variant="soft" icon="i-heroicons-clock" title="Raw context unavailable" description="The record has expired, was not captured, or is no longer available." />
+            <template v-else-if="rawRecord">
+              <UAlert v-if="rawRecord.truncated" class="mb-4" color="amber" variant="soft" icon="i-heroicons-exclamation-triangle" title="Record truncated" :description="`${rawRecord.storedSizeBytes.toLocaleString()} of ${rawRecord.originalSizeBytes.toLocaleString()} bytes retained.`" />
+              <div class="mb-3 flex items-center justify-between"><p class="text-xs text-gray-500">Expires {{ formatTimestamp(rawRecord.expiresAt) }}</p><UButton :icon="copiedRaw ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" :label="copiedRaw ? 'Copied' : 'Copy'" color="neutral" variant="soft" size="xs" @click="copyRawError" /></div>
+              <pre class="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-950 p-4 text-xs leading-5 text-gray-100">{{ rawRecord.rawJson }}</pre>
+            </template>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
 
     <p v-if="lastUpdatedAt" class="text-right text-xs text-gray-500 dark:text-gray-400">Updated {{ formatTimestamp(lastUpdatedAt.toISOString()) }}</p>

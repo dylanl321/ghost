@@ -16,7 +16,7 @@
     <div v-if="mode === 'manual'" class="space-y-4">
       <div class="flex gap-4">
         <UInput v-model="ip" placeholder="Enter IP address (e.g., 10.0.1.25)" class="flex-1" @keyup.enter="searchIP" />
-        <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+        <USelect v-model="environment" :items="environmentOptions" class="w-40" />
         <UButton color="primary" :loading="loading" :disabled="!ip.trim()" @click="searchIP">
           <Icon name="i-heroicons-magnifying-glass" class="w-4 h-4 mr-1" />
           Search
@@ -32,7 +32,7 @@
     <div v-else class="space-y-4">
       <UTextarea v-model="aiQuery" placeholder="Describe what you're looking for (e.g., 'Find the instance with IP 10.0.1.25 in the production account')" :rows="2" />
       <div class="flex gap-4">
-        <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+        <USelect v-model="environment" :items="environmentOptions" class="w-40" />
         <UButton color="primary" :loading="aiLoading" :disabled="!aiQuery.trim()" @click="generateIPQuery">
           <Icon name="i-heroicons-sparkles" class="w-4 h-4 mr-1" />
           Generate Query
@@ -63,7 +63,7 @@
             {{ result.found ? 'Resource Found' : 'No Resource Found' }}
           </span>
         </div>
-        <UButton v-if="result.found" size="xs" variant="ghost" color="gray" @click="exportResult">
+        <UButton v-if="result.found" size="xs" variant="ghost" color="neutral" @click="exportResult">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export
         </UButton>
@@ -128,7 +128,7 @@
             <Icon name="i-heroicons-shield-check" class="w-3.5 h-3.5 mr-1" />
             Security
           </UButton>
-          <UButton v-if="awsConsoleUrl" size="xs" color="gray" variant="soft" @click="openExternal(awsConsoleUrl)">
+          <UButton v-if="awsConsoleUrl" size="xs" color="neutral" variant="soft" @click="openExternal(awsConsoleUrl)">
             <Icon name="i-heroicons-arrow-top-right-on-square" class="w-3.5 h-3.5 mr-1" />
             AWS Console
           </UButton>
@@ -223,6 +223,6 @@ function exportResult() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `ip-lookup-${ip.value}-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

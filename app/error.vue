@@ -290,8 +290,8 @@ onUnmounted(() => {
         <div class="flex flex-wrap items-center justify-center gap-3">
           <UButton
             v-if="canRetry"
-            color="white"
-            variant="solid"
+            color="neutral" variant="outline"
+           
             size="lg"
             :icon="statusCode === 401 ? 'i-heroicons-arrow-right-on-rectangle' : 'i-heroicons-arrow-path'"
             @click="handleRetry"
@@ -299,7 +299,7 @@ onUnmounted(() => {
             {{ statusCode === 401 ? "Sign In Again" : "Try Again" }}
           </UButton>
           <UButton
-            color="white"
+            color="neutral"
             :variant="canRetry ? 'ghost' : 'solid'"
             size="lg"
             icon="i-heroicons-home"

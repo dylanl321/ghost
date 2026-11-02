@@ -19,14 +19,14 @@
     <div v-else>
       <UAccordion
         :items="accordionItems"
-        :ui="{ wrapper: 'space-y-2' }"
+        :ui="{ root: 'space-y-2' }"
       >
         <template #default="{ item, open }">
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             class="w-full"
-            :ui="{ rounded: 'rounded-lg', padding: { sm: 'p-3' } }"
+            :ui="{ base: 'rounded-lg p-3' }"
           >
             <template #leading>
               <UIcon
@@ -103,7 +103,7 @@
                 v-if="item.projectUrl"
                 :to="item.projectUrl"
                 target="_blank"
-                color="gray"
+                color="neutral"
                 size="sm"
                 icon="i-heroicons-arrow-top-right-on-square"
               >
@@ -120,8 +120,8 @@
           Showing {{ (repoPage - 1) * repoPageSize + 1 }}-{{ Math.min(repoPage * repoPageSize, filteredRepositories.length) }} of {{ filteredRepositories.length }} repositories
         </div>
         <UPagination
-          v-model="repoPage"
-          :page-count="repoPageSize"
+          v-model:page="repoPage"
+          :items-per-page="repoPageSize"
           :total="filteredRepositories.length"
         />
       </div>

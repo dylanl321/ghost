@@ -71,7 +71,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ option.instanceType || `Option ${idx + 1}` }}</span>
-              <UBadge v-if="option.migrationEffort" color="gray" variant="soft" size="xs">{{ option.migrationEffort }}</UBadge>
+              <UBadge v-if="option.migrationEffort" color="neutral" variant="soft" size="xs">{{ option.migrationEffort }}</UBadge>
             </div>
             <div v-if="option.estimatedMonthlySavings" class="text-sm text-green-600 dark:text-green-400 font-medium">
               Save ${{ option.estimatedMonthlySavings }}/mo

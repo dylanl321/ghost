@@ -5,7 +5,7 @@
         <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ title }}</div>
         <UBadge v-if="isScoped" color="primary" variant="subtle" size="xs">{{ scopeLabel }}</UBadge>
       </div>
-      <UBadge color="gray" variant="soft" size="sm">
+      <UBadge color="neutral" variant="soft" size="sm">
         {{ dateRangeLabel }}
       </UBadge>
     </div>

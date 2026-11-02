@@ -49,14 +49,14 @@
                 <div class="flex items-center justify-end gap-1">
                   <UButton
                     icon="i-heroicons-pencil"
-                    size="2xs"
-                    color="gray"
+                    size="xs"
+                    color="neutral"
                     variant="ghost"
                     @click="openEditModal(level)"
                   />
                   <UButton
                     icon="i-heroicons-trash"
-                    size="2xs"
+                    size="xs"
                     color="red"
                     variant="ghost"
                     @click="confirmDelete(level)"
@@ -73,138 +73,142 @@
     </div>
 
     <!-- Edit/Create Modal -->
-    <UModal v-model="showModal">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium">{{ isEditing ? 'Edit Alert Level' : 'Create Alert Level' }}</h3>
-            <UButton
-              icon="i-heroicons-x-mark"
-              color="gray"
-              variant="ghost"
-              @click="showModal = false"
-            />
-          </div>
-        </template>
-
-        <div class="space-y-4">
-          <!-- Level Selector (only for create) -->
-          <UFormGroup label="Level" required :error="formErrors.level">
-            <USelectMenu
-              v-model="form.level"
-              :options="isEditing ? [form.level] : availableLevels"
-              :disabled="isEditing"
-              placeholder="Select level"
-            />
-            <template #hint>
-              <span class="text-xs">Valid levels: INFO, WARNING, CRITICAL, ESCALATION</span>
-            </template>
-          </UFormGroup>
-
-          <!-- Threshold -->
-          <UFormGroup label="Threshold (%)" required :error="formErrors.threshold">
-            <UInput
-              v-model.number="form.threshold"
-              type="number"
-              :min="100"
-              placeholder="115"
-            />
-            <template #hint>
-              <span class="text-xs">Burn rate percentage (e.g., 115 = 15% over pace)</span>
-            </template>
-          </UFormGroup>
-
-          <!-- Color -->
-          <UFormGroup label="Color" required :error="formErrors.color">
-            <div class="flex gap-2">
-              <input
-                type="color"
-                v-model="form.color"
-                class="w-12 h-10 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+    <UModal v-model:open="showModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium">{{ isEditing ? 'Edit Alert Level' : 'Create Alert Level' }}</h3>
+              <UButton
+                icon="i-heroicons-x-mark"
+                color="neutral"
+                variant="ghost"
+                @click="showModal = false"
               />
-              <UInput v-model="form.color" placeholder="#FF0000" class="flex-1" />
             </div>
-          </UFormGroup>
+          </template>
 
-          <!-- Min Dollars -->
-          <UFormGroup label="Min Dollars" :error="formErrors.min_dollars">
-            <UInput
-              v-model.number="form.min_dollars"
-              type="number"
-              :min="0"
-              placeholder="0"
-            />
-            <template #hint>
-              <span class="text-xs">Minimum dollar overspend to trigger alert</span>
-            </template>
-          </UFormGroup>
+          <div class="space-y-4">
+            <!-- Level Selector (only for create) -->
+            <UFormField label="Level" required :error="formErrors.level">
+              <USelectMenu
+                v-model="form.level"
+                :items="isEditing ? [form.level] : availableLevels"
+                :disabled="isEditing"
+                placeholder="Select level"
+               :search-input="false"/>
+              <template #hint>
+                <span class="text-xs">Valid levels: INFO, WARNING, CRITICAL, ESCALATION</span>
+              </template>
+            </UFormField>
 
-          <!-- Max Per Month -->
-          <UFormGroup label="Max Per Month" :error="formErrors.max_per_month">
-            <UInput
-              v-model.number="form.max_per_month"
-              type="number"
-              :min="1"
-              placeholder="1"
-            />
-            <template #hint>
-              <span class="text-xs">Maximum alerts per account per month</span>
-            </template>
-          </UFormGroup>
+            <!-- Threshold -->
+            <UFormField label="Threshold (%)" required :error="formErrors.threshold">
+              <UInput
+                v-model.number="form.threshold"
+                type="number"
+                :min="100"
+                placeholder="115"
+              />
+              <template #hint>
+                <span class="text-xs">Burn rate percentage (e.g., 115 = 15% over pace)</span>
+              </template>
+            </UFormField>
 
-          <!-- Intervals -->
-          <UFormGroup label="Intervals (days)" :error="formErrors.intervals">
-            <UInput
-              v-model="intervalsInput"
-              placeholder="0, 1, 3"
-            />
-            <template #hint>
-              <span class="text-xs">Comma-separated days between alerts (e.g., 0, 1, 3)</span>
-            </template>
-          </UFormGroup>
-        </div>
+            <!-- Color -->
+            <UFormField label="Color" required :error="formErrors.color">
+              <div class="flex gap-2">
+                <input
+                  type="color"
+                  v-model="form.color"
+                  class="w-12 h-10 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                />
+                <UInput v-model="form.color" placeholder="#FF0000" class="flex-1" />
+              </div>
+            </UFormField>
 
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton color="gray" variant="ghost" @click="showModal = false">
-              Cancel
-            </UButton>
-            <UButton @click="saveAlertLevel" :loading="saving">
-              {{ isEditing ? 'Save Changes' : 'Create' }}
-            </UButton>
+            <!-- Min Dollars -->
+            <UFormField label="Min Dollars" :error="formErrors.min_dollars">
+              <UInput
+                v-model.number="form.min_dollars"
+                type="number"
+                :min="0"
+                placeholder="0"
+              />
+              <template #hint>
+                <span class="text-xs">Minimum dollar overspend to trigger alert</span>
+              </template>
+            </UFormField>
+
+            <!-- Max Per Month -->
+            <UFormField label="Max Per Month" :error="formErrors.max_per_month">
+              <UInput
+                v-model.number="form.max_per_month"
+                type="number"
+                :min="1"
+                placeholder="1"
+              />
+              <template #hint>
+                <span class="text-xs">Maximum alerts per account per month</span>
+              </template>
+            </UFormField>
+
+            <!-- Intervals -->
+            <UFormField label="Intervals (days)" :error="formErrors.intervals">
+              <UInput
+                v-model="intervalsInput"
+                placeholder="0, 1, 3"
+              />
+              <template #hint>
+                <span class="text-xs">Comma-separated days between alerts (e.g., 0, 1, 3)</span>
+              </template>
+            </UFormField>
           </div>
-        </template>
-      </UCard>
+
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="showModal = false">
+                Cancel
+              </UButton>
+              <UButton @click="saveAlertLevel" :loading="saving">
+                {{ isEditing ? 'Save Changes' : 'Create' }}
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model="showDeleteModal">
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
-            <h3 class="text-lg font-medium">Delete Alert Level</h3>
-          </div>
-        </template>
+    <UModal v-model:open="showDeleteModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
+              <h3 class="text-lg font-medium">Delete Alert Level</h3>
+            </div>
+          </template>
 
-        <p class="text-gray-600 dark:text-gray-400">
-          Are you sure you want to delete the <strong :style="{ color: levelToDelete?.color }">{{ levelToDelete?.level }}</strong> alert level?
-        </p>
-        <p class="text-sm text-red-500 mt-2">
-          This action cannot be undone. Recipients configured for this level may need to be updated.
-        </p>
+          <p class="text-gray-600 dark:text-gray-400">
+            Are you sure you want to delete the <strong :style="{ color: levelToDelete?.color }">{{ levelToDelete?.level }}</strong> alert level?
+          </p>
+          <p class="text-sm text-red-500 mt-2">
+            This action cannot be undone. Recipients configured for this level may need to be updated.
+          </p>
 
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton color="gray" variant="ghost" @click="showDeleteModal = false">
-              Cancel
-            </UButton>
-            <UButton color="red" @click="deleteLevel" :loading="deleting">
-              Delete
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="showDeleteModal = false">
+                Cancel
+              </UButton>
+              <UButton color="red" @click="deleteLevel" :loading="deleting">
+                Delete
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

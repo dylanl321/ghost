@@ -46,7 +46,7 @@
       </div>
     </div>
     <div v-if="sortedAccounts.length > pageSize" class="mt-3 flex justify-end">
-      <UPagination v-model="currentPage" :total="sortedAccounts.length" :page-count="pageSize" size="xs" />
+      <UPagination v-model:page="currentPage" :total="sortedAccounts.length" :items-per-page="pageSize" size="xs" />
     </div>
   </div>
 </template>

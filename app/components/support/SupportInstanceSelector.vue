@@ -4,16 +4,16 @@
     <USelectMenu
       v-if="hasPreloadedInstances"
       v-model="selectedInstance"
-      :options="instanceOptions"
+      :items="instanceOptions"
       :loading="context.state.instancesLoading"
-      searchable
-      searchable-placeholder="Search by ID, name, or IP..."
+     
+     
       :placeholder="placeholder"
-      :search-attributes="['label', 'instanceId', 'instanceName', 'privateIp', 'publicIp']"
-      value-attribute="value"
+      :filter-fields="['label', 'instanceId', 'instanceName', 'privateIp', 'publicIp']"
+      value-key="value"
       class="w-full"
       :disabled="disabled"
-    >
+     :search-input="{ placeholder: 'Search by ID, name, or IP...' }">
       <template #label>
         <span v-if="context.state.instancesLoading" class="text-gray-500">Loading instances...</span>
         <span v-else-if="selectedInstanceData" class="flex items-center gap-2 min-w-0">

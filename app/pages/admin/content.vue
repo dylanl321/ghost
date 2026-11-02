@@ -3,7 +3,7 @@
     <!-- Header with Back Button -->
     <div class="mb-6">
       <UButton
-        color="gray"
+        color="neutral"
         variant="ghost"
         icon="i-heroicons-arrow-left"
         @click="navigateTo('/admin')"

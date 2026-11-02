@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">Recent Pipeline Runs</div>
-        <UBadge color="gray" variant="soft" size="sm">
+        <UBadge color="neutral" variant="soft" size="sm">
           {{ pipelineRuns.length }} {{ pipelineRuns.length === 1 ? 'Run' : 'Runs' }}
         </UBadge>
       </div>
@@ -15,7 +15,7 @@
     </div>
     <div v-else>
       <UTable
-        :rows="paginatedRuns"
+        :data="paginatedRuns"
         :columns="columns"
         :loading="loading"
       >
@@ -103,7 +103,7 @@
               All
             </UBadge>
           </UTooltip>
-          <UBadge v-else color="gray" variant="subtle" size="sm">
+          <UBadge v-else color="neutral" variant="subtle" size="sm">
             {{ row.account_count }}
           </UBadge>
         </template>
@@ -134,8 +134,8 @@
         </div>
         <UPagination
           v-if="pipelineRuns.length > pageSize"
-          v-model="page"
-          :page-count="pageSize"
+          v-model:page="page"
+          :items-per-page="pageSize"
           :total="pipelineRuns.length"
         />
       </div>

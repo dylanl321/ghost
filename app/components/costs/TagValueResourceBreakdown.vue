@@ -23,7 +23,7 @@
 
     <!-- Resource bars -->
     <div v-else class="space-y-1">
-      <UBadge color="gray" variant="soft" size="xs" class="mb-1">Exact billable</UBadge>
+      <UBadge color="neutral" variant="soft" size="xs" class="mb-1">Exact billable</UBadge>
       <div v-if="notice" class="text-[10px] text-amber-500 dark:text-amber-400 mb-1 flex items-center gap-1">
         <UIcon name="i-heroicons-clock" class="w-3 h-3 flex-shrink-0" />
         <span>{{ notice }}</span>

@@ -40,7 +40,7 @@
             Open Quick Overview
           </UButton>
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="xs"
             icon="i-heroicons-x-mark"

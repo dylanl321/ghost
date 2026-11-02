@@ -82,7 +82,7 @@
                 <UBadge v-if="isLayoutTrulyCustom(prefs)" color="indigo" variant="soft" size="sm">
                   Custom
                 </UBadge>
-                <UBadge v-else color="gray" variant="soft" size="sm">Default</UBadge>
+                <UBadge v-else color="neutral" variant="soft" size="sm">Default</UBadge>
               </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs">
                 {{ metricsLoading ? '…' : formatSessionDuration(getUserAvgSession(prefs.userId)) }}
@@ -91,9 +91,9 @@
                 {{ prefs.lastLoginAt ? formatRelativeDate(prefs.lastLoginAt) : 'Never' }}
               </td>
               <td class="py-3 text-right" @click.stop>
-                <UDropdown :items="getActionItems(prefs)" :popper="{ placement: 'bottom-end' }">
-                  <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-ellipsis-vertical" />
-                </UDropdown>
+                <UDropdownMenu :items="getActionItems(prefs)" :content="{ side: 'bottom', align: 'end' }">
+                  <UButton color="neutral" variant="ghost" size="xs" icon="i-heroicons-ellipsis-vertical" />
+                </UDropdownMenu>
               </td>
             </tr>
           </tbody>
@@ -106,8 +106,8 @@
           Showing {{ paginationStart + 1 }}-{{ Math.min(paginationStart + pageSize, rows.length) }} of {{ rows.length }}
         </span>
         <UPagination
-          v-model="currentPage"
-          :page-count="pageSize"
+          v-model:page="currentPage"
+          :items-per-page="pageSize"
           :total="rows.length"
         />
       </div>

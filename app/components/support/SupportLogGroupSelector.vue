@@ -4,16 +4,16 @@
     <USelectMenu
       v-if="hasPreloadedLogGroups"
       v-model="selectedLogGroup"
-      :options="logGroupOptions"
+      :items="logGroupOptions"
       :loading="context.state.logGroupsLoading"
-      searchable
-      searchable-placeholder="Search log groups..."
+     
+     
       :placeholder="placeholder"
-      :search-attributes="['label', 'value', 'prefix']"
-      value-attribute="value"
+      :filter-fields="['label', 'value', 'prefix']"
+      value-key="value"
       class="w-full"
       :disabled="disabled"
-    >
+     :search-input="{ placeholder: 'Search log groups...' }">
       <template #label>
         <span v-if="context.state.logGroupsLoading" class="text-gray-500">Loading log groups...</span>
         <span v-else-if="selectedLogGroupData" class="flex items-center gap-2 min-w-0">

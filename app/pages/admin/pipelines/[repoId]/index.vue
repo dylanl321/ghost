@@ -30,11 +30,11 @@
           <!-- Time Range Selector -->
           <USelectMenu
             v-model="selectedDays"
-            :options="timeRangeOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="timeRangeOptions"
+            value-key="value"
+            label-key="label"
             class="w-40"
-          >
+           :search-input="false">
             <template #label>
               <UIcon name="i-heroicons-calendar" class="mr-2" />
               {{ selectedDaysLabel }}
@@ -60,7 +60,7 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
       @close="error = null"
     >
       <template #title>Failed to Load Repository Data</template>
@@ -164,7 +164,7 @@
         <template #header>
           <div class="flex justify-between items-center">
             <h3 class="font-semibold text-lg">Recent Pipeline Runs</h3>
-            <UBadge color="gray" variant="soft">
+            <UBadge color="neutral" variant="soft">
               {{ pipelineRuns.length }} runs
             </UBadge>
           </div>
@@ -173,7 +173,7 @@
         <div v-if="pipelineRuns.length === 0" class="text-center py-8 text-gray-400">
           No pipeline runs found for this repository
         </div>
-        <UTable v-else :rows="pipelineRuns" :columns="columns">
+        <UTable v-else :data="pipelineRuns" :columns="columns">
           <!-- Status -->
           <template #status-data="{ row }">
             <UBadge :color="getStatusColor(row.status)" variant="soft" size="sm">
@@ -230,7 +230,7 @@
                 All
               </UBadge>
             </UTooltip>
-            <UBadge v-else color="gray" variant="subtle" size="sm">
+            <UBadge v-else color="neutral" variant="subtle" size="sm">
               {{ row.account_count }}
             </UBadge>
           </template>

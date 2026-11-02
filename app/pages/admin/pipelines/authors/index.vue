@@ -14,10 +14,10 @@
       <!-- Time Range Selector -->
       <USelectMenu
         v-model="selectedTimeRange"
-        :options="timeRangeOptions"
-        value-attribute="value"
-        option-attribute="label"
-      />
+        :items="timeRangeOptions"
+        value-key="value"
+        label-key="label"
+       :search-input="false"/>
     </div>
 
     <!-- Loading State -->
@@ -67,7 +67,7 @@
 
       <!-- Table -->
       <UTable
-        :rows="filteredAuthors"
+        :data="filteredAuthors"
         :columns="columns"
         :loading="pending"
         :empty-state="{ icon: 'i-heroicons-users', label: 'No authors found' }"

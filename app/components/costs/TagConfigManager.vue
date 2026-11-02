@@ -1,45 +1,47 @@
 <template>
-  <USlideover v-model="isOpen" side="right" :ui="{ width: 'max-w-sm' }">
-    <div class="flex flex-col h-full">
-      <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-adjustments-horizontal" class="w-5 h-5 text-gray-500" />
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h2>
+  <USlideover v-model:open="isOpen" side="right" :ui="{ content: 'max-w-sm' }">
+    <template #content>
+      <div class="flex flex-col h-full">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-adjustments-horizontal" class="w-5 h-5 text-gray-500" />
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h2>
+          </div>
+          <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="isOpen = false" />
         </div>
-        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="gray" @click="isOpen = false" />
-      </div>
 
-      <!-- Scrollable content -->
-      <div class="flex-1 overflow-y-auto p-4">
-        <TagConfigForm
-          :available-tags="availableTags"
-          :resource-tags="resourceTags"
-          :is-loading-resource-tags="isLoadingResourceTags"
-          :account-id="accountId"
-          :draft="draft"
-          :is-loading="isLoadingConfig || isLoadingTags"
-          :is-saving="isSavingConfig"
-          :default-group-options="defaultGroupOptions"
-          @toggle-important-tag="toggleImportantTag"
-          @set-description="setDescription"
-          @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
-          @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
-        />
-      </div>
+        <!-- Scrollable content -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <TagConfigForm
+            :available-tags="availableTags"
+            :resource-tags="resourceTags"
+            :is-loading-resource-tags="isLoadingResourceTags"
+            :account-id="accountId"
+            :draft="draft"
+            :is-loading="isLoadingConfig || isLoadingTags"
+            :is-saving="isSavingConfig"
+            :default-group-options="defaultGroupOptions"
+            @toggle-important-tag="toggleImportantTag"
+            @set-description="setDescription"
+            @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
+            @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
+          />
+        </div>
 
-      <!-- Footer -->
-      <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-        <UButton
-          label="Save Settings"
-          color="blue"
-          block
-          :loading="isSavingConfig"
-          :disabled="isLoadingConfig || isLoadingTags"
-          @click="save"
-        />
+        <!-- Footer -->
+        <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+          <UButton
+            label="Save Settings"
+            color="blue"
+            block
+            :loading="isSavingConfig"
+            :disabled="isLoadingConfig || isLoadingTags"
+            @click="save"
+          />
+        </div>
       </div>
-    </div>
+    </template>
   </USlideover>
 </template>
 

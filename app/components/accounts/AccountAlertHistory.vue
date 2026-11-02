@@ -10,7 +10,7 @@
         </div>
         <div class="flex items-center gap-2">
           <UButton
-            color="gray"
+            color="neutral"
             variant="soft"
             icon="i-heroicons-user-group"
             @click="openRecipientsModal"
@@ -20,12 +20,12 @@
           <USelect
             v-if="availableMonths.length > 0"
             v-model="selectedMonth"
-            :options="availableMonths"
+            :items="availableMonths"
             size="sm"
             class="w-40"
           />
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-path"
             :loading="loading"
@@ -54,7 +54,7 @@
     <!-- Alerts Table -->
     <UTable
       v-else
-      :rows="filteredAlerts"
+      :data="filteredAlerts"
       :columns="columns"
       class="min-w-full"
     >
@@ -98,7 +98,7 @@
       <template #actions-data="{ row }">
         <UButton
           v-if="row.email_body_s3_uri"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="xs"
           icon="i-heroicons-envelope"
@@ -111,123 +111,127 @@
     </UTable>
 
     <!-- Budget alert recipients modal -->
-    <UModal v-model="showRecipientsModal" :ui="{ width: 'sm:max-w-3xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Budget alert recipients</h3>
-              <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Default recipients come from IT PEP and vary by alert type and severity. Manual recipients are added as CC and do not replace defaults.
-              </p>
+    <UModal v-model:open="showRecipientsModal" :ui="{ content: 'sm:max-w-3xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Budget alert recipients</h3>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Default recipients come from IT PEP and vary by alert type and severity. Manual recipients are added as CC and do not replace defaults.
+                </p>
+              </div>
+              <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="showRecipientsModal = false" />
             </div>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showRecipientsModal = false" />
+          </template>
+
+          <div v-if="loadingRecipients" class="flex justify-center py-12">
+            <UIcon name="i-heroicons-arrow-path" class="h-8 w-8 animate-spin text-gray-400" />
           </div>
-        </template>
 
-        <div v-if="loadingRecipients" class="flex justify-center py-12">
-          <UIcon name="i-heroicons-arrow-path" class="h-8 w-8 animate-spin text-gray-400" />
-        </div>
-
-        <div v-else-if="recipientData" class="space-y-6">
-          <section>
-            <div class="mb-3 flex items-center gap-2">
-              <h4 class="font-medium text-gray-900 dark:text-white">Default role recipients</h4>
-              <UBadge color="blue" variant="subtle">IT PEP</UBadge>
-            </div>
-            <div v-if="recipientData.defaultRecipients.length" class="divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
-              <div v-for="recipient in recipientData.defaultRecipients" :key="`${recipient.email}-${recipient.role}`" class="p-3">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span class="font-medium text-gray-900 dark:text-white">{{ recipient.email }}</span>
-                  <UBadge color="gray" variant="subtle">{{ recipient.role }}</UBadge>
-                </div>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ recipient.note }}</p>
+          <div v-else-if="recipientData" class="space-y-6">
+            <section>
+              <div class="mb-3 flex items-center gap-2">
+                <h4 class="font-medium text-gray-900 dark:text-white">Default role recipients</h4>
+                <UBadge color="blue" variant="subtle">IT PEP</UBadge>
               </div>
-            </div>
-            <p v-else class="text-sm text-gray-500 dark:text-gray-400">No default role recipients were found in the account metadata.</p>
-          </section>
-
-          <section>
-            <div class="mb-3 flex items-center gap-2">
-              <h4 class="font-medium text-gray-900 dark:text-white">Manually added recipients</h4>
-              <UBadge color="emerald" variant="subtle">CC on all alerts</UBadge>
-            </div>
-
-            <form v-if="recipientData.canManage" class="mb-4 flex gap-2" @submit.prevent="addRecipient">
-              <UInput v-model="newRecipientEmail" class="flex-1" type="email" placeholder="name@gd-ms.com" :disabled="savingRecipient" />
-              <UButton type="submit" icon="i-heroicons-plus" :loading="savingRecipient" :disabled="!newRecipientEmail.trim()">Add user</UButton>
-            </form>
-
-            <div v-if="recipientData.manualRecipients.length" class="divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
-              <div v-for="recipient in recipientData.manualRecipients" :key="recipient.email" class="flex items-center justify-between gap-4 p-3">
-                <div class="min-w-0">
-                  <div class="truncate font-medium text-gray-900 dark:text-white">{{ recipient.email }}</div>
-                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">
-                    <template v-if="recipient.auditable">Added by {{ recipient.addedBy }} on {{ formatDateTime(recipient.addedAt) }}</template>
-                    <template v-else>Existing account configuration; detailed add history was not recorded.</template>
+              <div v-if="recipientData.defaultRecipients.length" class="divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+                <div v-for="recipient in recipientData.defaultRecipients" :key="`${recipient.email}-${recipient.role}`" class="p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="font-medium text-gray-900 dark:text-white">{{ recipient.email }}</span>
+                    <UBadge color="neutral" variant="subtle">{{ recipient.role }}</UBadge>
                   </div>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ recipient.note }}</p>
                 </div>
-                <UButton
-                  v-if="recipientData.canManage && recipient.auditable"
-                  color="red"
-                  variant="ghost"
-                  size="xs"
-                  icon="i-heroicons-trash"
-                  :loading="removingRecipient === recipient.email"
-                  @click="removeRecipient(recipient.email)"
-                >
-                  Remove
-                </UButton>
               </div>
-            </div>
-            <p v-else class="text-sm text-gray-500 dark:text-gray-400">No users have been manually added.</p>
+              <p v-else class="text-sm text-gray-500 dark:text-gray-400">No default role recipients were found in the account metadata.</p>
+            </section>
 
-            <p v-if="!recipientData.canManage" class="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-              GHOST admins, this account's primary or delegate admins, and its cost manager can change this list.
-            </p>
-          </section>
-        </div>
-      </UCard>
+            <section>
+              <div class="mb-3 flex items-center gap-2">
+                <h4 class="font-medium text-gray-900 dark:text-white">Manually added recipients</h4>
+                <UBadge color="emerald" variant="subtle">CC on all alerts</UBadge>
+              </div>
+
+              <form v-if="recipientData.canManage" class="mb-4 flex gap-2" @submit.prevent="addRecipient">
+                <UInput v-model="newRecipientEmail" class="flex-1" type="email" placeholder="name@gd-ms.com" :disabled="savingRecipient" />
+                <UButton type="submit" icon="i-heroicons-plus" :loading="savingRecipient" :disabled="!newRecipientEmail.trim()">Add user</UButton>
+              </form>
+
+              <div v-if="recipientData.manualRecipients.length" class="divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+                <div v-for="recipient in recipientData.manualRecipients" :key="recipient.email" class="flex items-center justify-between gap-4 p-3">
+                  <div class="min-w-0">
+                    <div class="truncate font-medium text-gray-900 dark:text-white">{{ recipient.email }}</div>
+                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">
+                      <template v-if="recipient.auditable">Added by {{ recipient.addedBy }} on {{ formatDateTime(recipient.addedAt) }}</template>
+                      <template v-else>Existing account configuration; detailed add history was not recorded.</template>
+                    </div>
+                  </div>
+                  <UButton
+                    v-if="recipientData.canManage && recipient.auditable"
+                    color="red"
+                    variant="ghost"
+                    size="xs"
+                    icon="i-heroicons-trash"
+                    :loading="removingRecipient === recipient.email"
+                    @click="removeRecipient(recipient.email)"
+                  >
+                    Remove
+                  </UButton>
+                </div>
+              </div>
+              <p v-else class="text-sm text-gray-500 dark:text-gray-400">No users have been manually added.</p>
+
+              <p v-if="!recipientData.canManage" class="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                GHOST admins, this account's primary or delegate admins, and its cost manager can change this list.
+              </p>
+            </section>
+          </div>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Email Preview Modal -->
-    <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex flex-col h-full">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="showEmailModal = false"
-          />
-        </div>
-
-        <!-- Loading -->
-        <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
-        </div>
-
-        <!-- Email Content -->
-        <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
-          <div class="bg-white rounded-lg h-full">
-            <iframe
-              :srcdoc="emailHtml"
-              class="w-full h-full rounded-lg"
-              sandbox="allow-same-origin"
+    <USlideover v-model:open="showEmailModal" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex flex-col h-full">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
+              <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="showEmailModal = false"
             />
           </div>
-        </div>
 
-        <!-- Error State -->
-        <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          <!-- Loading -->
+          <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+          </div>
+
+          <!-- Email Content -->
+          <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
+            <div class="bg-white rounded-lg h-full">
+              <iframe
+                :srcdoc="emailHtml"
+                class="w-full h-full rounded-lg"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div v-else class="flex-1 flex items-center justify-center">
+            <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </UCard>
 </template>

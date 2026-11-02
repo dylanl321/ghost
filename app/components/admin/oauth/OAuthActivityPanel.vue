@@ -198,7 +198,7 @@ const grants = computed(() => props.grants.data || [])
           <UButton
             v-if="attempts.hasMore && attempts.nextCursor"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="soft"
             :loading="attempts.loading"
             @click="emit('loadMoreAttempts', attempts.nextCursor)"
@@ -259,7 +259,7 @@ const grants = computed(() => props.grants.data || [])
           <UButton
             v-if="grants.hasMore && grants.nextCursor"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="soft"
             :loading="grants.loading"
             @click="emit('loadMoreGrants', grants.nextCursor)"

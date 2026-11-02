@@ -16,7 +16,7 @@
     <div v-else>
       <div class="flex items-center gap-2 mb-2">
         <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400">Cost Over Time by Service</h4>
-        <UBadge color="gray" variant="soft" size="xs">Exact billable</UBadge>
+        <UBadge color="neutral" variant="soft" size="xs">Exact billable</UBadge>
       </div>
       <v-chart :option="chartOption" :autoresize="true" style="height: 250px" />
     </div>

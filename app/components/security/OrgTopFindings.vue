@@ -3,11 +3,11 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="text-base font-semibold text-gray-900 dark:text-white">Top Critical / High Findings</div>
-        <UBadge color="gray" variant="soft" size="sm">{{ (findings || []).length }} shown</UBadge>
+        <UBadge color="neutral" variant="soft" size="sm">{{ (findings || []).length }} shown</UBadge>
       </div>
     </template>
 
-    <UTable :rows="findings" :columns="columns" @select="onRowClick" class="cursor-pointer">
+    <UTable :data="findings" :columns="columns" @select="onRowClick" class="cursor-pointer">
       <template #severity-data="{ row }">
         <UBadge :color="severityColor(row.severity)" variant="subtle" size="sm">
           {{ row.severity }}

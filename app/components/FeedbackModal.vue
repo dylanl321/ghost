@@ -1,48 +1,50 @@
 <template>
   <div>
-    <UButton icon="i-heroicons-document-text" color="white" variant="ghost" @click="open()">
+    <UButton icon="i-heroicons-document-text" color="neutral" variant="ghost" @click="open()">
       Submit Feedback
     </UButton>
 
-    <UModal v-model="isOpen" :title="modalTitle">
-      <div class="p-6 space-y-4">
-        <h1 class="text-xl mb-8 font-semibold">{{ modalTitle }}</h1>
+    <UModal v-model:open="isOpen" :title="modalTitle" :ui="{ content: 'bg-default' }" scrollable>
+      <template #content>
+        <div class="p-6 space-y-4">
+          <h1 class="text-xl mb-8 font-semibold">{{ modalTitle }}</h1>
 
-        <div>
-          <label class="block mb-1 text-sm font-medium">Type</label>
-          <USelect
-            v-model="featureTypeSelection"
-            :options="featureOptions"
-          />
-        </div>
+          <div>
+            <label class="block mb-1 text-sm font-medium">Type</label>
+            <USelect
+              v-model="featureTypeSelection"
+              :items="featureOptions"
+            />
+          </div>
 
-        <div>
-          <label class="block mb-1 text-sm font-medium">Description</label>
-          <UTextarea
-            v-model="description"
-            :placeholder="descriptionPlaceholder"
-            :rows="4"
-          />
-        </div>
+          <div>
+            <label class="block mb-1 text-sm font-medium">Description</label>
+            <UTextarea
+              v-model="description"
+              :placeholder="descriptionPlaceholder"
+              :rows="4"
+            />
+          </div>
 
-        <div>
-          <label class="block mb-1 text-sm font-medium">Your Email</label>
-          <UInput
-            v-model="reporter_email"
-            type="email"
-            placeholder="your.email@example.com"
-            :disabled="isAnonymous"
-          />
-          <div class="mt-2 flex items-center space-x-2">
-            <UCheckbox v-model="isAnonymous" label="Submit Anonymously" />
+          <div>
+            <label class="block mb-1 text-sm font-medium">Your Email</label>
+            <UInput
+              v-model="reporter_email"
+              type="email"
+              placeholder="your.email@example.com"
+              :disabled="isAnonymous"
+            />
+            <div class="mt-2 flex items-center space-x-2">
+              <UCheckbox v-model="isAnonymous" label="Submit Anonymously" />
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <UButton color="neutral" variant="ghost" @click="isOpen = false">Cancel</UButton>
+            <UButton color="primary" :loading="isSubmitting" @click="submit">Submit</UButton>
           </div>
         </div>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <UButton color="gray" variant="ghost" @click="isOpen = false">Cancel</UButton>
-          <UButton color="primary" :loading="isSubmitting" @click="submit">Submit</UButton>
-        </div>
-      </div>
+      </template>
     </UModal>
   </div>
 </template>

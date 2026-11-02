@@ -7,13 +7,13 @@
         <UBadge color="blue" variant="soft" size="sm" class="flex-shrink-0">A</UBadge>
         <USelectMenu
           v-model="selectedA"
-          :options="periodOptions"
-          value-attribute="value"
-          option-attribute="label"
+          :items="periodOptions"
+          value-key="value"
+          label-key="label"
           size="sm"
           class="flex-1"
           @update:model-value="fetchComparison"
-        />
+         :search-input="false"/>
       </div>
 
       <!-- Center vs label -->
@@ -28,13 +28,13 @@
       <div class="flex items-center gap-3">
         <USelectMenu
           v-model="selectedB"
-          :options="periodOptions"
-          value-attribute="value"
-          option-attribute="label"
+          :items="periodOptions"
+          value-key="value"
+          label-key="label"
           size="sm"
           class="flex-1"
           @update:model-value="fetchComparison"
-        />
+         :search-input="false"/>
         <UBadge color="violet" variant="soft" size="sm" class="flex-shrink-0">B</UBadge>
       </div>
     </div>

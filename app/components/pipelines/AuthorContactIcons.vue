@@ -7,9 +7,9 @@
         target="_blank"
         icon="i-heroicons-envelope"
         size="xs"
-        color="gray"
+        color="neutral"
         variant="ghost"
-        :ui="{ rounded: 'rounded-full' }"
+        :ui="{ base: 'rounded-full' }"
         @click.stop
       />
     </UTooltip>
@@ -20,9 +20,9 @@
         :to="teamsUrl"
         icon="i-simple-icons-microsoftteams"
         size="xs"
-        color="gray"
+        color="neutral"
         variant="ghost"
-        :ui="{ rounded: 'rounded-full' }"
+        :ui="{ base: 'rounded-full' }"
         @click.stop="handleTeamsClick"
       />
     </UTooltip>
@@ -32,9 +32,9 @@
       <UButton
         icon="i-heroicons-clipboard-document"
         size="xs"
-        color="gray"
+        color="neutral"
         variant="ghost"
-        :ui="{ rounded: 'rounded-full' }"
+        :ui="{ base: 'rounded-full' }"
         @click.stop="handleCopyEmail"
       />
     </UTooltip>

@@ -33,7 +33,7 @@
               <td class="px-3 py-3 align-top">
                 <UTooltip :text="expanded === row.key ? 'Hide details' : 'Show details'">
                   <UButton
-                    color="gray"
+                    color="neutral"
                     variant="ghost"
                     :icon="expanded === row.key ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                     size="xs"

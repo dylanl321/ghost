@@ -117,10 +117,10 @@ const columns = [
       :hide-retry="state.unavailable"
       @retry="emit('retry')"
     >
-      <UTable :rows="records" :columns="columns">
+      <UTable :data="records" :columns="columns">
         <template #timestamp-data="{ row }">{{ formatTimestamp(row.timestamp) }}</template>
         <template #environment-data="{ row }">
-          <UBadge color="gray" variant="subtle" size="xs">{{ row.deployment }}</UBadge>
+          <UBadge color="neutral" variant="subtle" size="xs">{{ row.deployment }}</UBadge>
         </template>
         <template #actor-data="{ row }"><code class="text-xs">{{ row.actor }}</code></template>
         <template #capability-data="{ row }"><code class="text-xs">{{ row.capability }}</code></template>
@@ -166,7 +166,7 @@ const columns = [
         <UButton
           v-if="state.hasMore && state.nextCursor"
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           :loading="state.loading"
           @click="emit('loadMore', state.nextCursor)"

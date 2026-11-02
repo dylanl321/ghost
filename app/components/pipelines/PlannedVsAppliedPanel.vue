@@ -62,7 +62,7 @@
       <div v-if="driftData.summary.byResourceType?.length">
         <h4 class="text-sm font-semibold text-gray-300 mb-2">Breakdown by Resource Type</h4>
         <UTable
-          :rows="driftData.summary.byResourceType"
+          :data="driftData.summary.byResourceType"
           :columns="breakdownColumns"
         >
           <template #resource_type-data="{ row }">
@@ -77,7 +77,7 @@
       <div v-if="driftData.unappliedResources?.length">
         <h4 class="text-sm font-semibold text-gray-300 mb-2">Unapplied Resources</h4>
         <UTable
-          :rows="paginatedUnapplied"
+          :data="paginatedUnapplied"
           :columns="unappliedColumns"
         >
           <template #change_action-data="{ row }">
@@ -117,8 +117,8 @@
             Showing {{ unappliedStart }}-{{ unappliedEnd }} of {{ driftData.unappliedResources.length }} unapplied resources
           </div>
           <UPagination
-            v-model="unappliedPage"
-            :page-count="unappliedPageSize"
+            v-model:page="unappliedPage"
+            :items-per-page="unappliedPageSize"
             :total="driftData.unappliedResources.length"
           />
         </div>
@@ -131,11 +131,11 @@
           <USelectMenu
             v-if="props.repoNames?.length"
             v-model="stateRepoName"
-            :options="props.repoNames"
+            :items="props.repoNames"
             placeholder="Select repository..."
             class="flex-1"
             size="sm"
-            searchable
+           
           />
           <UInput
             v-else
@@ -173,14 +173,14 @@
         <div v-if="stateComparison && !stateLoading">
           <UAccordion
             :items="stateAccordionItems"
-            :ui="{ wrapper: 'space-y-2' }"
+            :ui="{ root: 'space-y-2' }"
           >
             <template #default="{ item, open }">
               <UButton
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 class="w-full"
-                :ui="{ rounded: 'rounded-lg', padding: { sm: 'p-3' } }"
+                :ui="{ base: 'rounded-lg p-3' }"
               >
                 <template #leading>
                   <UIcon

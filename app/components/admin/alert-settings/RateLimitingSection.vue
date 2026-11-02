@@ -7,7 +7,7 @@
         <!-- Enabled Toggle -->
         <div class="flex items-center justify-between">
           <span class="text-sm text-gray-600 dark:text-gray-400">Enabled</span>
-          <UToggle
+          <USwitch
             :model-value="thresholdScaling.enabled !== false"
             :loading="savingField === 'enabled'"
             @update:model-value="updateThresholdField('enabled', $event)"
@@ -31,11 +31,11 @@
               />
             </div>
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveThresholdField('reference_budget')" :loading="savingField === 'reference_budget'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">${{ (thresholdScaling.reference_budget || 1000).toLocaleString() }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('reference_budget', thresholdScaling.reference_budget || 1000)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('reference_budget', thresholdScaling.reference_budget || 1000)" />
           </div>
         </div>
 
@@ -54,11 +54,11 @@
               @keyup.escape="cancelEdit"
             />
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveThresholdField('scaling_factor')" :loading="savingField === 'scaling_factor'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ thresholdScaling.scaling_factor || 6 }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('scaling_factor', thresholdScaling.scaling_factor || 6)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('scaling_factor', thresholdScaling.scaling_factor || 6)" />
           </div>
         </div>
 
@@ -79,11 +79,11 @@
               <span class="text-sm text-gray-500 ml-1">%</span>
             </div>
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveThresholdField('min_threshold')" :loading="savingField === 'min_threshold'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ thresholdScaling.min_threshold || 101 }}%</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('min_threshold', thresholdScaling.min_threshold || 101)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('min_threshold', thresholdScaling.min_threshold || 101)" />
           </div>
         </div>
       </div>
@@ -136,7 +136,7 @@
         <!-- Enabled Toggle -->
         <div class="flex items-center justify-between">
           <span class="text-sm text-gray-600 dark:text-gray-400">Enabled</span>
-          <UToggle
+          <USwitch
             :model-value="mlConfig.enabled !== false"
             :loading="savingMlField === 'enabled'"
             @update:model-value="updateMlField('enabled', $event)"
@@ -158,11 +158,11 @@
               @keyup.escape="cancelEdit"
             />
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveMlField('forecast_days')" :loading="savingMlField === 'forecast_days'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ mlConfig.forecast_days || 30 }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('forecast_days', mlConfig.forecast_days || 30)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('forecast_days', mlConfig.forecast_days || 30)" />
           </div>
         </div>
       </div>

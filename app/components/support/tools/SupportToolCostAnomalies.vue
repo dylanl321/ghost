@@ -6,7 +6,7 @@
       {{ supportContext.state.mode === 'account' && supportContext.state.accountId ? `Using account: ${supportContext.state.accountName || supportContext.state.accountId}` : 'Leave account unselected to check all accounts.' }}
     </div>
     <div class="flex gap-4 flex-wrap">
-      <USelect v-model="daysBack" :options="daysBackOptions" class="w-40" />
+      <USelect v-model="daysBack" :items="daysBackOptions" class="w-40" />
       <UButton color="primary" :loading="loading" @click="fetchCostAnomalies">
         <Icon name="i-heroicons-currency-dollar" class="w-4 h-4 mr-1" />
         Check
@@ -32,7 +32,7 @@
       <div v-if="data.anomalies.length > 0" class="space-y-2">
         <div class="flex items-center justify-between">
           <h4 class="font-medium text-gray-900 dark:text-white">Recent Anomalies</h4>
-          <UButton size="xs" variant="ghost" color="gray" @click="exportData">
+          <UButton size="xs" variant="ghost" color="neutral" @click="exportData">
             <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
             Export
           </UButton>
@@ -115,6 +115,6 @@ function exportData() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `cost-anomalies-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Cost data exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Cost data exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

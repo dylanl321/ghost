@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-4xl">
     <!-- Header -->
-    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin')" class="mb-4">
+    <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin')" class="mb-4">
       Back to Dashboard
     </UButton>
     <div class="flex items-center gap-3 mb-2">
@@ -29,7 +29,7 @@
               When disabled, users see the version changelog "What's New" popup instead.
             </p>
           </div>
-          <UToggle v-model="form.enabled" />
+          <USwitch v-model="form.enabled" />
         </div>
       </UCard>
 
@@ -48,7 +48,7 @@
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message ID</label>
               <div class="flex gap-2">
                 <UInput v-model="form.id" placeholder="e.g. march-2026-update" class="flex-1" />
-                <UButton color="gray" variant="soft" size="sm" @click="generateId">
+                <UButton color="neutral" variant="soft" size="sm" @click="generateId">
                   Generate
                 </UButton>
               </div>
@@ -181,7 +181,7 @@
         </div>
         <span v-else />
         <div class="flex gap-3">
-          <UButton color="gray" variant="soft" :disabled="!hasChanges" @click="resetForm">
+          <UButton color="neutral" variant="soft" :disabled="!hasChanges" @click="resetForm">
             Discard Changes
           </UButton>
           <UButton color="primary" :loading="saving" :disabled="!hasChanges || (form.enabled && !form.id)" @click="save">

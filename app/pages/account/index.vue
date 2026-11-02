@@ -13,16 +13,16 @@
           <div class="flex gap-2">
             <USelectMenu
               v-model="selectedEnvironment"
-              :options="environmentOptions"
+              :items="environmentOptions"
               size="sm"
               class="w-40"
-            />
-            <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
+             :search-input="false"/>
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
               Refresh
             </UButton>
-            <UButton color="white" variant="ghost" icon="i-heroicons-viewfinder-circle" title="Fit to Screen" @click="fitToScreen" />
-            <UButton color="white" variant="ghost" icon="i-heroicons-plus" @click="zoomIn" />
-            <UButton color="white" variant="ghost" icon="i-heroicons-minus" @click="zoomOut" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-viewfinder-circle" title="Fit to Screen" @click="fitToScreen" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-plus" @click="zoomIn" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-minus" @click="zoomOut" />
           </div>
         </div>
 
@@ -40,16 +40,16 @@
             <UButton color="emerald" variant="soft" size="sm" @click="expandAll">
               Expand All
             </UButton>
-            <UButton color="gray" variant="soft" size="sm" @click="collapseAll">
+            <UButton color="neutral" variant="soft" size="sm" @click="collapseAll">
               Collapse All
             </UButton>
-            <UToggle v-model="showPolicies">
+            <USwitch v-model="showPolicies">
               <template #default="{ checked }">
                 <span class="text-sm" :class="checked ? 'text-blue-500' : 'text-gray-400'">
                   {{ checked ? 'Show SCPs' : 'Hide SCPs' }}
                 </span>
               </template>
-            </UToggle>
+            </USwitch>
           </div>
         </div>
 
@@ -86,7 +86,7 @@
           <span class="font-semibold">Error Loading Data</span>
         </div>
         <p class="text-gray-400">{{ error }}</p>
-        <UButton color="white" variant="soft" size="sm" class="mt-4" @click="refreshData">
+        <UButton color="neutral" variant="soft" size="sm" class="mt-4" @click="refreshData">
           Try Again
         </UButton>
       </div>
@@ -175,7 +175,7 @@
                 </UBadge>
               </div>
               <UButton
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
                 icon="i-heroicons-x-mark"

@@ -48,17 +48,17 @@
         <div class="w-32" data-tour="costs-mode">
           <USelectMenu
             v-model="modelMode"
-            :options="modeOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="modeOptions"
+            value-key="value"
+            label-key="label"
             size="xs"
-          />
+           :search-input="false"/>
         </div>
 
         <!-- Reports Menu -->
-        <UDropdown :items="reportsMenuItems" :popper="{ placement: 'bottom-end' }" data-tour="export-button">
+        <UDropdownMenu :items="reportsMenuItems" :content="{ side: 'bottom', align: 'end' }" data-tour="export-button">
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             :icon="isExporting ? 'i-heroicons-arrow-path' : 'i-heroicons-document-text'"
             trailing-icon="i-heroicons-chevron-down"
@@ -66,13 +66,13 @@
           >
             {{ isExporting ? 'Exporting...' : 'Reports' }}
           </UButton>
-        </UDropdown>
+        </UDropdownMenu>
 
         <!-- Help Menu -->
         <span data-tour="costs-help">
-          <UDropdown :items="helpMenuItems" :popper="{ placement: 'bottom-end' }">
-            <UButton color="gray" variant="ghost" icon="i-heroicons-question-mark-circle" aria-label="Help" />
-          </UDropdown>
+          <UDropdownMenu :items="helpMenuItems" :content="{ side: 'bottom', align: 'end' }">
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-question-mark-circle" aria-label="Help" />
+          </UDropdownMenu>
         </span>
 
         <!-- Filter Presets -->
@@ -93,7 +93,7 @@
 
         <!-- Refresh -->
         <UTooltip text="Refresh data">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" aria-label="Refresh data" @click="$emit('refresh')" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" aria-label="Refresh data" @click="$emit('refresh')" />
         </UTooltip>
       </div>
     </div>
@@ -102,11 +102,11 @@
       <div class="w-full sm:w-64 md:w-72" data-tour="costs-timeframe">
         <USelectMenu
           v-model="modelSelectedTimeframe"
-          :options="timeframeOptions"
+          :items="timeframeOptions"
           placeholder="Time Period"
-          value-attribute="value"
-          option-attribute="label"
-        />
+          value-key="value"
+          label-key="label"
+         :search-input="false"/>
       </div>
 
       <!-- Compare two periods side by side (not available in Tag Analysis) -->
@@ -124,110 +124,106 @@
     </div>
 
     <!-- Share Link Modal -->
-    <UModal v-model="showShareLinkModal" :ui="{ width: 'sm:max-w-md' }">
-      <UCard
-        :ui="{
-          ring: '',
-          divide: 'divide-y divide-gray-200 dark:divide-gray-700',
-          body: { base: 'p-0', padding: '' },
-          header: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' },
-          footer: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' }
-        }"
-      >
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Share Interactive View</h3>
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              size="sm"
-              @click="showShareLinkModal = false"
-            />
-          </div>
-        </template>
-
-        <div class="p-6 space-y-4">
-          <!-- Loading State -->
-          <div v-if="shareLoading" class="flex items-center justify-center py-8">
-            <div class="text-center">
-              <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
-              <p class="text-sm text-gray-600 dark:text-gray-400">Creating share link...</p>
+    <UModal v-model:open="showShareLinkModal" :ui="{ content: 'sm:max-w-md' }" scrollable>
+      <template #content>
+        <UCard
+          :ui="{ root: 'border-0 divide-y divide-gray-200 dark:divide-gray-700', body: 'p-0 sm:p-0', header: 'py-4 px-6 sm:px-6 bg-white dark:bg-gray-900', footer: 'py-4 px-6 sm:px-6 bg-white dark:bg-gray-900' }"
+        >
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Share Interactive View</h3>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-x-mark-20-solid"
+                size="sm"
+                @click="showShareLinkModal = false"
+              />
             </div>
-          </div>
+          </template>
 
-          <!-- Success State -->
-          <div v-else-if="generatedShareUrl && !shareError" class="space-y-4">
-            <div class="flex items-center gap-2 text-green-400">
-              <UIcon name="i-heroicons-check-circle" class="w-5 h-5" />
-              <span class="text-sm font-medium">Share link created successfully!</span>
-            </div>
-
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Share URL</label>
-              <div class="flex gap-2">
-                <UInput
-                  :model-value="generatedShareUrl"
-                  readonly
-                  class="flex-1"
-                />
-                <UButton
-                  color="blue"
-                  variant="solid"
-                  icon="i-heroicons-clipboard-document"
-                  size="sm"
-                  @click="copyShareUrl"
-                >
-                  {{ shareCopied ? 'Copied!' : 'Copy' }}
-                </UButton>
+          <div class="p-6 space-y-4">
+            <!-- Loading State -->
+            <div v-if="shareLoading" class="flex items-center justify-center py-8">
+              <div class="text-center">
+                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
+                <p class="text-sm text-gray-600 dark:text-gray-400">Creating share link...</p>
               </div>
             </div>
 
-            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-200">
-              Link expires in 30 days and includes current view settings, selected accounts, and filters.
+            <!-- Success State -->
+            <div v-else-if="generatedShareUrl && !shareError" class="space-y-4">
+              <div class="flex items-center gap-2 text-green-400">
+                <UIcon name="i-heroicons-check-circle" class="w-5 h-5" />
+                <span class="text-sm font-medium">Share link created successfully!</span>
+              </div>
+
+              <div class="space-y-2">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Share URL</label>
+                <div class="flex gap-2">
+                  <UInput
+                    :model-value="generatedShareUrl"
+                    readonly
+                    class="flex-1"
+                  />
+                  <UButton
+                    color="blue"
+                    variant="solid"
+                    icon="i-heroicons-clipboard-document"
+                    size="sm"
+                    @click="copyShareUrl"
+                  >
+                    {{ shareCopied ? 'Copied!' : 'Copy' }}
+                  </UButton>
+                </div>
+              </div>
+
+              <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-200">
+                Link expires in 30 days and includes current view settings, selected accounts, and filters.
+              </div>
+            </div>
+
+            <!-- Error State -->
+            <div v-else-if="shareError" class="space-y-4">
+              <div class="flex items-center gap-2 text-red-400">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
+                <span class="text-sm font-medium">Failed to create share link</span>
+              </div>
+
+              <div class="bg-red-900/20 border border-red-700 rounded-lg p-3">
+                <p class="text-xs text-red-200">{{ shareError }}</p>
+              </div>
+            </div>
+
+            <!-- Initial State -->
+            <div v-else class="space-y-4">
+              <p class="text-sm text-gray-700 dark:text-gray-300">
+                Create a shareable link that includes your current view settings, selected accounts, and filters.
+              </p>
             </div>
           </div>
 
-          <!-- Error State -->
-          <div v-else-if="shareError" class="space-y-4">
-            <div class="flex items-center gap-2 text-red-400">
-              <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
-              <span class="text-sm font-medium">Failed to create share link</span>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showShareLinkModal = false"
+              >
+                Close
+              </UButton>
+              <UButton
+                v-if="!generatedShareUrl && !shareLoading"
+                color="blue"
+                variant="solid"
+                @click="generateShareUrl"
+              >
+                Create Share Link
+              </UButton>
             </div>
-
-            <div class="bg-red-900/20 border border-red-700 rounded-lg p-3">
-              <p class="text-xs text-red-200">{{ shareError }}</p>
-            </div>
-          </div>
-
-          <!-- Initial State -->
-          <div v-else class="space-y-4">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
-              Create a shareable link that includes your current view settings, selected accounts, and filters.
-            </p>
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showShareLinkModal = false"
-            >
-              Close
-            </UButton>
-            <UButton
-              v-if="!generatedShareUrl && !shareLoading"
-              color="blue"
-              variant="solid"
-              @click="generateShareUrl"
-            >
-              Create Share Link
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Schedule Modals -->
@@ -639,7 +635,7 @@ async function handleProformaBillableExport() {
     title: 'Generating Comparison Report',
     description: 'Creating Proforma vs Billable comparison report...',
     icon: 'i-heroicons-arrow-path',
-    timeout: 0,
+    duration: 0,
     id: 'proforma-billable-export-progress'
   })
 

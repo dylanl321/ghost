@@ -151,7 +151,7 @@
               Submit Support Ticket
             </UButton>
             <UButton
-              color="gray"
+              color="neutral"
               variant="soft"
               size="lg"
               @click="openTeamsChat"

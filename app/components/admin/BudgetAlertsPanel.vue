@@ -13,52 +13,52 @@
       </template>
 
       <div class="flex flex-wrap gap-6 items-center">
-        <UFormGroup label="Account" class="min-w-[200px]">
+        <UFormField label="Account" class="min-w-[200px]">
           <UInput
             v-model="accountSearch"
             placeholder="Search by account name/ID..."
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Level" class="min-w-[160px]">
+        <UFormField label="Level" class="min-w-[160px]">
           <USelect
             v-model="selectedLevel"
-            :options="levelOptions"
+            :items="levelOptions"
             placeholder="Select level"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Type" class="min-w-[160px]">
+        <UFormField label="Type" class="min-w-[160px]">
           <USelect
             v-model="selectedType"
-            :options="typeOptions"
+            :items="typeOptions"
             placeholder="Select type"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Delivery Status" class="min-w-[160px]">
+        <UFormField label="Delivery Status" class="min-w-[160px]">
           <USelect
             v-model="selectedDeliveryStatus"
-            :options="deliveryStatusOptions"
+            :items="deliveryStatusOptions"
             placeholder="Select status"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Mode" class="min-w-[160px]">
+        <UFormField label="Mode" class="min-w-[160px]">
           <USelect
             v-model="selectedMode"
-            :options="modeOptions"
+            :items="modeOptions"
             placeholder="Select mode"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Month" class="min-w-[140px]">
+        <UFormField label="Month" class="min-w-[140px]">
           <UInput
             v-model="selectedMonth"
             type="month"
             placeholder="YYYY-MM"
           />
-        </UFormGroup>
+        </UFormField>
       </div>
     </UCard>
 
@@ -140,7 +140,7 @@
             <UBadge color="emerald" variant="subtle">{{ filteredItems.length }} results</UBadge>
           </div>
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-path"
             :loading="loading"
@@ -166,7 +166,7 @@
       <!-- Alerts Table -->
       <UTable
         v-else
-        :rows="paginatedItems"
+        :data="paginatedItems"
         :columns="columns"
         class="min-w-full"
       >
@@ -229,7 +229,7 @@
         <template #actions-data="{ row }">
           <UButton
             v-if="row.email_body_s3_uri"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="xs"
             icon="i-heroicons-envelope"
@@ -244,51 +244,53 @@
       <!-- Pagination -->
       <div v-if="filteredItems.length > 0" class="flex justify-end items-center mt-4">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredItems.length"
         />
       </div>
     </UCard>
 
     <!-- Email Preview Modal -->
-    <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex flex-col h-full">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h3 class="text-lg font-semibold">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="showEmailModal = false"
-          />
-        </div>
-
-        <!-- Loading -->
-        <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
-        </div>
-
-        <!-- Email Content -->
-        <div v-else-if="emailHtml" class="flex-1 overflow-auto p-4">
-          <div class="bg-white rounded-lg">
-            <iframe
-              :srcdoc="emailHtml"
-              class="w-full h-full min-h-[600px] rounded-lg"
-              sandbox="allow-same-origin"
+    <USlideover v-model:open="showEmailModal" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex flex-col h-full">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 class="text-lg font-semibold">Email Preview</h3>
+              <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="showEmailModal = false"
             />
           </div>
-        </div>
 
-        <!-- Error State -->
-        <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          <!-- Loading -->
+          <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+          </div>
+
+          <!-- Email Content -->
+          <div v-else-if="emailHtml" class="flex-1 overflow-auto p-4">
+            <div class="bg-white rounded-lg">
+              <iframe
+                :srcdoc="emailHtml"
+                class="w-full h-full min-h-[600px] rounded-lg"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div v-else class="flex-1 flex items-center justify-center">
+            <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </div>
 </template>

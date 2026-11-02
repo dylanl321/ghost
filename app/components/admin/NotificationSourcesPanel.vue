@@ -52,7 +52,7 @@
               <UBadge v-if="item.source.handlesOwnEmail" color="yellow" variant="subtle" size="xs">
                 External Email
               </UBadge>
-              <UBadge v-if="item.source.cronExpression" color="gray" variant="subtle" size="xs">
+              <UBadge v-if="item.source.cronExpression" color="neutral" variant="subtle" size="xs">
                 {{ item.source.cronExpression }}
               </UBadge>
             </div>

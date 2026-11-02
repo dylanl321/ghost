@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <!-- Back Button -->
-    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin/users')" class="mb-6">
+    <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin/users')" class="mb-6">
       Back to Users
     </UButton>
 
@@ -48,7 +48,7 @@
               <UBadge v-if="userPrefs.lastLoginAt" color="green" variant="soft" size="sm">
                 Last login: {{ formatRelativeDate(userPrefs.lastLoginAt) }}
               </UBadge>
-              <UBadge v-else color="gray" variant="soft" size="sm">Never logged in</UBadge>
+              <UBadge v-else color="neutral" variant="soft" size="sm">Never logged in</UBadge>
             </div>
           </div>
         </div>
@@ -255,7 +255,7 @@
               <div class="flex items-center gap-2">
                 <Icon name="i-heroicons-star" class="w-5 h-5 text-yellow-500" />
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Favorite Accounts</h3>
-                <UBadge v-if="favoriteAccounts.length" color="gray" variant="soft" size="xs">
+                <UBadge v-if="favoriteAccounts.length" color="neutral" variant="soft" size="xs">
                   {{ favoriteAccounts.length }}
                 </UBadge>
               </div>
@@ -278,7 +278,7 @@
               <div class="flex items-center gap-2">
                 <Icon name="i-heroicons-clock" class="w-5 h-5 text-cyan-500" />
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recently Viewed Accounts</h3>
-                <UBadge color="gray" variant="soft" size="xs">{{ recentlyViewed.length }}</UBadge>
+                <UBadge color="neutral" variant="soft" size="xs">{{ recentlyViewed.length }}</UBadge>
               </div>
             </template>
             <div class="space-y-2">
@@ -315,14 +315,14 @@
                 <span class="text-sm font-medium text-gray-900 dark:text-white">{{ hiddenSections.length }}</span>
               </div>
               <div v-if="hiddenSections.length" class="flex flex-wrap gap-1">
-                <UBadge v-for="s in hiddenSections" :key="s" color="gray" variant="soft" size="xs">{{ s }}</UBadge>
+                <UBadge v-for="s in hiddenSections" :key="s" color="neutral" variant="soft" size="xs">{{ s }}</UBadge>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-sm text-gray-600 dark:text-gray-400">Disabled metric cards</span>
                 <span class="text-sm font-medium text-gray-900 dark:text-white">{{ disabledMetrics.length }}</span>
               </div>
               <div v-if="disabledMetrics.length" class="flex flex-wrap gap-1">
-                <UBadge v-for="m in disabledMetrics" :key="m" color="gray" variant="soft" size="xs">{{ m }}</UBadge>
+                <UBadge v-for="m in disabledMetrics" :key="m" color="neutral" variant="soft" size="xs">{{ m }}</UBadge>
               </div>
             </div>
             <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -341,7 +341,7 @@
                 <UBadge
                   v-for="w in userPrefs.preferences.dashboardLayoutV2.widgets"
                   :key="w.id"
-                  color="gray"
+                  color="neutral"
                   variant="soft"
                   size="xs"
                 >

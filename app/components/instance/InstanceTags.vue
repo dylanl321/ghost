@@ -7,7 +7,7 @@
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-tag" class="w-4 h-4 text-gray-400" />
             <span class="font-semibold text-sm">Tags</span>
-            <UBadge color="gray" variant="soft" size="xs">{{ tagEntries.length }}</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ tagEntries.length }}</UBadge>
           </div>
           <UInput v-model="tagSearch" placeholder="Filter tags..." icon="i-heroicons-magnifying-glass" size="sm" class="w-48" />
         </div>
@@ -20,7 +20,7 @@
           <div class="flex-1">
             <span class="text-sm text-gray-600 dark:text-gray-300 break-all">{{ tag.value }}</span>
           </div>
-          <UButton icon="i-heroicons-clipboard-document" size="2xs" color="gray" variant="ghost" @click="copy(tag.value)" />
+          <UButton icon="i-heroicons-clipboard-document" size="xs" color="neutral" variant="ghost" @click="copy(tag.value)" />
         </div>
       </div>
       <div v-else class="text-sm text-gray-400 text-center py-6">

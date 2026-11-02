@@ -36,7 +36,7 @@
             <UBadge
               v-if="favorites.length > 0"
               size="xs"
-              color="gray"
+              color="neutral"
               variant="subtle"
             >
               {{ favorites.length }}

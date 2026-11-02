@@ -6,7 +6,7 @@
     <NuxtLink to="/account/explorer">
       <UButton icon="i-heroicons-magnifying-glass" size="xs" color="emerald" variant="soft">Search Accounts</UButton>
     </NuxtLink>
-    <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" size="xs" @click="handleDismiss" class="flex-shrink-0" />
+    <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" size="xs" @click="handleDismiss" class="flex-shrink-0" />
   </div>
 
   <div
@@ -62,7 +62,7 @@
           <UButton
             icon="i-heroicons-book-open"
             to="/support/docs?topic=welcome-overview"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="lg"
             class="justify-start"
@@ -74,7 +74,7 @@
         <div class="mt-4 flex items-center gap-4 text-sm">
           <UButton
             variant="ghost"
-            color="gray"
+            color="neutral"
             size="xs"
             icon="i-heroicons-sparkles"
             to="/account/costs?tour=1"
@@ -92,7 +92,7 @@
 
       <UButton
         icon="i-heroicons-x-mark"
-        color="gray"
+        color="neutral"
         variant="ghost"
         size="xs"
         @click="handleDismiss"

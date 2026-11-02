@@ -9,7 +9,7 @@
           <UButton 
             size="xs" 
             variant="ghost" 
-            color="gray"
+            color="neutral"
             icon="i-heroicons-arrow-path"
             :loading="isLoading"
             @click="refreshData"
@@ -18,7 +18,7 @@
 
         <!-- Selected Accounts Indicator -->
         <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-          <UPopover mode="hover" :popper="{ placement: 'bottom-start', offsetDistance: 4 }">
+          <UPopover mode="hover" :content="{ side: 'bottom', align: 'start', sideOffset: 4 }">
             <button
               class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
             >
@@ -27,7 +27,7 @@
               <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-500 dark:text-gray-400 ml-auto" />
             </button>
 
-            <template #panel>
+            <template #content>
               <div class="p-2 w-72 max-h-64 overflow-y-auto">
                 <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Accounts</div>
                 <div class="space-y-1">
@@ -60,7 +60,7 @@
                 <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <UButton
                     size="xs"
-                    color="gray"
+                    color="neutral"
                     variant="ghost"
                     block
                     @click="clearSelection"
@@ -98,9 +98,9 @@
                 
                 <UButton
                   v-show="searchTerm !== ''"
-                  color="gray"
+                  color="neutral"
                   variant="link"
-                  size="2xs"
+                  size="xs"
                   icon="i-heroicons-x-mark-20-solid"
                   :padded="false"
                   @click="clearSearch"
@@ -163,8 +163,8 @@
               <span class="text-sm text-gray-900 dark:text-gray-300">All Accounts ({{ sortedFilteredAccounts.length }})</span>
               <div class="flex gap-1 items-center">
                 <!-- Sort Popover -->
-                <UPopover mode="hover" :popper="{ placement: 'bottom-start' }">
-                  <UTooltip :text="`Sort: ${sortOptions.find(opt => opt.value === accountSortBy)?.label || 'Total Cost'}`" :popper="{ placement: 'top' }">
+                <UPopover mode="hover" :content="{ side: 'bottom', align: 'start' }">
+                  <UTooltip :text="`Sort: ${sortOptions.find(opt => opt.value === accountSortBy)?.label || 'Total Cost'}`" :content="{ side: 'top' }">
                     <UButton 
                       size="xs" 
                       variant="ghost" 
@@ -174,7 +174,7 @@
                     />
                   </UTooltip>
                   
-                  <template #panel="{ close }">
+                  <template #content="{ close }">
                     <div class="p-2 w-44">
                       <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Sort by</div>
                       <div class="space-y-1">
@@ -201,10 +201,10 @@
                   </template>
                 </UPopover>
                 
-                <UButton size="xs" variant="ghost" color="gray" @click="selectAll">
+                <UButton size="xs" variant="ghost" color="neutral" @click="selectAll">
                   Select All
                 </UButton>
-                <UButton size="xs" variant="ghost" color="gray" @click="clearSelection">
+                <UButton size="xs" variant="ghost" color="neutral" @click="clearSelection">
                   Clear
                 </UButton>
               </div>
@@ -295,7 +295,7 @@
               <UButton 
                 v-show="selectedAccounts.length > 0" 
                 size="xs" 
-                color="gray"
+                color="neutral"
                 variant="link"
                 @click="clearSelection"
               >
@@ -379,7 +379,7 @@
         <div v-if="compareMode && !isTagAnalysis">
           <div class="mb-4 flex items-center gap-3">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">Period Comparison</h2>
-            <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
+            <UButton size="xs" color="neutral" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
               Exit Compare
             </UButton>
           </div>

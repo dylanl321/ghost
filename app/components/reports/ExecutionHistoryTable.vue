@@ -13,7 +13,7 @@
       <UButton
         v-if="!hideRefresh"
         icon="i-heroicons-arrow-path"
-        color="gray"
+        color="neutral"
         variant="ghost"
         size="sm"
         :loading="loading"
@@ -42,7 +42,7 @@
     <!-- History Table -->
     <div v-else-if="executions.length > 0" class="overflow-x-auto">
       <UTable
-        :rows="executions"
+        :data="executions"
         :columns="columns"
         :loading="loading"
       >
@@ -120,7 +120,7 @@
             <UButton
               v-if="row.emailDelivery"
               icon="i-heroicons-envelope-open"
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               @click="emit('view-email', row)"

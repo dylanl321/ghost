@@ -43,7 +43,7 @@
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-2">
             <h3 class="font-semibold text-lg">{{ pipelineData.gitlab.commit.title }}</h3>
-            <UBadge color="gray" variant="soft" size="sm" class="font-mono">
+            <UBadge color="neutral" variant="soft" size="sm" class="font-mono">
               {{ pipelineData.gitlab.commit.short_sha }}
             </UBadge>
           </div>
@@ -89,7 +89,7 @@
             >
               {{ pipelineData.gitlab.merge_request.state }}
             </UBadge>
-            <UBadge v-if="pipelineData.gitlab.merge_request.draft" color="gray" variant="soft" size="sm">
+            <UBadge v-if="pipelineData.gitlab.merge_request.draft" color="neutral" variant="soft" size="sm">
               Draft
             </UBadge>
           </div>
@@ -146,7 +146,7 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
       @close="error = null"
     >
       <template #title>Failed to Load Pipeline Data</template>
@@ -241,7 +241,7 @@
         <template #header>
           <h3 class="font-semibold text-lg">Account Plans ({{ accountPlans.length }})</h3>
         </template>
-        <UTable :rows="accountPlans" :columns="accountPlanColumns">
+        <UTable :data="accountPlans" :columns="accountPlanColumns">
           <!-- Account Name -->
           <template #account_name-data="{ row }">
             <div>
@@ -253,7 +253,7 @@
           <!-- Changes -->
           <template #changes_total-data="{ row }">
             <div class="flex items-center gap-2">
-              <UBadge color="gray" variant="subtle" size="sm">
+              <UBadge color="neutral" variant="subtle" size="sm">
                 {{ row.changes_total }} total
               </UBadge>
             </div>
@@ -329,7 +329,7 @@
                 />
                 <span class="capitalize">{{ item.action }}</span>
               </div>
-              <UBadge color="gray" variant="subtle">
+              <UBadge color="neutral" variant="subtle">
                 {{ item.count }}
               </UBadge>
             </div>
@@ -348,7 +348,7 @@
               class="flex items-center justify-between"
             >
               <span class="text-sm font-mono text-gray-300">{{ item.type }}</span>
-              <UBadge color="gray" variant="subtle">
+              <UBadge color="neutral" variant="subtle">
                 {{ item.count }}
               </UBadge>
             </div>
@@ -418,7 +418,7 @@
           <UBadge
             v-for="(account, index) in (showAllAccounts ? accountsList : accountsList.slice(0, 20))"
             :key="account"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
           >
@@ -444,7 +444,7 @@
             />
           </div>
         </template>
-        <UTable :rows="filteredResources" :columns="resourceColumns">
+        <UTable :data="filteredResources" :columns="resourceColumns">
           <!-- Resource Address -->
           <template #resource_address-data="{ row }">
             <div class="font-mono text-xs text-gray-300 max-w-md truncate" :title="row.resource_address">
@@ -486,7 +486,7 @@
             >
               {{ row.apply_success ? 'Applied' : 'Failed' }}
             </UBadge>
-            <UBadge v-else color="gray" variant="subtle" size="xs">
+            <UBadge v-else color="neutral" variant="subtle" size="xs">
               Pending
             </UBadge>
           </template>
@@ -500,9 +500,9 @@
             <h3 class="font-semibold text-lg text-red-400">Error Details ({{ detailedErrors.length }})</h3>
             <USelectMenu
               v-model="errorFilter"
-              :options="errorFilterOptions"
+              :items="errorFilterOptions"
               size="sm"
-            />
+             :search-input="false"/>
           </div>
         </template>
         <div class="space-y-4">
@@ -516,7 +516,7 @@
                 <UBadge :color="getSeverityColor(errorItem.error_severity)" variant="soft" size="sm">
                   {{ errorItem.error_severity }}
                 </UBadge>
-                <UBadge color="gray" variant="subtle" size="sm">
+                <UBadge color="neutral" variant="subtle" size="sm">
                   {{ errorItem.error_category }}
                 </UBadge>
                 <span class="text-xs text-gray-400">{{ errorItem.error_phase }}</span>

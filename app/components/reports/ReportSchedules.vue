@@ -124,7 +124,7 @@
                   <UTooltip text="Edit">
                     <UButton
                       icon="i-heroicons-pencil-square"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="emit('edit', report)"
@@ -134,7 +134,7 @@
                   <UTooltip :text="report.status === 'active' ? 'Pause' : 'Resume'">
                     <UButton
                       :icon="report.status === 'active' ? 'i-heroicons-pause' : 'i-heroicons-play'"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="emit('toggle-pause', report)"
@@ -144,21 +144,21 @@
                   <UTooltip text="Send Test">
                     <UButton
                       icon="i-heroicons-paper-airplane"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="emit('test', report)"
                     />
                   </UTooltip>
 
-                  <UDropdown :items="getDropdownItems(report)" :ui="{ width: 'w-48' }">
+                  <UDropdownMenu :items="getDropdownItems(report)" :ui="{ content: 'w-48' }">
                     <UButton
                       icon="i-heroicons-ellipsis-vertical"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                     />
-                  </UDropdown>
+                  </UDropdownMenu>
                 </div>
               </td>
             </tr>

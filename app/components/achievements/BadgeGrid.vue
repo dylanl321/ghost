@@ -74,7 +74,7 @@ const filters: { key: FilterKey; label: string }[] = [
           </div>
           <div class="text-2xl font-bold text-white">{{ progressPercent }}%</div>
         </div>
-        <UProgress :value="progressPercent" color="yellow" size="sm" />
+        <UProgress :model-value="progressPercent" color="yellow" size="sm" />
       </UCard>
 
       <!-- Filter tabs -->

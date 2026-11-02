@@ -3,12 +3,12 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="text-base font-semibold text-gray-900 dark:text-white">Account Risk Ranking</div>
-        <UBadge color="gray" variant="soft" size="sm">{{ (accounts || []).length }} accounts</UBadge>
+        <UBadge color="neutral" variant="soft" size="sm">{{ (accounts || []).length }} accounts</UBadge>
       </div>
     </template>
 
     <UTable
-      :rows="sortedAccounts"
+      :data="sortedAccounts"
       :columns="columns"
       @select="onRowClick"
       class="cursor-pointer"

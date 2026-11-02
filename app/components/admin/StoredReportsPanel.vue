@@ -88,7 +88,7 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
               All Stored Reports
             </h3>
-            <UBadge v-if="!loading" color="gray" variant="soft">
+            <UBadge v-if="!loading" color="neutral" variant="soft">
               {{ filteredReports.length }} total
             </UBadge>
           </div>
@@ -102,7 +102,7 @@
             />
             <UButton
               icon="i-heroicons-arrow-path"
-              color="gray"
+              color="neutral"
               variant="soft"
               size="sm"
               @click="refreshData"
@@ -161,7 +161,7 @@
       <!-- Reports Table -->
       <div v-else-if="filteredReports.length > 0" class="overflow-x-auto">
         <UTable
-          :rows="filteredReports"
+          :data="filteredReports"
           :columns="columns"
           :loading="loading"
         >
@@ -187,7 +187,7 @@
 
           <!-- Format -->
           <template #format-data="{ row }">
-            <UBadge color="gray" variant="soft" size="xs" class="uppercase">
+            <UBadge color="neutral" variant="soft" size="xs" class="uppercase">
               {{ row.format }}
             </UBadge>
           </template>
@@ -220,14 +220,14 @@
 
           <!-- Actions -->
           <template #actions-data="{ row }">
-            <UDropdown :items="getRowActions(row)" :popper="{ placement: 'bottom-end' }">
+            <UDropdownMenu :items="getRowActions(row)" :content="{ side: 'bottom', align: 'end' }">
               <UButton
                 icon="i-heroicons-ellipsis-vertical"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
               />
-            </UDropdown>
+            </UDropdownMenu>
           </template>
         </UTable>
       </div>
@@ -246,44 +246,46 @@
     </UCard>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model="showDeleteModal" :ui="{ width: 'sm:max-w-md' }">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Delete Report
-          </h3>
-        </template>
+    <UModal v-model:open="showDeleteModal" :ui="{ content: 'sm:max-w-md' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Delete Report
+            </h3>
+          </template>
 
-        <div class="space-y-4">
-          <p class="text-gray-700 dark:text-gray-300">
-            Are you sure you want to delete this report? This action cannot be undone.
-          </p>
-          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <code class="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
-              {{ reportToDelete?.s3Key }}
-            </code>
+          <div class="space-y-4">
+            <p class="text-gray-700 dark:text-gray-300">
+              Are you sure you want to delete this report? This action cannot be undone.
+            </p>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <code class="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
+                {{ reportToDelete?.s3Key }}
+              </code>
+            </div>
           </div>
-        </div>
 
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showDeleteModal = false"
-            >
-              Cancel
-            </UButton>
-            <UButton
-              color="red"
-              :loading="deleting"
-              @click="confirmDelete"
-            >
-              Delete
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showDeleteModal = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                color="red"
+                :loading="deleting"
+                @click="confirmDelete"
+              >
+                Delete
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

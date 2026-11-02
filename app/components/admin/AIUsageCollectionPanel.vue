@@ -23,7 +23,7 @@
           Incremental run
         </UButton>
         <UButton
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-arrow-path-rounded-square"
           size="sm"
@@ -34,7 +34,7 @@
           Full backfill
         </UButton>
         <UTooltip text="Refresh status">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" size="sm" :loading="loading" @click="loadStatus" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" size="sm" :loading="loading" @click="loadStatus" />
         </UTooltip>
       </div>
     </header>
@@ -49,7 +49,7 @@
     />
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <UCard v-for="metric in metrics" :key="metric.label" :ui="{ body: { padding: 'p-4 sm:p-4' } }">
+      <UCard v-for="metric in metrics" :key="metric.label" :ui="{ body: 'p-4 sm:p-4' }">
         <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ metric.label }}</p>
         <p class="mt-2 text-xl font-semibold tabular-nums text-gray-950 dark:text-white">{{ metric.value }}</p>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ metric.note }}</p>
@@ -75,7 +75,7 @@
           </p>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row lg:w-[500px]">
-          <USelect v-model="category" :options="categoryOptions" size="sm" class="sm:w-48" />
+          <USelect v-model="category" :items="categoryOptions" size="sm" class="sm:w-48" />
           <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Search failures" size="sm" class="flex-1" />
         </div>
       </header>
@@ -102,7 +102,7 @@
                 <td class="px-3 py-3">
                   <UTooltip :text="expanded.has(item.id) ? 'Hide raw samples' : 'Show raw samples'">
                     <UButton
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       :icon="expanded.has(item.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                       size="xs"
@@ -129,7 +129,7 @@
                     <div v-for="sample in item.samples" :key="sample" class="flex items-start gap-2 rounded border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                       <code class="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 dark:text-gray-300">{{ sample }}</code>
                       <UTooltip text="Copy raw message">
-                        <UButton color="gray" variant="ghost" icon="i-heroicons-clipboard" size="xs" @click="copyError(sample)" />
+                        <UButton color="neutral" variant="ghost" icon="i-heroicons-clipboard" size="xs" @click="copyError(sample)" />
                       </UTooltip>
                     </div>
                   </div>

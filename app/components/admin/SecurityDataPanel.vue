@@ -134,14 +134,14 @@
           <UButton
             icon="i-heroicons-trash"
             label="Clear Memory Cache"
-            color="gray"
+            color="neutral"
             :loading="clearingCache"
             @click="clearCache"
           />
           <UButton
             icon="i-heroicons-arrow-top-right-on-square"
             label="View Security Dashboard"
-            color="gray"
+            color="neutral"
             variant="outline"
             @click="navigateTo('/security', { open: { target: '_blank' } })"
           />

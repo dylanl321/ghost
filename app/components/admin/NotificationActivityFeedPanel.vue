@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <!-- Filters -->
     <div class="flex flex-wrap items-center gap-3">
-      <UButtonGroup>
+      <UFieldGroup>
         <UButton
           v-for="opt in sourceOptions"
           :key="opt.value"
@@ -13,16 +13,16 @@
         >
           {{ opt.label }}
         </UButton>
-      </UButtonGroup>
+      </UFieldGroup>
 
       <USelectMenu
         v-model="categoryFilter"
-        :options="categoryOptions"
+        :items="categoryOptions"
         placeholder="All Categories"
         size="sm"
         class="w-48"
         @change="loadFeed(true)"
-      />
+       :search-input="false"/>
     </div>
 
     <!-- Loading -->

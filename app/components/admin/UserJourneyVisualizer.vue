@@ -9,13 +9,13 @@
       <div class="flex items-center gap-2">
         <USelect
           v-model="timeRange"
-          :options="timeRangeOptions"
+          :items="timeRangeOptions"
           class="w-36"
           @change="fetchData"
         />
         <UButton
           icon="i-heroicons-arrow-path"
-          color="gray"
+          color="neutral"
           variant="soft"
           :loading="loading"
           @click="fetchData"

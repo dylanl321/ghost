@@ -92,7 +92,7 @@ onMounted(async () => {
             <div class="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
               <span class="font-mono">{{ instanceId }}</span>
               <span v-if="instance?.instanceType">
-                <UBadge color="gray" variant="soft" size="xs">{{ instance.instanceType }}</UBadge>
+                <UBadge color="neutral" variant="soft" size="xs">{{ instance.instanceType }}</UBadge>
               </span>
               <span v-if="instance?.region">{{ instance.region }}</span>
             </div>
@@ -103,7 +103,7 @@ onMounted(async () => {
         <div class="flex items-center gap-2">
           <UButton
             icon="i-heroicons-arrow-path"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="sm"
             :loading="loading"
@@ -114,7 +114,7 @@ onMounted(async () => {
           <UButton
             v-if="consoleUrl"
             icon="i-heroicons-arrow-top-right-on-square"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
             :to="consoleUrl"
@@ -124,7 +124,7 @@ onMounted(async () => {
           </UButton>
           <UButton
             icon="i-heroicons-clipboard-document"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="sm"
             @click="navigator.clipboard.writeText(instanceId)"
@@ -143,7 +143,7 @@ onMounted(async () => {
       <div class="text-center py-8">
         <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-red-400 mx-auto mb-3" />
         <p class="text-red-600 dark:text-red-400 font-medium">{{ error }}</p>
-        <UButton color="gray" variant="soft" class="mt-4" @click="refresh">Try Again</UButton>
+        <UButton color="neutral" variant="soft" class="mt-4" @click="refresh">Try Again</UButton>
       </div>
     </UCard>
 

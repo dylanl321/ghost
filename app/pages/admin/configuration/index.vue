@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <div class="mb-6">
-      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" @click="navigateTo('/admin')">
+      <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" @click="navigateTo('/admin')">
         Back to Dashboard
       </UButton>
       <div class="flex items-center gap-3 mb-2">

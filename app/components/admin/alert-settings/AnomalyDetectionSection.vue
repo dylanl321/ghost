@@ -9,7 +9,7 @@
           <div>
             <span class="text-sm text-gray-600 dark:text-gray-400">Enabled</span>
           </div>
-          <UToggle
+          <USwitch
             :model-value="anomalyDetection.enabled !== false"
             :loading="savingAnomalyField === 'enabled'"
             @update:model-value="updateAnomalyField('enabled', $event)"
@@ -33,11 +33,11 @@
               />
             </div>
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveAnomalyField('min_impact_dollars')" :loading="savingAnomalyField === 'min_impact_dollars'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">${{ (anomalyDetection.min_impact_dollars || 100).toLocaleString() }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('anomaly_min_impact', anomalyDetection.min_impact_dollars || 100)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('anomaly_min_impact', anomalyDetection.min_impact_dollars || 100)" />
           </div>
         </div>
 
@@ -56,18 +56,18 @@
               @keyup.escape="cancelEdit"
             />
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveAnomalyField('lookback_days')" :loading="savingAnomalyField === 'lookback_days'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ anomalyDetection.lookback_days || 30 }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('anomaly_lookback', anomalyDetection.lookback_days || 30)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('anomaly_lookback', anomalyDetection.lookback_days || 30)" />
           </div>
         </div>
 
         <!-- Include in Monthly Report Toggle -->
         <div class="flex items-center justify-between">
           <span class="text-sm text-gray-600 dark:text-gray-400">Include in Monthly Report</span>
-          <UToggle
+          <USwitch
             :model-value="anomalyDetection.include_in_monthly_report !== false"
             :loading="savingAnomalyField === 'include_in_monthly_report'"
             @update:model-value="updateAnomalyField('include_in_monthly_report', $event)"
@@ -84,7 +84,7 @@
         <!-- Enabled Toggle -->
         <div class="flex items-center justify-between">
           <span class="text-sm text-gray-600 dark:text-gray-400">Enabled</span>
-          <UToggle
+          <USwitch
             :model-value="standaloneAnomalyAlerts.enabled === true"
             :loading="savingStandaloneField === 'enabled'"
             @update:model-value="updateStandaloneField('enabled', $event)"
@@ -108,11 +108,11 @@
               />
             </div>
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveStandaloneField('min_impact_dollars')" :loading="savingStandaloneField === 'min_impact_dollars'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">${{ (standaloneAnomalyAlerts.min_impact_dollars || 500).toLocaleString() }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('standalone_min_impact', standaloneAnomalyAlerts.min_impact_dollars || 500)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('standalone_min_impact', standaloneAnomalyAlerts.min_impact_dollars || 500)" />
           </div>
         </div>
 
@@ -131,11 +131,11 @@
               @keyup.escape="cancelEdit"
             />
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveStandaloneField('min_anomaly_score')" :loading="savingStandaloneField === 'min_anomaly_score'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ standaloneAnomalyAlerts.min_anomaly_score || 70 }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('standalone_score', standaloneAnomalyAlerts.min_anomaly_score || 70)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('standalone_score', standaloneAnomalyAlerts.min_anomaly_score || 70)" />
           </div>
         </div>
 
@@ -153,11 +153,11 @@
               @keyup.escape="cancelEdit"
             />
             <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveStandaloneField('max_per_month')" :loading="savingStandaloneField === 'max_per_month'" />
-            <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+            <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
           </div>
           <div v-else class="flex items-center gap-2">
             <span class="text-sm font-mono text-gray-900 dark:text-white">{{ standaloneAnomalyAlerts.max_per_month || 3 }}</span>
-            <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('standalone_max', standaloneAnomalyAlerts.max_per_month || 3)" />
+            <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('standalone_max', standaloneAnomalyAlerts.max_per_month || 3)" />
           </div>
         </div>
       </div>

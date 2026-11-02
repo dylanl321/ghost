@@ -63,7 +63,7 @@
           <UBadge
             v-if="user.roles.length > 1"
             size="xs"
-            color="gray"
+            color="neutral"
             class="text-xs text-gray-700 dark:text-gray-300"
             variant="soft"
           >

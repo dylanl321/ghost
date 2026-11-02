@@ -5,10 +5,10 @@
         <div class="text-sm font-semibold text-gray-900 dark:text-white">S3 Buckets</div>
         <div class="flex items-center gap-3">
           <div class="flex items-center gap-2">
-            <UToggle v-model="showLandingZoneBuckets" />
+            <USwitch v-model="showLandingZoneBuckets" />
             <span class="text-sm text-gray-600 dark:text-gray-400">Show LZ Buckets</span>
           </div>
-          <UBadge v-if="!loading" color="gray" variant="soft">
+          <UBadge v-if="!loading" color="neutral" variant="soft">
             {{ filteredBuckets.length }} buckets
           </UBadge>
         </div>
@@ -70,7 +70,7 @@
 
       <!-- Buckets Table -->
       <div class="overflow-y-auto" style="max-height: 500px;">
-        <UTable :rows="filteredBuckets" :columns="columns">
+        <UTable :data="filteredBuckets" :columns="columns">
           <!-- Bucket Details -->
           <template #resourceId-data="{ row }">
             <div class="py-2">
@@ -153,7 +153,7 @@
                 </UBadge>
                 <UBadge
                   v-if="row.configuration?.loggingConfiguration?.targetBucket"
-                  color="gray"
+                  color="neutral"
                   variant="soft"
                   size="xs"
                 >
@@ -167,7 +167,7 @@
                 <UBadge
                   v-for="(value, key) in Object.entries(row.tags).slice(0, 3)"
                   :key="key"
-                  color="gray"
+                  color="neutral"
                   variant="outline"
                   size="xs"
                 >
@@ -175,7 +175,7 @@
                 </UBadge>
                 <UBadge
                   v-if="row.tags && Object.keys(row.tags).length > 3"
-                  color="gray"
+                  color="neutral"
                   variant="outline"
                   size="xs"
                 >
@@ -190,7 +190,7 @@
       <div v-if="hasMore" class="text-center mt-4">
         <UButton
           :loading="loadingMore"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="loadMore"
         >
@@ -201,100 +201,102 @@
   </UCard>
 
   <!-- Policy Details Modal -->
-  <UModal v-model="policyModalOpen" :ui="{ width: 'sm:max-w-4xl' }">
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
+  <UModal v-model:open="policyModalOpen" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+    <template #content>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Bucket Policy</h3>
+              <p class="text-sm text-gray-400">{{ selectedBucketName }}</p>
+            </div>
+            <UButton icon="i-heroicons-x-mark" variant="ghost" @click="policyModalOpen = false" />
+          </div>
+        </template>
+
+        <div v-if="selectedBucketPolicy" class="space-y-4">
+          <!-- Analysis Summary -->
+          <div v-if="selectedBucketAnalysis" class="bg-gray-100 dark:bg-gray-800/30 rounded-lg p-4">
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Analysis</div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex items-center gap-2">
+                <UIcon
+                  :name="selectedBucketAnalysis.isPublic ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-check-circle'"
+                  :class="selectedBucketAnalysis.isPublic ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'"
+                />
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {{ selectedBucketAnalysis.isPublic ? 'Public Access' : 'Not Public' }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <UIcon
+                  :name="selectedBucketAnalysis.allowsCrossAccount ? 'i-heroicons-arrow-path' : 'i-heroicons-lock-closed'"
+                  :class="selectedBucketAnalysis.allowsCrossAccount ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400'"
+                />
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {{ selectedBucketAnalysis.allowsCrossAccount ? 'Cross-Account Access' : 'Single Account' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Risks -->
+            <div v-if="selectedBucketAnalysis.risks.length > 0" class="mt-3 space-y-2">
+              <div class="text-sm font-medium text-gray-700 dark:text-gray-300">Risks Found:</div>
+              <div
+                v-for="(risk, idx) in selectedBucketAnalysis.risks"
+                :key="idx"
+                class="flex items-start gap-2 text-sm"
+              >
+                <UBadge
+                  :color="risk.severity === 'critical' ? 'red' : risk.severity === 'high' ? 'orange' : risk.severity === 'medium' ? 'yellow' : 'gray'"
+                  size="xs"
+                  variant="solid"
+                >
+                  {{ risk.severity.toUpperCase() }}
+                </UBadge>
+                <span class="text-gray-700 dark:text-gray-300">{{ risk.finding }}</span>
+              </div>
+            </div>
+
+            <!-- Cross-Account Principals -->
+            <div v-if="selectedBucketAnalysis.crossAccountPrincipals.length > 0" class="mt-3">
+              <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross-Account Principals:</div>
+              <div class="flex flex-wrap gap-1">
+                <UBadge
+                  v-for="accountId in selectedBucketAnalysis.crossAccountPrincipals"
+                  :key="accountId"
+                  color="yellow"
+                  variant="soft"
+                  size="xs"
+                >
+                  {{ accountId }}
+                </UBadge>
+              </div>
+            </div>
+          </div>
+
+          <!-- Policy JSON -->
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Bucket Policy</h3>
-            <p class="text-sm text-gray-400">{{ selectedBucketName }}</p>
-          </div>
-          <UButton icon="i-heroicons-x-mark" variant="ghost" @click="policyModalOpen = false" />
-        </div>
-      </template>
-
-      <div v-if="selectedBucketPolicy" class="space-y-4">
-        <!-- Analysis Summary -->
-        <div v-if="selectedBucketAnalysis" class="bg-gray-100 dark:bg-gray-800/30 rounded-lg p-4">
-          <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Analysis</div>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="flex items-center gap-2">
-              <UIcon
-                :name="selectedBucketAnalysis.isPublic ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-check-circle'"
-                :class="selectedBucketAnalysis.isPublic ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'"
-              />
-              <span class="text-sm text-gray-700 dark:text-gray-300">
-                {{ selectedBucketAnalysis.isPublic ? 'Public Access' : 'Not Public' }}
-              </span>
-            </div>
-            <div class="flex items-center gap-2">
-              <UIcon
-                :name="selectedBucketAnalysis.allowsCrossAccount ? 'i-heroicons-arrow-path' : 'i-heroicons-lock-closed'"
-                :class="selectedBucketAnalysis.allowsCrossAccount ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400'"
-              />
-              <span class="text-sm text-gray-700 dark:text-gray-300">
-                {{ selectedBucketAnalysis.allowsCrossAccount ? 'Cross-Account Access' : 'Single Account' }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Risks -->
-          <div v-if="selectedBucketAnalysis.risks.length > 0" class="mt-3 space-y-2">
-            <div class="text-sm font-medium text-gray-700 dark:text-gray-300">Risks Found:</div>
-            <div
-              v-for="(risk, idx) in selectedBucketAnalysis.risks"
-              :key="idx"
-              class="flex items-start gap-2 text-sm"
-            >
-              <UBadge
-                :color="risk.severity === 'critical' ? 'red' : risk.severity === 'high' ? 'orange' : risk.severity === 'medium' ? 'yellow' : 'gray'"
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-sm font-medium text-gray-700 dark:text-gray-300">Policy Document</div>
+              <UButton
                 size="xs"
-                variant="solid"
-              >
-                {{ risk.severity.toUpperCase() }}
-              </UBadge>
-              <span class="text-gray-700 dark:text-gray-300">{{ risk.finding }}</span>
-            </div>
-          </div>
-
-          <!-- Cross-Account Principals -->
-          <div v-if="selectedBucketAnalysis.crossAccountPrincipals.length > 0" class="mt-3">
-            <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross-Account Principals:</div>
-            <div class="flex flex-wrap gap-1">
-              <UBadge
-                v-for="accountId in selectedBucketAnalysis.crossAccountPrincipals"
-                :key="accountId"
-                color="yellow"
                 variant="soft"
-                size="xs"
+                icon="i-heroicons-clipboard-document"
+                @click="copyPolicy"
               >
-                {{ accountId }}
-              </UBadge>
+                Copy
+              </UButton>
             </div>
+            <pre class="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">{{ formatPolicyJson(selectedBucketPolicy) }}</pre>
           </div>
         </div>
 
-        <!-- Policy JSON -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-sm font-medium text-gray-700 dark:text-gray-300">Policy Document</div>
-            <UButton
-              size="xs"
-              variant="soft"
-              icon="i-heroicons-clipboard-document"
-              @click="copyPolicy"
-            >
-              Copy
-            </UButton>
-          </div>
-          <pre class="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">{{ formatPolicyJson(selectedBucketPolicy) }}</pre>
+        <div v-else class="text-center py-8 text-gray-600 dark:text-gray-400">
+          No policy attached to this bucket
         </div>
-      </div>
-
-      <div v-else class="text-center py-8 text-gray-600 dark:text-gray-400">
-        No policy attached to this bucket
-      </div>
-    </UCard>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

@@ -13,7 +13,7 @@
             />
             <USelect
               v-model="stateFilter"
-              :options="stateOptions"
+              :items="stateOptions"
               size="sm"
               placeholder="All States"
             />
@@ -46,7 +46,7 @@
       No instances found
     </div>
     <div v-else class="overflow-x-auto overflow-y-auto relative" style="max-height: 600px;">
-      <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
+      <UTable :data="filteredInstances" :columns="columns" :ui="{ root: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
       <template #instanceName-data="{ row }">
         <NuxtLink v-if="row.resourceId" :to="`/account/${accountId}/instance/${row.resourceId}`" class="flex items-center gap-2 hover:text-primary-500 transition-colors">
@@ -69,7 +69,7 @@
 
       <!-- Instance Type -->
       <template #instanceType-data="{ row }">
-        <UBadge color="gray" variant="soft">{{ row.instanceType }}</UBadge>
+        <UBadge color="neutral" variant="soft">{{ row.instanceType }}</UBadge>
       </template>
 
       <!-- State -->
@@ -170,7 +170,7 @@
           </UBadge>
           <UBadge
             v-if="row.metadata?.environment"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="xs"
           >
@@ -178,7 +178,7 @@
           </UBadge>
           <UBadge
             v-if="otherTagsCount(row) > 0"
-            color="gray"
+            color="neutral"
             variant="outline"
             size="xs"
             class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -197,29 +197,31 @@
     </div>
 
     <!-- Tags Modal -->
-    <UModal v-model="tagsModalOpen">
-      <UCard>
-        <template #header>
-          <div class="flex justify-between items-center">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
-            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="tagsModalOpen = false" />
-          </div>
-        </template>
+    <UModal v-model:open="tagsModalOpen" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex justify-between items-center">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
+              <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" @click="tagsModalOpen = false" />
+            </div>
+          </template>
 
-        <div v-if="selectedInstance?.metadata?.tags" class="space-y-2">
-          <div
-            v-for="[key, value] in Object.entries(selectedInstance.metadata.tags)"
-            :key="key"
-            class="flex justify-between items-start p-2 bg-gray-100 dark:bg-gray-800/50 rounded"
-          >
-            <div class="font-medium text-sm break-all">{{ key }}</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 ml-4 break-all">{{ value }}</div>
+          <div v-if="selectedInstance?.metadata?.tags" class="space-y-2">
+            <div
+              v-for="[key, value] in Object.entries(selectedInstance.metadata.tags)"
+              :key="key"
+              class="flex justify-between items-start p-2 bg-gray-100 dark:bg-gray-800/50 rounded"
+            >
+              <div class="font-medium text-sm break-all">{{ key }}</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 ml-4 break-all">{{ value }}</div>
+            </div>
           </div>
-        </div>
-        <div v-else class="text-center text-gray-600 dark:text-gray-400 py-4">
-          No tags found
-        </div>
-      </UCard>
+          <div v-else class="text-center text-gray-600 dark:text-gray-400 py-4">
+            No tags found
+          </div>
+        </UCard>
+      </template>
     </UModal>
   </UCard>
 </template>

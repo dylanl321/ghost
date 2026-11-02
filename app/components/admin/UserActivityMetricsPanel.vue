@@ -12,7 +12,7 @@
       <div class="flex gap-2">
         <USelect
           v-model="activityPeriod"
-          :options="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
+          :items="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
           class="w-40"
           @update:model-value="load"
         />
@@ -157,7 +157,7 @@
                   <UBadge
                     v-for="a in (u.topActions || []).slice(0, 2)"
                     :key="a.type"
-                    color="gray"
+                    color="neutral"
                     variant="soft"
                     size="xs"
                   >
@@ -171,7 +171,7 @@
                   <UBadge
                     v-for="p in u.topPages.slice(0, 4)"
                     :key="p.path"
-                    color="gray"
+                    color="neutral"
                     variant="soft"
                     size="xs"
                   >

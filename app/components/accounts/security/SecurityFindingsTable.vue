@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-3">
     <UTable
-      :rows="paginatedRows"
+      :data="paginatedRows"
       :columns="columns"
-      :ui="{ wrapper: 'overflow-x-auto' }"
+      :ui="{ root: 'overflow-x-auto' }"
     >
       <!-- Severity badge -->
       <template #severity-data="{ row }">
@@ -66,8 +66,8 @@
         Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ props.findings.length }}
       </span>
       <UPagination
-        v-model="currentPage"
-        :page-count="PAGE_SIZE"
+        v-model:page="currentPage"
+        :items-per-page="PAGE_SIZE"
         :total="props.findings.length"
         size="xs"
       />

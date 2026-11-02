@@ -2,9 +2,9 @@
   <div>
     <UTable
       v-if="groups.length > 0"
-      :rows="paginatedRows"
+      :data="paginatedRows"
       :columns="columns"
-      :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }"
+      :ui="{ td: 'text-xs', th: 'text-xs' }"
     >
       <template #title-data="{ row }">
         <span class="line-clamp-2">{{ row.title }}</span>
@@ -21,7 +21,7 @@
 
     <!-- Pagination -->
     <div v-if="totalPages > 1" class="flex justify-center mt-4">
-      <UPagination v-model="currentPage" :total="groups.length" :page-count="pageSize" />
+      <UPagination v-model:page="currentPage" :total="groups.length" :items-per-page="pageSize" />
     </div>
 
     <div v-if="groups.length === 0" class="flex flex-col items-center justify-center py-10 gap-2">

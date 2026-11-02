@@ -48,6 +48,19 @@ export default defineAppConfig({
         base: 'rounded-lg'
       }
     },
+    modal: {
+      // Modals wrap a UCard in #content, so the card supplies the surface, border and rounding
+      slots: {
+        content: 'bg-transparent divide-y-0'
+      },
+      variants: {
+        fullscreen: {
+          false: {
+            content: 'w-[calc(100vw-2rem)] max-w-lg rounded-xl shadow-xl'
+          }
+        }
+      }
+    },
     tooltip: {
       slots: {
         // v2 tooltips wrapped long text; v4 defaults to a single truncated line

@@ -61,7 +61,7 @@
             <UButton
               v-if="validationResult"
               icon="i-heroicons-arrow-down-tray"
-              color="gray"
+              color="neutral"
               variant="ghost"
               @click="downloadCsv"
               :loading="downloadingCsv"
@@ -86,7 +86,7 @@
           </label>
           <USelect
             v-model="selectedPeriod"
-            :options="periodOptions"
+            :items="periodOptions"
             :disabled="loading"
           />
         </div>
@@ -97,7 +97,7 @@
           </label>
           <USelect
             v-model="selectedEnvironment"
-            :options="environmentOptions"
+            :items="environmentOptions"
             :disabled="loading"
           />
         </div>
@@ -151,7 +151,7 @@
       </template>
 
       <UTable
-        :rows="validationResult.tests"
+        :data="validationResult.tests"
         :columns="testColumns"
       >
         <template #name-data="{ row }">
@@ -213,7 +213,7 @@
             />
             <USelect
               v-model="accountFilter"
-              :options="accountFilterOptions"
+              :items="accountFilterOptions"
               size="sm"
               class="w-40"
             />
@@ -222,7 +222,7 @@
       </template>
 
       <UTable
-        :rows="paginatedAccountComparisons"
+        :data="paginatedAccountComparisons"
         :columns="accountColumns"
       >
         <template #accountId-data="{ row }">
@@ -288,7 +288,7 @@
           <UButton
             icon="i-heroicons-chevron-left"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="ghost"
             :disabled="currentPage === 1"
             @click="currentPage--"
@@ -299,7 +299,7 @@
           <UButton
             icon="i-heroicons-chevron-right"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="ghost"
             :disabled="currentPage === totalPages"
             @click="currentPage++"

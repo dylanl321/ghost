@@ -20,11 +20,11 @@
           <!-- Time Range Selector -->
           <USelectMenu
             v-model="selectedDays"
-            :options="timeRangeOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="timeRangeOptions"
+            value-key="value"
+            label-key="label"
             class="w-40"
-          >
+           :search-input="false">
             <template #label>
               <UIcon name="i-heroicons-calendar" class="mr-2" />
               {{ selectedDaysLabel }}
@@ -53,7 +53,7 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
       @close="error = null"
     >
       <template #title>Failed to Load Repository Data</template>

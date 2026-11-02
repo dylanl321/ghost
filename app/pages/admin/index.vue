@@ -27,7 +27,7 @@
               <Icon name="i-heroicons-home" class="w-4 h-4 mr-2" />
               Go to Dashboard
             </UButton>
-            <UButton color="gray" variant="soft" @click="navigateTo('/profile')">
+            <UButton color="neutral" variant="soft" @click="navigateTo('/profile')">
               <Icon name="i-heroicons-user-circle" class="w-4 h-4 mr-2" />
               View My Profile
             </UButton>
@@ -57,19 +57,19 @@
       <div class="mb-6">
         <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h2>
         <div class="flex flex-wrap gap-3">
-          <UButton color="gray" variant="soft" icon="i-heroicons-clipboard-document-check" @click="navigateTo('/admin/costs/data-validation')">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-clipboard-document-check" @click="navigateTo('/admin/costs/data-validation')">
             Run Validation
           </UButton>
-          <UButton color="gray" variant="soft" icon="i-heroicons-exclamation-triangle" @click="navigateTo('/admin/users?tab=feedback')">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-exclamation-triangle" @click="navigateTo('/admin/users?tab=feedback')">
             View Feedback
           </UButton>
-          <UButton color="gray" variant="soft" icon="i-heroicons-bell-alert" @click="navigateTo('/admin/costs/budget-alerts')">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-bell-alert" @click="navigateTo('/admin/costs/budget-alerts')">
             Budget Alerts
           </UButton>
-          <UButton color="gray" variant="soft" icon="i-heroicons-tag" @click="navigateTo('/admin/costs/tag-compliance')">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-tag" @click="navigateTo('/admin/costs/tag-compliance')">
             Tag Compliance
           </UButton>
-          <UButton color="gray" variant="soft" icon="i-heroicons-chat-bubble-bottom-center-text" @click="navigateTo('/admin/popup')">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-chat-bubble-bottom-center-text" @click="navigateTo('/admin/popup')">
             Popup Message
           </UButton>
         </div>

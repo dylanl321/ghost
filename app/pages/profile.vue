@@ -78,7 +78,7 @@
                 <Icon v-if="badge.icon" :name="badge.icon" class="w-4 h-4 mr-1" />
                 {{ badge.title }}
               </UBadge>
-              <UBadge v-if="userBadges.length === 0" color="gray" variant="soft">
+              <UBadge v-if="userBadges.length === 0" color="neutral" variant="soft">
                 No badges assigned
               </UBadge>
             </div>
@@ -158,15 +158,15 @@
         <template #header>
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-white">Active Permissions</h2>
-            <UBadge color="gray" variant="soft" size="xs">
+            <UBadge color="neutral" variant="soft" size="xs">
               {{ sortedPermissions.length }} total
             </UBadge>
           </div>
         </template>
 
-        <UAccordion :items="permissionAccordionItems" :ui="{ wrapper: 'space-y-2' }">
+        <UAccordion :items="permissionAccordionItems" :ui="{ root: 'space-y-2' }">
           <template #default="{ item, open }">
-            <UButton color="gray" variant="ghost" class="w-full">
+            <UButton color="neutral" variant="ghost" class="w-full">
               <template #leading>
                 <Icon :name="item.icon" class="w-5 h-5" />
               </template>
@@ -248,15 +248,15 @@
           <template #header>
             <div class="flex items-center justify-between">
               <h2 class="text-lg font-semibold text-white">Group Memberships</h2>
-              <UBadge color="gray" variant="soft" size="xs">
+              <UBadge color="neutral" variant="soft" size="xs">
                 {{ allGroups.length }} groups
               </UBadge>
             </div>
           </template>
 
-          <UAccordion :items="groupAccordionItems" :ui="{ wrapper: 'space-y-2' }">
+          <UAccordion :items="groupAccordionItems" :ui="{ root: 'space-y-2' }">
             <template #default="{ item, open }">
-              <UButton color="gray" variant="ghost" class="w-full">
+              <UButton color="neutral" variant="ghost" class="w-full">
                 <template #leading>
                   <Icon :name="item.icon" class="w-5 h-5" />
                 </template>
@@ -380,7 +380,7 @@
                       {{ formatFileSize(report.reportSize) }}
                     </td>
                     <td class="py-3 pr-4">
-                      <UBadge color="gray" variant="soft" size="xs">
+                      <UBadge color="neutral" variant="soft" size="xs">
                         {{ report.downloadCount || 0 }}
                       </UBadge>
                     </td>
@@ -492,7 +492,7 @@
                 <div class="bg-gray-800 rounded-lg p-4">
                   <div class="flex items-center justify-between mb-2">
                     <span class="text-sm font-medium text-gray-300">Browser Timezone</span>
-                    <UBadge color="gray" variant="soft" size="sm">
+                    <UBadge color="neutral" variant="soft" size="sm">
                       {{ browserTimezone }}
                     </UBadge>
                   </div>
@@ -519,9 +519,9 @@
                   <div class="flex gap-2">
                     <USelect
                       v-model="selectedTimezone"
-                      :options="commonTimezones"
-                      option-attribute="label"
-                      value-attribute="value"
+                      :items="commonTimezones"
+                      label-key="label"
+                      value-key="value"
                       class="flex-1"
                       size="lg"
                     />
@@ -589,7 +589,7 @@
                     <UButton size="sm" color="blue" variant="soft" @click="resetWelcomeBanner" :loading="resetLoading.banner">
                       Re-enable Banner
                     </UButton>
-                    <UButton size="sm" color="gray" variant="ghost" to="/support/docs?topic=welcome-overview">
+                    <UButton size="sm" color="neutral" variant="ghost" to="/support/docs?topic=welcome-overview">
                       View Overview Doc
                     </UButton>
                   </div>
@@ -613,10 +613,10 @@
                     <UButton size="sm" color="blue" variant="soft" @click="resetCostTour" :loading="resetLoading.cost">
                       Reset Cost Tour
                     </UButton>
-                    <UButton size="sm" color="gray" variant="ghost" to="/account/costs?tour=1">
+                    <UButton size="sm" color="neutral" variant="ghost" to="/account/costs?tour=1">
                       Start on Costs Page
                     </UButton>
-                    <UButton size="sm" color="gray" variant="ghost" to="/support/docs?topic=cost-dashboard-guide">
+                    <UButton size="sm" color="neutral" variant="ghost" to="/support/docs?topic=cost-dashboard-guide">
                       Cost Docs
                     </UButton>
                   </div>
@@ -640,7 +640,7 @@
                     <UButton size="sm" color="blue" variant="soft" @click="resetAccountTour" :loading="resetLoading.account">
                       Reset Account Tour
                     </UButton>
-                    <UButton size="sm" color="gray" variant="ghost" to="/account/explorer">
+                    <UButton size="sm" color="neutral" variant="ghost" to="/account/explorer">
                       Open Account Explorer
                     </UButton>
                   </div>

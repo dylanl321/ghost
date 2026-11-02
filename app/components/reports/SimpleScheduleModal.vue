@@ -1,207 +1,203 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-lg' }" @close="handleClose">
-    <UCard
-      :ui="{
-        ring: '',
-        divide: 'divide-y divide-gray-200 dark:divide-gray-700',
-        body: { base: 'p-6', padding: '' },
-        header: { base: 'py-4 px-6' },
-        footer: { base: 'py-4 px-6' }
-      }"
-    >
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              Schedule Report
-            </h3>
-            <UTooltip text="Learn how to create and schedule reports">
-              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
-                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
-              </NuxtLink>
-            </UTooltip>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark-20-solid"
-            size="sm"
-            @click="handleClose"
-          />
-        </div>
-      </template>
-
-      <div class="space-y-6">
-        <!-- Current Configuration Info -->
-        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div class="flex items-start gap-3">
-            <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div class="space-y-2 text-sm">
-              <p class="font-medium text-blue-900 dark:text-blue-100">
-                Your current configuration will be used:
-              </p>
-              <ul class="text-blue-800 dark:text-blue-200 space-y-1">
-                <li v-if="config.accounts.length > 0">
-                  • <strong>Accounts:</strong> {{ config.accounts.length }} selected
-                </li>
-                <li v-else>
-                  • <strong>Accounts:</strong> All accounts (org-wide)
-                </li>
-                <li>• <strong>Timeframe:</strong> {{ getTimeframeLabel(config.timeframe) }}</li>
-                <li>• <strong>Data Mode:</strong> {{ config.dataMode === 'billable' ? 'Billable (Raw AWS)' : 'Proforma (With savings)' }}</li>
-                <li>• <strong>Format:</strong> {{ config.format.toUpperCase() }}</li>
-              </ul>
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-lg' }" @close="handleClose" scrollable>
+    <template #content>
+      <UCard
+        :ui="{ root: 'border-0 divide-y divide-gray-200 dark:divide-gray-700', body: 'p-6 sm:p-6', header: 'py-4 px-6 sm:px-6', footer: 'py-4 px-6 sm:px-6' }"
+      >
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                Schedule Report
+              </h3>
+              <UTooltip text="Learn how to create and schedule reports">
+                <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                  <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+                </NuxtLink>
+              </UTooltip>
             </div>
-          </div>
-        </div>
-
-        <!-- Report Name -->
-        <UFormGroup label="Report Name" required>
-          <UInput
-            v-model="form.reportName"
-            placeholder="e.g., Weekly Team Cost Report"
-            :error="errors.reportName"
-          />
-        </UFormGroup>
-
-        <!-- Schedule Configuration -->
-        <div class="space-y-4">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
-            Delivery Schedule
-          </h4>
-
-          <UFormGroup label="Frequency" required>
-            <USelect
-              v-model="form.schedule.frequency"
-              :options="frequencyOptions"
-              @change="handleFrequencyChange"
-            />
-          </UFormGroup>
-
-          <!-- Day of Week (Weekly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'weekly'"
-            label="Day of Week"
-            required
-          >
-            <USelect
-              v-model="form.schedule.dayOfWeek"
-              :options="dayOfWeekOptions"
-            />
-          </UFormGroup>
-
-          <!-- Day of Month (Monthly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'monthly'"
-            label="Day of Month"
-            required
-          >
-            <USelect
-              v-model="form.schedule.dayOfMonth"
-              :options="dayOfMonthOptions"
-            />
-          </UFormGroup>
-
-          <!-- Month of Quarter (Quarterly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'quarterly'"
-            label="Month of Quarter"
-            required
-          >
-            <USelect
-              v-model="form.schedule.monthOfQuarter"
-              :options="monthOfQuarterOptions"
-            />
-          </UFormGroup>
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormGroup label="Time" required>
-              <UInput
-                v-model="form.schedule.time"
-                type="time"
-                placeholder="09:00"
-              />
-            </UFormGroup>
-
-            <UFormGroup label="Timezone" required>
-              <USelect
-                v-model="form.schedule.timezone"
-                :options="timezoneOptions"
-              />
-            </UFormGroup>
-          </div>
-
-          <!-- Next Run Preview -->
-          <div v-if="nextRunPreview" class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
-              <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-1" />
-              <strong>Next delivery:</strong> {{ nextRunPreview }}
-            </p>
-          </div>
-        </div>
-
-        <!-- AI Insights Toggle -->
-        <UFormGroup label="Report Enhancements">
-          <UCheckbox
-            v-model="form.includeAI"
-            label="Include AI-powered cost analysis (recommended)"
-            help="Add intelligent insights and recommendations to PDF reports using Claude AI"
-          />
-        </UFormGroup>
-
-        <!-- Recipient Info -->
-        <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-          <div class="flex items-start gap-2">
-            <Icon name="i-heroicons-envelope" class="w-5 h-5 text-gray-500 dark:text-gray-400 mt-0.5" />
-            <div class="flex-1">
-              <p class="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                Recipient{{ isAdmin ? 's' : '' }}
-              </p>
-              <p class="text-sm text-gray-600 dark:text-gray-400">
-                {{ isAdmin
-                  ? 'Reports will be sent to your email. Use Advanced Settings to add more recipients.'
-                  : `Reports will be sent to ${userEmail}`
-                }}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="flex justify-between items-center">
-          <!-- Advanced Settings Button (Admin Only) -->
-          <UButton
-            v-if="isAdmin"
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-cog-6-tooth"
-            @click="openAdvancedSettings"
-          >
-            Advanced Settings
-          </UButton>
-          <div v-else></div>
-
-          <div class="flex gap-2">
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
+              icon="i-heroicons-x-mark-20-solid"
+              size="sm"
               @click="handleClose"
+            />
+          </div>
+        </template>
+
+        <div class="space-y-6">
+          <!-- Current Configuration Info -->
+          <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+              <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div class="space-y-2 text-sm">
+                <p class="font-medium text-blue-900 dark:text-blue-100">
+                  Your current configuration will be used:
+                </p>
+                <ul class="text-blue-800 dark:text-blue-200 space-y-1">
+                  <li v-if="config.accounts.length > 0">
+                    • <strong>Accounts:</strong> {{ config.accounts.length }} selected
+                  </li>
+                  <li v-else>
+                    • <strong>Accounts:</strong> All accounts (org-wide)
+                  </li>
+                  <li>• <strong>Timeframe:</strong> {{ getTimeframeLabel(config.timeframe) }}</li>
+                  <li>• <strong>Data Mode:</strong> {{ config.dataMode === 'billable' ? 'Billable (Raw AWS)' : 'Proforma (With savings)' }}</li>
+                  <li>• <strong>Format:</strong> {{ config.format.toUpperCase() }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Report Name -->
+          <UFormField label="Report Name" required>
+            <UInput
+              v-model="form.reportName"
+              placeholder="e.g., Weekly Team Cost Report"
+              :error="errors.reportName"
+            />
+          </UFormField>
+
+          <!-- Schedule Configuration -->
+          <div class="space-y-4">
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+              Delivery Schedule
+            </h4>
+
+            <UFormField label="Frequency" required>
+              <USelect
+                v-model="form.schedule.frequency"
+                :items="frequencyOptions"
+                @change="handleFrequencyChange"
+              />
+            </UFormField>
+
+            <!-- Day of Week (Weekly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'weekly'"
+              label="Day of Week"
+              required
             >
-              Cancel
-            </UButton>
-            <UButton
-              color="blue"
-              @click="handleSubmit"
-              :loading="submitting"
-              :disabled="!canSubmit"
+              <USelect
+                v-model="form.schedule.dayOfWeek"
+                :items="dayOfWeekOptions"
+              />
+            </UFormField>
+
+            <!-- Day of Month (Monthly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'monthly'"
+              label="Day of Month"
+              required
             >
-              Schedule Report
-            </UButton>
+              <USelect
+                v-model="form.schedule.dayOfMonth"
+                :items="dayOfMonthOptions"
+              />
+            </UFormField>
+
+            <!-- Month of Quarter (Quarterly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'quarterly'"
+              label="Month of Quarter"
+              required
+            >
+              <USelect
+                v-model="form.schedule.monthOfQuarter"
+                :items="monthOfQuarterOptions"
+              />
+            </UFormField>
+
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="Time" required>
+                <UInput
+                  v-model="form.schedule.time"
+                  type="time"
+                  placeholder="09:00"
+                />
+              </UFormField>
+
+              <UFormField label="Timezone" required>
+                <USelect
+                  v-model="form.schedule.timezone"
+                  :items="timezoneOptions"
+                />
+              </UFormField>
+            </div>
+
+            <!-- Next Run Preview -->
+            <div v-if="nextRunPreview" class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p class="text-sm text-gray-700 dark:text-gray-300">
+                <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-1" />
+                <strong>Next delivery:</strong> {{ nextRunPreview }}
+              </p>
+            </div>
+          </div>
+
+          <!-- AI Insights Toggle -->
+          <UFormField label="Report Enhancements">
+            <UCheckbox
+              v-model="form.includeAI"
+              label="Include AI-powered cost analysis (recommended)"
+              description="Add intelligent insights and recommendations to PDF reports using Claude AI"
+            />
+          </UFormField>
+
+          <!-- Recipient Info -->
+          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+            <div class="flex items-start gap-2">
+              <Icon name="i-heroicons-envelope" class="w-5 h-5 text-gray-500 dark:text-gray-400 mt-0.5" />
+              <div class="flex-1">
+                <p class="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                  Recipient{{ isAdmin ? 's' : '' }}
+                </p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                  {{ isAdmin
+                    ? 'Reports will be sent to your email. Use Advanced Settings to add more recipients.'
+                    : `Reports will be sent to ${userEmail}`
+                  }}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      </template>
-    </UCard>
+
+        <template #footer>
+          <div class="flex justify-between items-center">
+            <!-- Advanced Settings Button (Admin Only) -->
+            <UButton
+              v-if="isAdmin"
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-cog-6-tooth"
+              @click="openAdvancedSettings"
+            >
+              Advanced Settings
+            </UButton>
+            <div v-else></div>
+
+            <div class="flex gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="handleClose"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                color="blue"
+                @click="handleSubmit"
+                :loading="submitting"
+                :disabled="!canSubmit"
+              >
+                Schedule Report
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

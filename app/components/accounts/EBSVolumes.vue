@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-sm font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
-        <UBadge v-if="!loading" color="gray" variant="soft">
+        <UBadge v-if="!loading" color="neutral" variant="soft">
           {{ volumes.length }} volumes
         </UBadge>
       </div>
@@ -51,7 +51,7 @@
 
       <!-- Volumes Table -->
       <div class="overflow-y-auto" style="max-height: 450px;">
-        <UTable :rows="volumes" :columns="columns">
+        <UTable :data="volumes" :columns="columns">
           <!-- Volume ID -->
           <template #resourceId-data="{ row }">
             <div>
@@ -93,7 +93,7 @@
       <div v-if="hasMore" class="text-center mt-4">
         <UButton
           :loading="loadingMore"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="loadMore"
         >

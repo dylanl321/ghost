@@ -51,7 +51,7 @@
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-shield-exclamation" class="w-4 h-4 text-gray-400" />
             <span class="font-semibold text-sm">Security Hub Findings</span>
-            <UBadge color="gray" variant="soft" size="xs">{{ health.securityFindings.findings.length }}</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ health.securityFindings.findings.length }}</UBadge>
           </div>
         </template>
         <div class="space-y-2">
@@ -71,7 +71,7 @@
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-bug-ant" class="w-4 h-4 text-gray-400" />
             <span class="font-semibold text-sm">Vulnerabilities</span>
-            <UBadge color="gray" variant="soft" size="xs">{{ health.vulnerabilities.findings.length }}</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ health.vulnerabilities.findings.length }}</UBadge>
           </div>
         </template>
         <div class="space-y-2">

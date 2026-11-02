@@ -65,48 +65,50 @@
         </div>
 
         <!-- Mobile Sidebar -->
-        <USlideover v-model="mobileMenuOpen" side="left">
-          <div class="p-4">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Documentation
-            </h2>
-            
-            <UInput
-              v-model="searchQuery"
-              placeholder="Search docs..."
-              icon="i-heroicons-magnifying-glass"
-              class="mb-4"
-            />
-
-            <div v-for="category in filteredCategories" :key="category.id" class="mb-6">
-              <button
-                @click="toggleCategory(category.id)"
-                class="flex items-center justify-between w-full text-left px-2 py-1 text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                <span>{{ category.title }}</span>
-                <UIcon 
-                  :name="expandedCategories.includes(category.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
-                  class="text-gray-400"
-                />
-              </button>
+        <USlideover v-model:open="mobileMenuOpen" side="left">
+          <template #content>
+            <div class="p-4">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Documentation
+              </h2>
               
-              <ul v-if="expandedCategories.includes(category.id)" class="mt-1 ml-2">
-                <li v-for="article in category.articles" :key="article.id">
-                  <button
-                    @click="selectArticle(article.id); mobileMenuOpen = false"
-                    :class="[
-                      'block w-full text-left px-3 py-2 text-sm rounded-md',
-                      selectedArticle === article.id
-                        ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    ]"
-                  >
-                    {{ article.title }}
-                  </button>
-                </li>
-              </ul>
+              <UInput
+                v-model="searchQuery"
+                placeholder="Search docs..."
+                icon="i-heroicons-magnifying-glass"
+                class="mb-4"
+              />
+
+              <div v-for="category in filteredCategories" :key="category.id" class="mb-6">
+                <button
+                  @click="toggleCategory(category.id)"
+                  class="flex items-center justify-between w-full text-left px-2 py-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  <span>{{ category.title }}</span>
+                  <UIcon 
+                    :name="expandedCategories.includes(category.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+                    class="text-gray-400"
+                  />
+                </button>
+                
+                <ul v-if="expandedCategories.includes(category.id)" class="mt-1 ml-2">
+                  <li v-for="article in category.articles" :key="article.id">
+                    <button
+                      @click="selectArticle(article.id); mobileMenuOpen = false"
+                      :class="[
+                        'block w-full text-left px-3 py-2 text-sm rounded-md',
+                        selectedArticle === article.id
+                          ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ]"
+                    >
+                      {{ article.title }}
+                    </button>
+                  </li>
+                </ul>
+              </div>
             </div>
-          </div>
+          </template>
         </USlideover>
 
         <!-- Main Content -->

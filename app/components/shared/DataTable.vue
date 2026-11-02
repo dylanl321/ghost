@@ -19,12 +19,12 @@
           <UButton
             icon="i-heroicons-eye"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="outline"
           >
             Columns
           </UButton>
-          <template #panel>
+          <template #content>
             <div class="p-3 space-y-2 min-w-[200px]">
               <div
                 v-for="col in columns"
@@ -158,7 +158,7 @@
         <span class="text-sm text-gray-600 dark:text-gray-400">Rows per page:</span>
         <USelect
           v-model="pageSize"
-          :options="pageSizeOptions"
+          :items="pageSizeOptions"
           size="xs"
           class="w-20"
         />
@@ -172,7 +172,7 @@
           <UButton
             icon="i-heroicons-chevron-left"
             size="xs"
-            color="gray"
+            color="neutral"
             :disabled="currentPage === 1"
             @click="currentPage--"
           />
@@ -182,7 +182,7 @@
           <UButton
             icon="i-heroicons-chevron-right"
             size="xs"
-            color="gray"
+            color="neutral"
             :disabled="currentPage === totalPages"
             @click="currentPage++"
           />

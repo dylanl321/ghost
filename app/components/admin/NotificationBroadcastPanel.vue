@@ -23,11 +23,11 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-            <USelectMenu v-model="form.category" :options="categoryOptions" />
+            <USelectMenu v-model="form.category" :items="categoryOptions"  :search-input="false"/>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
-            <USelectMenu v-model="form.severity" :options="severityOptions" />
+            <USelectMenu v-model="form.severity" :items="severityOptions"  :search-input="false"/>
           </div>
         </div>
 
@@ -52,7 +52,7 @@
               <p class="font-medium text-gray-900 dark:text-white">{{ form.title || 'Untitled' }}</p>
               <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ form.body || 'No body' }}</p>
               <div class="flex gap-2 mt-2">
-                <UBadge color="gray" variant="subtle" size="xs">{{ form.category }}</UBadge>
+                <UBadge color="neutral" variant="subtle" size="xs">{{ form.category }}</UBadge>
                 <UBadge :color="form.severity === 'critical' ? 'red' : form.severity === 'warning' ? 'yellow' : 'blue'" variant="subtle" size="xs">{{ form.severity }}</UBadge>
               </div>
             </div>
@@ -73,22 +73,24 @@
     </UCard>
 
     <!-- Confirmation Modal -->
-    <UModal v-model="showConfirm">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold">Confirm Broadcast</h3>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">
-          Send "{{ form.title }}" to
-          <strong>{{ form.targetAudience === 'all' ? 'all users' : `${targetUserIds.length} user(s)` }}</strong>?
-        </p>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton variant="ghost" @click="showConfirm = false">Cancel</UButton>
-            <UButton color="primary" @click="sendBroadcast" :loading="sending">Send</UButton>
-          </div>
-        </template>
-      </UCard>
+    <UModal v-model:open="showConfirm" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">Confirm Broadcast</h3>
+          </template>
+          <p class="text-gray-600 dark:text-gray-400">
+            Send "{{ form.title }}" to
+            <strong>{{ form.targetAudience === 'all' ? 'all users' : `${targetUserIds.length} user(s)` }}</strong>?
+          </p>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton variant="ghost" @click="showConfirm = false">Cancel</UButton>
+              <UButton color="primary" @click="sendBroadcast" :loading="sending">Send</UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Broadcast History -->
@@ -100,9 +102,9 @@
         </div>
       </template>
 
-      <UTable :rows="broadcasts" :columns="historyColumns" :loading="loadingHistory" :empty-state="{ icon: 'i-heroicons-megaphone', label: 'No broadcasts sent yet' }">
+      <UTable :data="broadcasts" :columns="historyColumns" :loading="loadingHistory" :empty-state="{ icon: 'i-heroicons-megaphone', label: 'No broadcasts sent yet' }">
         <template #targetAudience-data="{ row }">
-          <UBadge color="gray" variant="subtle" size="xs">{{ row.targetAudience }}</UBadge>
+          <UBadge color="neutral" variant="subtle" size="xs">{{ row.targetAudience }}</UBadge>
         </template>
         <template #delivered-data="{ row }">
           <span class="text-sm">{{ row.deliveredCount }}/{{ row.totalCount }}</span>

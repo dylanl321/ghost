@@ -1,5 +1,5 @@
 <template>
-  <UCard :ui="{ body: { padding: 'p-6' } }">
+  <UCard :ui="{ body: 'p-6 sm:p-6' }">
     <!-- Header -->
     <div class="flex items-start justify-between mb-4">
       <div class="flex-1">
@@ -15,14 +15,14 @@
       </div>
 
       <!-- Actions Dropdown -->
-      <UDropdown :items="actions" :popper="{ placement: 'bottom-end' }">
+      <UDropdownMenu :items="actions" :content="{ side: 'bottom', align: 'end' }">
         <UButton
           icon="i-heroicons-ellipsis-vertical"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="sm"
         />
-      </UDropdown>
+      </UDropdownMenu>
     </div>
 
     <!-- Schedule & Recipients -->

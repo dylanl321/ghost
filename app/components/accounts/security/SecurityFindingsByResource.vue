@@ -9,7 +9,7 @@
     </ClientOnly>
 
     <!-- Table -->
-    <UTable :rows="groups" :columns="columns" :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }">
+    <UTable :data="groups" :columns="columns" :ui="{ td: 'text-xs', th: 'text-xs' }">
       <template #resource_id-data="{ row }">
         <UTooltip :text="row.resourceId">
           <span class="font-mono text-xs truncate max-w-[200px] block">

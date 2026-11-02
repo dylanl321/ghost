@@ -73,7 +73,7 @@
       <template #header>
         <div class="flex items-center justify-between">
           <div class="text-lg font-semibold">Alert Level Breakdown</div>
-          <USelect v-model="selectedMonth" :options="monthOptions" class="w-40" />
+          <USelect v-model="selectedMonth" :items="monthOptions" class="w-40" />
         </div>
       </template>
 
@@ -112,9 +112,9 @@
               icon="i-heroicons-magnifying-glass"
               class="w-64"
             />
-            <USelect v-model="statusFilter" :options="statusFilterOptions" class="w-36" />
+            <USelect v-model="statusFilter" :items="statusFilterOptions" class="w-36" />
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               icon="i-heroicons-arrow-path"
               :loading="loading"
@@ -135,7 +135,7 @@
       <div v-else-if="error" class="flex flex-col items-center justify-center py-12 text-center">
         <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-red-500 mb-4" />
         <p class="text-gray-400 mb-4">{{ error }}</p>
-        <UButton color="gray" @click="fetchOverview">Try Again</UButton>
+        <UButton color="neutral" @click="fetchOverview">Try Again</UButton>
       </div>
 
       <!-- Empty State -->
@@ -147,7 +147,7 @@
       <!-- Accounts Table -->
       <UTable
         v-else
-        :rows="paginatedAccounts"
+        :data="paginatedAccounts"
         :columns="columns"
         class="min-w-full"
         :sort="{ column: 'currentSpend', direction: 'desc' }"
@@ -169,7 +169,7 @@
               <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-400" />
               <span class="text-yellow-400 hover:underline">Exceeded ({{ row.alertsThisMonth }})</span>
             </div>
-            <template #panel>
+            <template #content>
               <div class="p-3 min-w-[280px] max-w-[350px]">
                 <div class="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-200">Recent Alerts</div>
                 <div v-if="row.recentAlerts && row.recentAlerts.length > 0" class="space-y-2">
@@ -241,7 +241,7 @@
         <template #budgetUtilization-data="{ row }">
           <div v-if="row.budget && row.budget > 0" class="w-24">
             <UProgress
-              :value="Math.min(row.budgetUtilization || 0, 100)"
+              :model-value="Math.min(row.budgetUtilization || 0, 100)"
               :color="getBudgetUtilizationColor(row.budgetUtilization)"
               size="sm"
             />
@@ -253,8 +253,8 @@
       <!-- Pagination -->
       <div v-if="filteredAccounts.length > 0" class="flex justify-end items-center mt-4">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredAccounts.length"
         />
       </div>

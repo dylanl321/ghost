@@ -816,7 +816,7 @@ defineExpose({
                 v-for="tag in userTags"
                 :key="tag.title"
                 :text="tag.description || tag.title"
-                :popper="{ placement: 'top' }"
+                :content="{ side: 'top' }"
               >
                 <UBadge
                   :color="tag.color as any"
@@ -885,14 +885,14 @@ defineExpose({
               icon="i-heroicons-question-mark-circle"
               variant="ghost"
               size="sm"
-              color="gray"
+              color="neutral"
             >
               Help
             </UButton>
           </div>
           <div class="flex items-center gap-2">
             <!-- Export Dropdown -->
-            <UDropdown :items="[
+            <UDropdownMenu :items="[
               [{
                 label: 'Export Options',
                 slot: 'account',
@@ -920,7 +920,7 @@ defineExpose({
                 icon: 'i-heroicons-cog-6-tooth',
                 click: () => showExportModal = true
               }]
-            ]" :popper="{ placement: 'bottom-end' }">
+            ]" :content="{ side: 'bottom', align: 'end' }">
               <UButton 
                 icon="i-heroicons-arrow-down-tray"
                 variant="outline"
@@ -929,7 +929,7 @@ defineExpose({
               >
                 Export
               </UButton>
-            </UDropdown>
+            </UDropdownMenu>
             <UButton 
               @click="toggleViewMode"
               :icon="viewMode === 'cards' ? 'i-heroicons-table-cells' : 'i-heroicons-squares-2x2'"
@@ -980,13 +980,13 @@ defineExpose({
           <span class="text-sm text-gray-400">Filter by role:</span>
           <USelectMenu 
             v-model="selectedRoleFilter" 
-            :options="[
+            :items="[
               { label: 'All Roles', value: '' },
               ...allRoles.map(role => ({ label: role, value: role }))
             ]"
             placeholder="All Roles"
             class="w-48"
-          />
+           :search-input="false"/>
           <UButton 
             v-if="selectedRoleFilter || showInactiveAccounts"
             @click="clearFilters"
@@ -1003,7 +1003,7 @@ defineExpose({
           <UCheckbox 
             v-model="showInactiveAccounts"
             label="Show inactive accounts"
-            help="Include accounts that are not in the AWS accounts database"
+            description="Include accounts that are not in the AWS accounts database"
           />
         </div>
       </div>
@@ -1264,7 +1264,7 @@ defineExpose({
 
                   <UBadge
                     v-if="!account.isActive"
-                    color="gray"
+                    color="neutral"
                     variant="soft"
                     size="xs"
                     label="Inactive"
@@ -1379,618 +1379,624 @@ defineExpose({
     </div>
 
     <!-- Help Modal -->
-    <UModal v-model="showHelpModal">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-white">AWS Access Center Help</h3>
-            <UButton @click="showHelpModal = false" icon="i-heroicons-x-mark" variant="ghost" size="sm" />
-          </div>
-        </template>
-        
-        <div class="space-y-6 p-4 max-h-[70vh] overflow-y-auto">
-          <!-- Page Overview -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-400" />
-              Page Overview
-            </h4>
-            <p class="text-sm text-gray-300 mb-3">
-              This page displays comprehensive AWS account access information for a specific user, including their roles, permissions, and how they obtained access.
-            </p>
-          </div>
-
-          <!-- User Profile Section -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-green-400" />
-              User Profile Section
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <UBadge color="green" variant="soft" size="sm">Avatar</UBadge>
-                <p class="text-sm text-gray-300">Displays the user's profile picture or initials if no photo is available</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="blue" variant="soft" size="sm">Contact Actions</UBadge>
-                <p class="text-sm text-gray-300">Quick access to email, Teams chat, and phone communication</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="purple" variant="soft" size="sm">Teams Button</UBadge>
-                <p class="text-sm text-gray-300">Opens Microsoft Teams to start a chat with the user</p>
-              </div>
+    <UModal v-model:open="showHelpModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-white">AWS Access Center Help</h3>
+              <UButton @click="showHelpModal = false" icon="i-heroicons-x-mark" variant="ghost" size="sm" />
             </div>
-          </div>
+          </template>
+          
+          <div class="space-y-6 p-4 max-h-[70vh] overflow-y-auto">
+            <!-- Page Overview -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-400" />
+                Page Overview
+              </h4>
+              <p class="text-sm text-gray-300 mb-3">
+                This page displays comprehensive AWS account access information for a specific user, including their roles, permissions, and how they obtained access.
+              </p>
+            </div>
 
-          <!-- Environment Types -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-blue-400" />
-              Environment Types
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <div class="w-3 h-3 bg-blue-400 rounded-full mt-1.5"></div>
-                <div>
-                  <p class="text-sm font-medium text-blue-300">Commercial Environment</p>
-                  <p class="text-xs text-gray-400">Standard AWS cloud environment for general business use</p>
+            <!-- User Profile Section -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-green-400" />
+                User Profile Section
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <UBadge color="green" variant="soft" size="sm">Avatar</UBadge>
+                  <p class="text-sm text-gray-300">Displays the user's profile picture or initials if no photo is available</p>
                 </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <div class="w-3 h-3 bg-orange-400 rounded-full mt-1.5"></div>
-                <div>
-                  <p class="text-sm font-medium text-orange-300">GovCloud Environment</p>
-                  <p class="text-xs text-gray-400">AWS GovCloud environment for government and compliance workloads</p>
+                <div class="flex items-start gap-3">
+                  <UBadge color="blue" variant="soft" size="sm">Contact Actions</UBadge>
+                  <p class="text-sm text-gray-300">Quick access to email, Teams chat, and phone communication</p>
                 </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="purple" variant="soft" size="sm">Multi-Env</UBadge>
-                <p class="text-sm text-gray-300">User has access to both Commercial and GovCloud environments for the same account</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Access Types -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-key" class="w-5 h-5 text-yellow-400" />
-              How Users Get Access
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <UBadge color="green" variant="soft" size="sm">Direct Member</UBadge>
-                <p class="text-sm text-gray-300">User is directly assigned to specific AWS account roles in Azure AD</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="blue" variant="soft" size="sm">Group Member</UBadge>
-                <p class="text-sm text-gray-300">User inherits access through Azure AD group membership</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="purple" variant="soft" size="sm">Mixed Access</UBadge>
-                <p class="text-sm text-gray-300">User has both direct assignments and group-based access</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Common AWS Roles -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-red-400" />
-              Common AWS Roles
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <UBadge color="red" variant="soft" size="sm">admin</UBadge>
-                <p class="text-sm text-gray-300">Full administrative access - can create, modify, and delete all AWS resources</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="orange" variant="soft" size="sm">poweruser</UBadge>
-                <p class="text-sm text-gray-300">Elevated access with most permissions except user/group management</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="yellow" variant="soft" size="sm">developer</UBadge>
-                <p class="text-sm text-gray-300">Development permissions - can deploy applications and manage development resources</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="blue" variant="soft" size="sm">readonly</UBadge>
-                <p class="text-sm text-gray-300">View-only access - can see resources but cannot make changes</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="gray" variant="soft" size="sm">billing</UBadge>
-                <p class="text-sm text-gray-300">Access to billing and cost information only</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Icon Legend -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-purple-400" />
-              Interface Icons
-            </h4>
-            <div class="grid grid-cols-2 gap-3">
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-building-office" class="w-4 h-4 text-blue-400" />
-                <span class="text-xs text-gray-300">AWS Account</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-user-group" class="w-4 h-4 text-green-400" />
-                <span class="text-xs text-gray-300">Group Access</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-eye" class="w-4 h-4 text-gray-400" />
-                <span class="text-xs text-gray-300">View Details</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-blue-400" />
-                <span class="text-xs text-gray-300">Refresh Data</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-funnel" class="w-4 h-4 text-yellow-400" />
-                <span class="text-xs text-gray-300">Filter Results</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-purple-400" />
-                <span class="text-xs text-gray-300">Toggle View Mode</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- View Modes -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-rectangle-group" class="w-5 h-5 text-cyan-400" />
-              View Modes
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <UBadge color="blue" variant="soft" size="sm">Card View</UBadge>
-                <p class="text-sm text-gray-300">Displays accounts as cards with detailed role and group information</p>
-              </div>
-              <div class="flex items-start gap-3">
-                <UBadge color="cyan" variant="soft" size="sm">Table View</UBadge>
-                <p class="text-sm text-gray-300">Compact table format showing key information in rows</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Status Indicators -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-signal" class="w-5 h-5 text-green-400" />
-              Status Indicators
-            </h4>
-            <div class="space-y-3">
-              <div class="flex items-start gap-3">
-                <div class="w-3 h-3 bg-green-400 rounded-full mt-1.5"></div>
-                <div>
-                  <p class="text-sm font-medium text-green-300">Active Account</p>
-                  <p class="text-xs text-gray-400">Account is active and accessible</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <div class="w-3 h-3 bg-yellow-400 rounded-full mt-1.5"></div>
-                <div>
-                  <p class="text-sm font-medium text-yellow-300">Inactive Account</p>
-                  <p class="text-xs text-gray-400">Account exists but may have limited access</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <div class="w-3 h-3 bg-blue-400 rounded-full mt-1.5"></div>
-                <div>
-                  <p class="text-sm font-medium text-blue-300">Loading</p>
-                  <p class="text-xs text-gray-400">Data is being fetched from Azure AD and AWS</p>
+                <div class="flex items-start gap-3">
+                  <UBadge color="purple" variant="soft" size="sm">Teams Button</UBadge>
+                  <p class="text-sm text-gray-300">Opens Microsoft Teams to start a chat with the user</p>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Tips -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-yellow-400" />
-              Tips & Best Practices
-            </h4>
-            <div class="space-y-2">
-              <div class="flex items-start gap-2">
-                <span class="text-yellow-400">•</span>
-                <p class="text-sm text-gray-300">Use the role filter to quickly find specific types of access</p>
-              </div>
-              <div class="flex items-start gap-2">
-                <span class="text-yellow-400">•</span>
-                <p class="text-sm text-gray-300">Click "View Groups" to see detailed group membership and owners</p>
-              </div>
-              <div class="flex items-start gap-2">
-                <span class="text-yellow-400">•</span>
-                <p class="text-sm text-gray-300">Multi-environment accounts may require separate login sessions</p>
-              </div>
-              <div class="flex items-start gap-2">
-                <span class="text-yellow-400">•</span>
-                <p class="text-sm text-gray-300">Contact group owners for access requests or questions</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Navigation Guide -->
-          <div>
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-              <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-5 h-5 text-cyan-400" />
-              Where Links Take You
-            </h4>
-            <div class="space-y-2 text-sm">
-              <div class="flex items-start gap-2">
-                <UIcon name="i-heroicons-building-office" class="w-4 h-4 text-blue-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">Account Details / Account Overview</p>
-                  <p class="text-xs text-gray-400">→ Takes you to the AWS account's main page with users, groups, and resources</p>
+            <!-- Environment Types -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-blue-400" />
+                Environment Types
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <div class="w-3 h-3 bg-blue-400 rounded-full mt-1.5"></div>
+                  <div>
+                    <p class="text-sm font-medium text-blue-300">Commercial Environment</p>
+                    <p class="text-xs text-gray-400">Standard AWS cloud environment for general business use</p>
+                  </div>
                 </div>
-              </div>
-              <div class="flex items-start gap-2">
-                <UIcon name="i-heroicons-user-group" class="w-4 h-4 text-green-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">View Groups / Group Details</p>
-                  <p class="text-xs text-gray-400">→ Opens detailed information about Azure AD groups (modal popup)</p>
+                <div class="flex items-start gap-3">
+                  <div class="w-3 h-3 bg-orange-400 rounded-full mt-1.5"></div>
+                  <div>
+                    <p class="text-sm font-medium text-orange-300">GovCloud Environment</p>
+                    <p class="text-xs text-gray-400">AWS GovCloud environment for government and compliance workloads</p>
+                  </div>
                 </div>
-              </div>
-              <div class="flex items-start gap-2">
-                <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-purple-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">User Names / View Access</p>
-                  <p class="text-xs text-gray-400">→ Takes you to that user's AWS access page (like this page)</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-2">
-                <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-blue-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">Send Email</p>
-                  <p class="text-xs text-gray-400">→ Opens your default email client to compose an email</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-2">
-                <UIcon name="i-simple-icons-microsoftteams" class="w-4 h-4 text-purple-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">Teams Chat</p>
-                  <p class="text-xs text-gray-400">→ Opens Microsoft Teams to start a chat with the user</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-2">
-                <UIcon name="i-heroicons-phone" class="w-4 h-4 text-green-400 mt-0.5" />
-                <div>
-                  <p class="text-gray-300 font-medium">Call</p>
-                  <p class="text-xs text-gray-400">→ Uses your device to call the phone number</p>
+                <div class="flex items-start gap-3">
+                  <UBadge color="purple" variant="soft" size="sm">Multi-Env</UBadge>
+                  <p class="text-sm text-gray-300">User has access to both Commercial and GovCloud environments for the same account</p>
                 </div>
               </div>
             </div>
+
+            <!-- Access Types -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-key" class="w-5 h-5 text-yellow-400" />
+                How Users Get Access
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <UBadge color="green" variant="soft" size="sm">Direct Member</UBadge>
+                  <p class="text-sm text-gray-300">User is directly assigned to specific AWS account roles in Azure AD</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="blue" variant="soft" size="sm">Group Member</UBadge>
+                  <p class="text-sm text-gray-300">User inherits access through Azure AD group membership</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="purple" variant="soft" size="sm">Mixed Access</UBadge>
+                  <p class="text-sm text-gray-300">User has both direct assignments and group-based access</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Common AWS Roles -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-red-400" />
+                Common AWS Roles
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <UBadge color="red" variant="soft" size="sm">admin</UBadge>
+                  <p class="text-sm text-gray-300">Full administrative access - can create, modify, and delete all AWS resources</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="orange" variant="soft" size="sm">poweruser</UBadge>
+                  <p class="text-sm text-gray-300">Elevated access with most permissions except user/group management</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="yellow" variant="soft" size="sm">developer</UBadge>
+                  <p class="text-sm text-gray-300">Development permissions - can deploy applications and manage development resources</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="blue" variant="soft" size="sm">readonly</UBadge>
+                  <p class="text-sm text-gray-300">View-only access - can see resources but cannot make changes</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="neutral" variant="soft" size="sm">billing</UBadge>
+                  <p class="text-sm text-gray-300">Access to billing and cost information only</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Icon Legend -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-purple-400" />
+                Interface Icons
+              </h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-building-office" class="w-4 h-4 text-blue-400" />
+                  <span class="text-xs text-gray-300">AWS Account</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-user-group" class="w-4 h-4 text-green-400" />
+                  <span class="text-xs text-gray-300">Group Access</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-eye" class="w-4 h-4 text-gray-400" />
+                  <span class="text-xs text-gray-300">View Details</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-blue-400" />
+                  <span class="text-xs text-gray-300">Refresh Data</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-funnel" class="w-4 h-4 text-yellow-400" />
+                  <span class="text-xs text-gray-300">Filter Results</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-purple-400" />
+                  <span class="text-xs text-gray-300">Toggle View Mode</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- View Modes -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-rectangle-group" class="w-5 h-5 text-cyan-400" />
+                View Modes
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <UBadge color="blue" variant="soft" size="sm">Card View</UBadge>
+                  <p class="text-sm text-gray-300">Displays accounts as cards with detailed role and group information</p>
+                </div>
+                <div class="flex items-start gap-3">
+                  <UBadge color="cyan" variant="soft" size="sm">Table View</UBadge>
+                  <p class="text-sm text-gray-300">Compact table format showing key information in rows</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Status Indicators -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-signal" class="w-5 h-5 text-green-400" />
+                Status Indicators
+              </h4>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <div class="w-3 h-3 bg-green-400 rounded-full mt-1.5"></div>
+                  <div>
+                    <p class="text-sm font-medium text-green-300">Active Account</p>
+                    <p class="text-xs text-gray-400">Account is active and accessible</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-3 h-3 bg-yellow-400 rounded-full mt-1.5"></div>
+                  <div>
+                    <p class="text-sm font-medium text-yellow-300">Inactive Account</p>
+                    <p class="text-xs text-gray-400">Account exists but may have limited access</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-3 h-3 bg-blue-400 rounded-full mt-1.5"></div>
+                  <div>
+                    <p class="text-sm font-medium text-blue-300">Loading</p>
+                    <p class="text-xs text-gray-400">Data is being fetched from Azure AD and AWS</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tips -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-yellow-400" />
+                Tips & Best Practices
+              </h4>
+              <div class="space-y-2">
+                <div class="flex items-start gap-2">
+                  <span class="text-yellow-400">•</span>
+                  <p class="text-sm text-gray-300">Use the role filter to quickly find specific types of access</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="text-yellow-400">•</span>
+                  <p class="text-sm text-gray-300">Click "View Groups" to see detailed group membership and owners</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="text-yellow-400">•</span>
+                  <p class="text-sm text-gray-300">Multi-environment accounts may require separate login sessions</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="text-yellow-400">•</span>
+                  <p class="text-sm text-gray-300">Contact group owners for access requests or questions</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Navigation Guide -->
+            <div>
+              <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+                <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-5 h-5 text-cyan-400" />
+                Where Links Take You
+              </h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-heroicons-building-office" class="w-4 h-4 text-blue-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">Account Details / Account Overview</p>
+                    <p class="text-xs text-gray-400">→ Takes you to the AWS account's main page with users, groups, and resources</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-heroicons-user-group" class="w-4 h-4 text-green-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">View Groups / Group Details</p>
+                    <p class="text-xs text-gray-400">→ Opens detailed information about Azure AD groups (modal popup)</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-purple-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">User Names / View Access</p>
+                    <p class="text-xs text-gray-400">→ Takes you to that user's AWS access page (like this page)</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-blue-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">Send Email</p>
+                    <p class="text-xs text-gray-400">→ Opens your default email client to compose an email</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-simple-icons-microsoftteams" class="w-4 h-4 text-purple-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">Teams Chat</p>
+                    <p class="text-xs text-gray-400">→ Opens Microsoft Teams to start a chat with the user</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-heroicons-phone" class="w-4 h-4 text-green-400 mt-0.5" />
+                  <div>
+                    <p class="text-gray-300 font-medium">Call</p>
+                    <p class="text-xs text-gray-400">→ Uses your device to call the phone number</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </UCard>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Enhanced Group Details Modal -->
-    <UModal :ui="{ width: 'md:max-w-4xl'}" v-model="showGroupModal" :prevent-close="false">
-      <UCard :ui="{ body: { padding: '' } }" class="w-full">
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <h3 class="text-lg font-semibold text-white">Group Membership Details</h3>
-              <UBadge color="gray" variant="soft" size="sm">
-                {{ selectedGroupDetails.length }} group{{ selectedGroupDetails.length !== 1 ? 's' : '' }}
-              </UBadge>
+    <UModal :ui="{ content: 'md:max-w-4xl' }" v-model:open="showGroupModal" :dismissible="false" scrollable>
+      <template #content>
+        <UCard :ui="{ body: 'p-0 sm:p-0' }" class="w-full">
+          <template #header>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <h3 class="text-lg font-semibold text-white">Group Membership Details</h3>
+                <UBadge color="neutral" variant="soft" size="sm">
+                  {{ selectedGroupDetails.length }} group{{ selectedGroupDetails.length !== 1 ? 's' : '' }}
+                </UBadge>
+              </div>
+              <div class="flex items-center gap-2">
+                <UButton
+                  v-if="selectedGroupDetails.length > 0"
+                  @click="navigateToGroupsPage(selectedGroupDetails[0].accountId)"
+                  variant="outline"
+                  size="sm"
+                  icon="i-heroicons-arrow-top-right-on-square"
+                >
+                  View All Groups
+                </UButton>
+                <UButton @click="showGroupModal = false" icon="i-heroicons-x-mark" variant="ghost" size="sm" />
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <UButton
-                v-if="selectedGroupDetails.length > 0"
-                @click="navigateToGroupsPage(selectedGroupDetails[0].accountId)"
-                variant="outline"
-                size="sm"
-                icon="i-heroicons-arrow-top-right-on-square"
-              >
-                View All Groups
-              </UButton>
-              <UButton @click="showGroupModal = false" icon="i-heroicons-x-mark" variant="ghost" size="sm" />
-            </div>
-          </div>
-        </template>
-        
-        <div class="max-h-[80vh] overflow-y-auto">
-          <!-- Loading State -->
-          <div v-if="loadingGroupDetails" class="flex items-center justify-center py-12">
-            <div class="text-center">
-              <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-400 mb-3" />
-              <p class="text-gray-400">Loading group details...</p>
-            </div>
-          </div>
+          </template>
           
-          <!-- No Groups -->
-          <div v-else-if="selectedGroupDetails.length === 0" class="text-center py-12 px-6">
-            <UIcon name="i-heroicons-user-group" class="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <h4 class="text-lg font-medium text-white mb-2">No Group Details</h4>
-            <p class="text-gray-400">No group membership information available.</p>
-          </div>
-          
-          <!-- Group Details -->
-          <div v-else class="space-y-6 p-6">
-            <div v-for="(detail, index) in selectedGroupDetails" :key="`${detail.groupId}-${detail.role}`" 
-                 class="border border-gray-700 rounded-lg overflow-hidden">
-              
-              <!-- Group Header -->
-              <div class="bg-gray-800/50 p-4">
-                <div class="flex items-start justify-between mb-3">
-                  <div class="flex-1 min-w-0">
-                    <h4 class="font-semibold text-white text-lg">{{ detail.groupName }}</h4>
-                    <p class="text-sm text-gray-400 mt-1">{{ detail.accountName }}</p>
-                    <div class="flex items-center gap-2 mt-2">
-                      <UBadge 
-                        :color="detail.role === 'admin' ? 'red' : detail.role === 'poweruser' ? 'orange' : 'blue'"
-                        variant="soft"
-                        size="sm"
-                      >
-                        {{ detail.role }}
-                      </UBadge>
-                      <UBadge 
-                        :color="detail.environment === 'govcloud' ? 'orange' : 'blue'"
-                        variant="soft"
-                        size="sm"
-                      >
-                        {{ detail.environment === 'govcloud' ? 'GovCloud' : 'Commercial' }}
-                      </UBadge>
-                      <UBadge 
-                        color="gray" 
-                        variant="soft" 
-                        size="sm"
-                        class="flex items-center gap-1"
-                      >
-                        <UIcon name="i-heroicons-users" class="w-3 h-3" />
-                        {{ detail.memberCount }}
-                      </UBadge>
-                    </div>
-                  </div>
-                  
-                  <!-- Action Buttons -->
-                  <div class="flex items-start gap-2 ml-4">
-                    <UButton
-                      @click="navigateTo(`/account/${detail.accountId}`)"
-                      variant="ghost"
-                      size="sm"
-                      icon="i-heroicons-building-office"
-                      :title="`Go to ${detail.accountName} account overview page`"
-                    >
-                      <span class="flex items-center gap-1">
-                        Account Overview
-                        <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3 h-3" />
-                      </span>
-                    </UButton>
-                  </div>
-                </div>
+          <div class="max-h-[80vh] overflow-y-auto">
+            <!-- Loading State -->
+            <div v-if="loadingGroupDetails" class="flex items-center justify-center py-12">
+              <div class="text-center">
+                <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-400 mb-3" />
+                <p class="text-gray-400">Loading group details...</p>
+              </div>
+            </div>
+            
+            <!-- No Groups -->
+            <div v-else-if="selectedGroupDetails.length === 0" class="text-center py-12 px-6">
+              <UIcon name="i-heroicons-user-group" class="w-16 h-16 text-gray-500 mx-auto mb-4" />
+              <h4 class="text-lg font-medium text-white mb-2">No Group Details</h4>
+              <p class="text-gray-400">No group membership information available.</p>
+            </div>
+            
+            <!-- Group Details -->
+            <div v-else class="space-y-6 p-6">
+              <div v-for="(detail, index) in selectedGroupDetails" :key="`${detail.groupId}-${detail.role}`" 
+                   class="border border-gray-700 rounded-lg overflow-hidden">
                 
-                <!-- Group ID -->
-                <div class="text-xs text-gray-500">
-                  <span class="font-medium">Group ID:</span>
-                  <span class="font-mono ml-1">{{ detail.groupId || 'N/A' }}</span>
-                </div>
-              </div>
-
-              <!-- Group Details Content -->
-              <div class="p-4 space-y-4">
-                <!-- Owners Section -->
-                <div v-if="detail.owners.length > 0">
-                  <div class="flex items-center gap-2 mb-3">
-                    <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-blue-400" />
-                    <h5 class="text-sm font-medium text-gray-300">Group Owners ({{ detail.owners.length }})</h5>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <span 
-                      v-for="owner in detail.owners" 
-                      :key="owner"
-                      :class="[
-                        'px-3 py-1 text-sm rounded-full transition-colors',
-                        owner === 'GDMSCloud.AWS' 
-                          ? 'bg-gray-500/10 border border-gray-500/20 text-gray-300' 
-                          : 'bg-blue-500/10 border border-blue-500/20 text-blue-300 cursor-pointer hover:bg-blue-500/20'
-                      ]"
-                      @click="owner !== 'GDMSCloud.AWS' ? navigateToUser(owner + '@gd-ms.com') : null"
-                      :title="owner === 'GDMSCloud.AWS' 
-                        ? 'GDMS Landing Zone Owned Group - This group is managed by the GDMS Cloud Platform team' 
-                        : `View ${owner}'s access details`"
-                    >
-                      <span class="flex items-center gap-1">
-                        {{ owner }}
-                        <UIcon 
-                          v-if="owner !== 'GDMSCloud.AWS'"
-                          name="i-heroicons-arrow-top-right-on-square" 
-                          class="w-3 h-3" 
-                        />
-                        <UIcon 
-                          v-else
-                          name="i-heroicons-shield-check" 
-                          class="w-3 h-3 text-gray-400" 
-                        />
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Description Section -->
-                <div v-if="detail.cleanDescription">
-                  <div class="flex items-center gap-2 mb-3">
-                    <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-green-400" />
-                    <h5 class="text-sm font-medium text-gray-300">Description</h5>
-                  </div>
-                  <p class="text-sm text-gray-400 bg-gray-800/30 rounded-lg p-3">
-                    {{ detail.cleanDescription }}
-                  </p>
-                </div>
-
-                <!-- Members Section -->
-                <div>
-                  <div class="flex items-center gap-2 mb-3">
-                    <UIcon name="i-heroicons-users" class="w-4 h-4 text-purple-400" />
-                    <h5 class="text-sm font-medium text-gray-300">Members ({{ detail.memberCount }})</h5>
-                  </div>
-                  
-                  <!-- Loading Members -->
-                  <div v-if="detail.loadingMembers" class="flex items-center justify-center py-6">
-                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-gray-400 mr-2" />
-                    <span class="text-sm text-gray-400">Loading members...</span>
-                  </div>
-                  
-                  <!-- No Members -->
-                  <div v-else-if="detail.memberCount === 0" class="text-center py-6 bg-gray-800/30 rounded-lg">
-                    <UIcon name="i-heroicons-user-minus" class="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                    <p class="text-sm text-gray-400">No members in this group</p>
-                  </div>
-                  
-                  <!-- Members List -->
-                  <div v-else-if="detail.members.length > 0" class="space-y-2 max-h-64 overflow-y-auto border border-gray-700 rounded-lg">
-                    <div 
-                      v-for="member in detail.members" 
-                      :key="member.userPrincipalName"
-                      class="flex items-center gap-3 p-3 hover:bg-gray-800/50 transition-colors cursor-pointer border-b border-gray-700 last:border-b-0"
-                      @click="navigateToUser(member.userPrincipalName)"
-                      :title="`View ${member.displayName}'s access details`"
-                    >
-                      <!-- User Avatar -->
-                      <UserAvatar 
-                        :user-principal-name="member.userPrincipalName"
-                        :display-name="member.displayName"
+                <!-- Group Header -->
+                <div class="bg-gray-800/50 p-4">
+                  <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1 min-w-0">
+                      <h4 class="font-semibold text-white text-lg">{{ detail.groupName }}</h4>
+                      <p class="text-sm text-gray-400 mt-1">{{ detail.accountName }}</p>
+                      <div class="flex items-center gap-2 mt-2">
+                        <UBadge 
+                          :color="detail.role === 'admin' ? 'red' : detail.role === 'poweruser' ? 'orange' : 'blue'"
+                          variant="soft"
+                          size="sm"
+                        >
+                          {{ detail.role }}
+                        </UBadge>
+                        <UBadge 
+                          :color="detail.environment === 'govcloud' ? 'orange' : 'blue'"
+                          variant="soft"
+                          size="sm"
+                        >
+                          {{ detail.environment === 'govcloud' ? 'GovCloud' : 'Commercial' }}
+                        </UBadge>
+                        <UBadge 
+                          color="neutral" 
+                          variant="soft" 
+                          size="sm"
+                          class="flex items-center gap-1"
+                        >
+                          <UIcon name="i-heroicons-users" class="w-3 h-3" />
+                          {{ detail.memberCount }}
+                        </UBadge>
+                      </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex items-start gap-2 ml-4">
+                      <UButton
+                        @click="navigateTo(`/account/${detail.accountId}`)"
+                        variant="ghost"
                         size="sm"
-                        class="flex-shrink-0"
-                      />
-                      
-                      <!-- User Details -->
-                      <div class="flex-1 min-w-0">
-                        <p class="font-medium text-white text-base">{{ member.displayName }}</p>
-                        <p class="text-xs text-gray-400 truncate">{{ member.userPrincipalName }}</p>
-                        <p v-if="member.jobTitle" class="text-xs text-gray-500 truncate">{{ member.jobTitle }}</p>
-                      </div>
-                      
-                      <!-- Navigate Icon with label -->
-                      <div class="flex items-center gap-1 text-xs text-gray-400">
-                        <span class="hidden sm:block">View Access</span>
-                        <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
-                      </div>
+                        icon="i-heroicons-building-office"
+                        :title="`Go to ${detail.accountName} account overview page`"
+                      >
+                        <span class="flex items-center gap-1">
+                          Account Overview
+                          <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3 h-3" />
+                        </span>
+                      </UButton>
                     </div>
                   </div>
                   
-                  <!-- Fallback for no member data -->
-                  <div v-else class="text-center py-4 bg-gray-800/30 rounded-lg">
-                    <p class="text-sm text-gray-400">Member details not available</p>
+                  <!-- Group ID -->
+                  <div class="text-xs text-gray-500">
+                    <span class="font-medium">Group ID:</span>
+                    <span class="font-mono ml-1">{{ detail.groupId || 'N/A' }}</span>
+                  </div>
+                </div>
+
+                <!-- Group Details Content -->
+                <div class="p-4 space-y-4">
+                  <!-- Owners Section -->
+                  <div v-if="detail.owners.length > 0">
+                    <div class="flex items-center gap-2 mb-3">
+                      <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-blue-400" />
+                      <h5 class="text-sm font-medium text-gray-300">Group Owners ({{ detail.owners.length }})</h5>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <span 
+                        v-for="owner in detail.owners" 
+                        :key="owner"
+                        :class="[
+                          'px-3 py-1 text-sm rounded-full transition-colors',
+                          owner === 'GDMSCloud.AWS' 
+                            ? 'bg-gray-500/10 border border-gray-500/20 text-gray-300' 
+                            : 'bg-blue-500/10 border border-blue-500/20 text-blue-300 cursor-pointer hover:bg-blue-500/20'
+                        ]"
+                        @click="owner !== 'GDMSCloud.AWS' ? navigateToUser(owner + '@gd-ms.com') : null"
+                        :title="owner === 'GDMSCloud.AWS' 
+                          ? 'GDMS Landing Zone Owned Group - This group is managed by the GDMS Cloud Platform team' 
+                          : `View ${owner}'s access details`"
+                      >
+                        <span class="flex items-center gap-1">
+                          {{ owner }}
+                          <UIcon 
+                            v-if="owner !== 'GDMSCloud.AWS'"
+                            name="i-heroicons-arrow-top-right-on-square" 
+                            class="w-3 h-3" 
+                          />
+                          <UIcon 
+                            v-else
+                            name="i-heroicons-shield-check" 
+                            class="w-3 h-3 text-gray-400" 
+                          />
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Description Section -->
+                  <div v-if="detail.cleanDescription">
+                    <div class="flex items-center gap-2 mb-3">
+                      <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-green-400" />
+                      <h5 class="text-sm font-medium text-gray-300">Description</h5>
+                    </div>
+                    <p class="text-sm text-gray-400 bg-gray-800/30 rounded-lg p-3">
+                      {{ detail.cleanDescription }}
+                    </p>
+                  </div>
+
+                  <!-- Members Section -->
+                  <div>
+                    <div class="flex items-center gap-2 mb-3">
+                      <UIcon name="i-heroicons-users" class="w-4 h-4 text-purple-400" />
+                      <h5 class="text-sm font-medium text-gray-300">Members ({{ detail.memberCount }})</h5>
+                    </div>
+                    
+                    <!-- Loading Members -->
+                    <div v-if="detail.loadingMembers" class="flex items-center justify-center py-6">
+                      <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-gray-400 mr-2" />
+                      <span class="text-sm text-gray-400">Loading members...</span>
+                    </div>
+                    
+                    <!-- No Members -->
+                    <div v-else-if="detail.memberCount === 0" class="text-center py-6 bg-gray-800/30 rounded-lg">
+                      <UIcon name="i-heroicons-user-minus" class="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                      <p class="text-sm text-gray-400">No members in this group</p>
+                    </div>
+                    
+                    <!-- Members List -->
+                    <div v-else-if="detail.members.length > 0" class="space-y-2 max-h-64 overflow-y-auto border border-gray-700 rounded-lg">
+                      <div 
+                        v-for="member in detail.members" 
+                        :key="member.userPrincipalName"
+                        class="flex items-center gap-3 p-3 hover:bg-gray-800/50 transition-colors cursor-pointer border-b border-gray-700 last:border-b-0"
+                        @click="navigateToUser(member.userPrincipalName)"
+                        :title="`View ${member.displayName}'s access details`"
+                      >
+                        <!-- User Avatar -->
+                        <UserAvatar 
+                          :user-principal-name="member.userPrincipalName"
+                          :display-name="member.displayName"
+                          size="sm"
+                          class="flex-shrink-0"
+                        />
+                        
+                        <!-- User Details -->
+                        <div class="flex-1 min-w-0">
+                          <p class="font-medium text-white text-base">{{ member.displayName }}</p>
+                          <p class="text-xs text-gray-400 truncate">{{ member.userPrincipalName }}</p>
+                          <p v-if="member.jobTitle" class="text-xs text-gray-500 truncate">{{ member.jobTitle }}</p>
+                        </div>
+                        
+                        <!-- Navigate Icon with label -->
+                        <div class="flex items-center gap-1 text-xs text-gray-400">
+                          <span class="hidden sm:block">View Access</span>
+                          <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Fallback for no member data -->
+                    <div v-else class="text-center py-4 bg-gray-800/30 rounded-lg">
+                      <p class="text-sm text-gray-400">Member details not available</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </UCard>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Export Options Modal -->
-    <UModal v-model="showExportModal" class="z-50">
-      <UCard class="max-w-lg">
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-arrow-down-tray" class="w-5 h-5 text-blue-400" />
-            <h3 class="text-lg font-semibold">Export User Access</h3>
-          </div>
-        </template>
-
-        <div class="space-y-6">
-          <!-- File Format -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">File Format</label>
-            <USelectMenu
-              v-model="exportOptions.fileType"
-              :options="[
-                { label: 'CSV (Comma Separated)', value: 'csv' },
-                { label: 'JSON (JavaScript Object)', value: 'json' }
-              ]"
-              placeholder="Select format"
-            />
-          </div>
-
-          <!-- Export Format (only for CSV) -->
-          <div v-if="exportOptions.fileType === 'csv'">
-            <label class="block text-sm font-medium text-gray-300 mb-2">Export Format</label>
-            <USelectMenu
-              v-model="exportOptions.format"
-              :options="[
-                { label: 'Detailed - All information', value: 'detailed' },
-                { label: 'Summary - Essential fields only', value: 'summary' },
-                { label: 'Compliance - Audit-focused data', value: 'compliance' }
-              ]"
-              placeholder="Select format"
-            />
-          </div>
-
-          <!-- Include Options -->
-          <div class="space-y-3">
-            <label class="block text-sm font-medium text-gray-300">Include Additional Data</label>
-            
+    <UModal v-model:open="showExportModal" class="z-50" scrollable>
+      <template #content>
+        <UCard class="max-w-lg">
+          <template #header>
             <div class="flex items-center gap-2">
-              <UCheckbox
-                v-model="exportOptions.includeContactInfo"
-                id="include-contact"
-              />
-              <label for="include-contact" class="text-sm text-gray-300">
-                Contact Information (email, phone, job title)
-              </label>
+              <UIcon name="i-heroicons-arrow-down-tray" class="w-5 h-5 text-blue-400" />
+              <h3 class="text-lg font-semibold">Export User Access</h3>
+            </div>
+          </template>
+
+          <div class="space-y-6">
+            <!-- File Format -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">File Format</label>
+              <USelectMenu
+                v-model="exportOptions.fileType"
+                :items="[
+                  { label: 'CSV (Comma Separated)', value: 'csv' },
+                  { label: 'JSON (JavaScript Object)', value: 'json' }
+                ]"
+                placeholder="Select format"
+               :search-input="false"/>
             </div>
 
-            <div class="flex items-center gap-2">
-              <UCheckbox
-                v-model="exportOptions.includeGroupDetails"
-                id="include-groups"
-              />
-              <label for="include-groups" class="text-sm text-gray-300">
-                Group Membership Details
-              </label>
+            <!-- Export Format (only for CSV) -->
+            <div v-if="exportOptions.fileType === 'csv'">
+              <label class="block text-sm font-medium text-gray-300 mb-2">Export Format</label>
+              <USelectMenu
+                v-model="exportOptions.format"
+                :items="[
+                  { label: 'Detailed - All information', value: 'detailed' },
+                  { label: 'Summary - Essential fields only', value: 'summary' },
+                  { label: 'Compliance - Audit-focused data', value: 'compliance' }
+                ]"
+                placeholder="Select format"
+               :search-input="false"/>
             </div>
 
-            <div class="flex items-center gap-2">
-              <UCheckbox
-                v-model="exportOptions.includeComplianceData"
-                id="include-compliance"
-              />
-              <label for="include-compliance" class="text-sm text-gray-300">
-                Compliance & Audit Fields
-              </label>
-            </div>
-          </div>
+            <!-- Include Options -->
+            <div class="space-y-3">
+              <label class="block text-sm font-medium text-gray-300">Include Additional Data</label>
+              
+              <div class="flex items-center gap-2">
+                <UCheckbox
+                  v-model="exportOptions.includeContactInfo"
+                  id="include-contact"
+                />
+                <label for="include-contact" class="text-sm text-gray-300">
+                  Contact Information (email, phone, job title)
+                </label>
+              </div>
 
-          <!-- Preview Info -->
-          <div class="bg-gray-800/50 rounded-lg p-4">
-            <div class="flex items-start gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5" />
-              <div class="text-sm">
-                <p class="text-gray-300 font-medium mb-1">Export Preview</p>
-                <p class="text-gray-400">
-                  {{ accounts.length }} account{{ accounts.length !== 1 ? 's' : '' }} will be exported
-                  as {{ exportOptions.fileType.toUpperCase() }}
-                  {{ exportOptions.fileType === 'csv' ? `in ${exportOptions.format} format` : '' }}.
-                </p>
+              <div class="flex items-center gap-2">
+                <UCheckbox
+                  v-model="exportOptions.includeGroupDetails"
+                  id="include-groups"
+                />
+                <label for="include-groups" class="text-sm text-gray-300">
+                  Group Membership Details
+                </label>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <UCheckbox
+                  v-model="exportOptions.includeComplianceData"
+                  id="include-compliance"
+                />
+                <label for="include-compliance" class="text-sm text-gray-300">
+                  Compliance & Audit Fields
+                </label>
+              </div>
+            </div>
+
+            <!-- Preview Info -->
+            <div class="bg-gray-800/50 rounded-lg p-4">
+              <div class="flex items-start gap-2">
+                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5" />
+                <div class="text-sm">
+                  <p class="text-gray-300 font-medium mb-1">Export Preview</p>
+                  <p class="text-gray-400">
+                    {{ accounts.length }} account{{ accounts.length !== 1 ? 's' : '' }} will be exported
+                    as {{ exportOptions.fileType.toUpperCase() }}
+                    {{ exportOptions.fileType === 'csv' ? `in ${exportOptions.format} format` : '' }}.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <template #footer>
-          <div class="flex items-center justify-end gap-3">
-            <UButton 
-              @click="showExportModal = false"
-              variant="ghost"
-            >
-              Cancel
-            </UButton>
-            <UButton 
-              @click="handleExportAccess"
-              color="blue"
-              :disabled="!accounts.length"
-            >
-              Export Data
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex items-center justify-end gap-3">
+              <UButton 
+                @click="showExportModal = false"
+                variant="ghost"
+              >
+                Cancel
+              </UButton>
+              <UButton 
+                @click="handleExportAccess"
+                color="blue"
+                :disabled="!accounts.length"
+              >
+                Export Data
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

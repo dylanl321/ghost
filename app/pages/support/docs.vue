@@ -64,7 +64,7 @@
             
             <UButton
               variant="soft"
-              color="gray"
+              color="neutral"
               size="sm"
               @click="openServiceNow"
             >

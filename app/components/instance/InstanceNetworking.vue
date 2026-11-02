@@ -14,14 +14,14 @@
             <span class="text-gray-500 dark:text-gray-400">Private IP</span>
             <div class="flex items-center gap-1.5">
               <span class="font-mono text-gray-900 dark:text-white">{{ networkInfo?.privateIpAddress || 'N/A' }}</span>
-              <UButton v-if="networkInfo?.privateIpAddress" icon="i-heroicons-clipboard-document" size="2xs" color="gray" variant="ghost" @click="copy(networkInfo.privateIpAddress)" />
+              <UButton v-if="networkInfo?.privateIpAddress" icon="i-heroicons-clipboard-document" size="xs" color="neutral" variant="ghost" @click="copy(networkInfo.privateIpAddress)" />
             </div>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-gray-500 dark:text-gray-400">Public IP</span>
             <div class="flex items-center gap-1.5">
               <span class="font-mono text-gray-900 dark:text-white">{{ networkInfo?.publicIpAddress || 'None' }}</span>
-              <UButton v-if="networkInfo?.publicIpAddress" icon="i-heroicons-clipboard-document" size="2xs" color="gray" variant="ghost" @click="copy(networkInfo.publicIpAddress)" />
+              <UButton v-if="networkInfo?.publicIpAddress" icon="i-heroicons-clipboard-document" size="xs" color="neutral" variant="ghost" @click="copy(networkInfo.publicIpAddress)" />
             </div>
           </div>
           <div class="flex justify-between">
@@ -66,7 +66,7 @@
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-shield-check" class="w-4 h-4 text-gray-400" />
           <span class="font-semibold text-sm">Security Groups</span>
-          <UBadge color="gray" variant="soft" size="xs">{{ securityGroups.length }}</UBadge>
+          <UBadge color="neutral" variant="soft" size="xs">{{ securityGroups.length }}</UBadge>
         </div>
       </template>
       <div v-if="securityGroups.length > 0" class="space-y-2">
@@ -86,7 +86,7 @@
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-server-stack" class="w-4 h-4 text-gray-400" />
           <span class="font-semibold text-sm">Network Interfaces</span>
-          <UBadge color="gray" variant="soft" size="xs">{{ networkInterfaces.length }}</UBadge>
+          <UBadge color="neutral" variant="soft" size="xs">{{ networkInterfaces.length }}</UBadge>
         </div>
       </template>
       <div class="space-y-3">

@@ -15,7 +15,7 @@
         </div>
         <div class="flex items-center gap-3">
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-path"
             :loading="loading"

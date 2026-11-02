@@ -30,7 +30,7 @@
           <span class="text-sm text-gray-500">Environment:</span>
           <USelect
             :model-value="context.state.environment"
-            :options="environmentOptions"
+            :items="environmentOptions"
             class="w-36"
             @update:model-value="(val: string) => context.setEnvironment(val as 'commercial' | 'govcloud')"
           />
@@ -107,7 +107,7 @@
           v-if="!context.isLoading.value"
           size="xs"
           variant="ghost"
-          color="gray"
+          color="neutral"
           @click="context.loadResources"
         >
           <Icon name="i-heroicons-arrow-path" class="w-4 h-4" />

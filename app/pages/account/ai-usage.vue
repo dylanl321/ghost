@@ -11,10 +11,10 @@
       </div>
       <div class="flex items-center gap-2">
         <UTooltip text="Export current tab">
-          <UButton color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" @click="exportCsv" />
+          <UButton color="neutral" variant="soft" icon="i-heroicons-arrow-down-tray" @click="exportCsv" />
         </UTooltip>
         <UTooltip text="Refresh snapshot">
-          <UButton color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="loadData" />
+          <UButton color="neutral" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="loadData" />
         </UTooltip>
       </div>
     </header>
@@ -37,31 +37,31 @@
         </div>
         <div class="w-40">
           <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Period</label>
-          <USelect v-model="period" :options="periodOptions" size="sm" />
+          <USelect v-model="period" :items="periodOptions" size="sm" />
         </div>
         <div class="w-40">
           <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Cost basis</label>
-          <USelect v-model="costBasis" :options="costBasisOptions" size="sm" />
+          <USelect v-model="costBasis" :items="costBasisOptions" size="sm" />
         </div>
         <div class="min-w-[250px] flex-1 xl:max-w-md">
           <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Accounts</label>
           <USelectMenu
             v-model="selectedAccounts"
-            :options="accountOptions"
-            value-attribute="value"
-            option-attribute="label"
-            searchable
+            :items="accountOptions"
+            value-key="value"
+            label-key="label"
+           
             multiple
             size="sm"
             placeholder="All enclaves"
           />
         </div>
         <UPopover>
-          <UButton color="gray" variant="soft" icon="i-heroicons-adjustments-horizontal" size="sm">
+          <UButton color="neutral" variant="soft" icon="i-heroicons-adjustments-horizontal" size="sm">
             Filters
             <UBadge v-if="activeFilterCount" color="emerald" variant="solid" size="xs">{{ activeFilterCount }}</UBadge>
           </UButton>
-          <template #panel>
+          <template #content>
             <div class="grid w-[min(92vw,720px)] gap-4 p-4 sm:grid-cols-2">
               <FilterSelect v-model="providers" label="Telemetry source" :options="providerOptions" />
               <FilterSelect v-model="services" label="Service" :options="stringOptions(data?.options.services)" />
@@ -71,7 +71,7 @@
               <FilterSelect v-model="linesOfBusiness" label="Line of business" :options="stringOptions(data?.options.linesOfBusiness)" />
               <FilterSelect v-model="departments" label="Department" :options="stringOptions(data?.options.departments)" />
               <div class="flex items-end justify-end">
-                <UButton color="gray" variant="ghost" size="sm" @click="clearFilters">Clear filters</UButton>
+                <UButton color="neutral" variant="ghost" size="sm" @click="clearFilters">Clear filters</UButton>
               </div>
             </div>
           </template>
@@ -97,7 +97,7 @@
 
     <template v-else-if="data">
       <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6" aria-label="AI adoption summary">
-        <UCard v-for="metric in summaryMetrics" :key="metric.label" :ui="{ body: { padding: 'p-4 sm:p-4' } }">
+        <UCard v-for="metric in summaryMetrics" :key="metric.label" :ui="{ body: 'p-4 sm:p-4' }">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ metric.label }}</p>

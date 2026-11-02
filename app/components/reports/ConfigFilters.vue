@@ -4,19 +4,19 @@
       Filter Options
     </div>
 
-    <UFormGroup label="Resource ID"><UInput v-model="filters.resourceId" placeholder="i-..., bucket, ARN..." /></UFormGroup>
-    <UFormGroup label="Resource Name"><UInput v-model="filters.resourceName" placeholder="Partial resource name" /></UFormGroup>
-    <UFormGroup label="Tags" help="Comma-separated key=value pairs"><UInput v-model="tagExpression" placeholder="Environment=prod,Owner=platform" /></UFormGroup>
+    <UFormField label="Resource ID"><UInput v-model="filters.resourceId" placeholder="i-..., bucket, ARN..." /></UFormField>
+    <UFormField label="Resource Name"><UInput v-model="filters.resourceName" placeholder="Partial resource name" /></UFormField>
+    <UFormField label="Tags" help="Comma-separated key=value pairs"><UInput v-model="tagExpression" placeholder="Environment=prod,Owner=platform" /></UFormField>
 
     <!-- Resource Types -->
-    <UFormGroup label="Resource Types" help="Leave empty to include all types">
+    <UFormField label="Resource Types" help="Leave empty to include all types">
       <USelectMenu
         v-model="selectedResourceTypes"
-        :options="resourceTypeOptions"
+        :items="resourceTypeOptions"
         multiple
-        searchable
+       
         placeholder="Select resource types..."
-        value-attribute="value"
+        value-key="value"
       >
         <template #label>
           <span v-if="!selectedResourceTypes || selectedResourceTypes.length === 0">
@@ -27,10 +27,10 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Compliance Status -->
-    <UFormGroup label="Compliance Status" help="Filter by compliance evaluation">
+    <UFormField label="Compliance Status" help="Filter by compliance evaluation">
       <div class="flex flex-wrap gap-2">
         <UBadge
           v-for="status in complianceStatuses"
@@ -43,27 +43,27 @@
           {{ status.label }}
         </UBadge>
       </div>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Compliance Only -->
-    <UFormGroup>
+    <UFormField>
       <div class="flex items-center gap-2">
         <UCheckbox
           v-model="filters.complianceOnly"
           label="Only show resources with compliance rules"
         />
       </div>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Regions -->
-    <UFormGroup label="Regions" help="Leave empty to include all regions">
+    <UFormField label="Regions" help="Leave empty to include all regions">
       <USelectMenu
         v-model="selectedRegions"
-        :options="regionOptions"
+        :items="regionOptions"
         multiple
-        searchable
+       
         placeholder="Select regions..."
-        value-attribute="value"
+        value-key="value"
       >
         <template #label>
           <span v-if="!selectedRegions || selectedRegions.length === 0">
@@ -74,7 +74,7 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Quick Filters -->
     <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -89,7 +89,7 @@
       <div class="flex flex-wrap gap-2">
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="setComputeResources"
         >
@@ -97,7 +97,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="setStorageResources"
         >
@@ -105,7 +105,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="setNetworkResources"
         >
@@ -113,7 +113,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="clearFilters"
         >

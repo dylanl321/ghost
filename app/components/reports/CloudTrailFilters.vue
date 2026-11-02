@@ -4,35 +4,35 @@
       Filter Options
     </div>
 
-    <UFormGroup label="Users or Roles" help="Comma-separated"><UInput v-model="userIdentitiesText" placeholder="alice,DeploymentRole" /></UFormGroup>
-    <UFormGroup label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-gov-west-1" /></UFormGroup>
-    <UFormGroup label="Custom Event Names" help="Comma-separated"><UInput v-model="eventNamesText" placeholder="CreateBucket,AssumeRole" /></UFormGroup>
-    <UFormGroup label="Custom Services" help="Comma-separated"><UInput v-model="eventSourcesText" placeholder="s3.amazonaws.com,sts.amazonaws.com" /></UFormGroup>
+    <UFormField label="Users or Roles" help="Comma-separated"><UInput v-model="userIdentitiesText" placeholder="alice,DeploymentRole" /></UFormField>
+    <UFormField label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-gov-west-1" /></UFormField>
+    <UFormField label="Custom Event Names" help="Comma-separated"><UInput v-model="eventNamesText" placeholder="CreateBucket,AssumeRole" /></UFormField>
+    <UFormField label="Custom Services" help="Comma-separated"><UInput v-model="eventSourcesText" placeholder="s3.amazonaws.com,sts.amazonaws.com" /></UFormField>
 
     <div class="grid grid-cols-2 gap-2">
-      <UFormGroup label="Start"><UInput v-model="filters.startTime" type="datetime-local" /></UFormGroup>
-      <UFormGroup label="End"><UInput v-model="filters.endTime" type="datetime-local" /></UFormGroup>
+      <UFormField label="Start"><UInput v-model="filters.startTime" type="datetime-local" /></UFormField>
+      <UFormField label="End"><UInput v-model="filters.endTime" type="datetime-local" /></UFormField>
     </div>
 
     <!-- Lookback Period -->
-    <UFormGroup label="Lookback Period" help="How far back to search for events (max 90 days)">
+    <UFormField label="Lookback Period" help="How far back to search for events (max 90 days)">
       <USelectMenu
         v-model="filters.lookbackDays"
-        :options="lookbackOptions"
+        :items="lookbackOptions"
         placeholder="Select period..."
-        value-attribute="value"
-      />
-    </UFormGroup>
+        value-key="value"
+       :search-input="false"/>
+    </UFormField>
 
     <!-- Event Types -->
-    <UFormGroup label="Event Types" help="Filter by event classification">
+    <UFormField label="Event Types" help="Filter by event classification">
       <USelectMenu
         v-model="selectedEventTypes"
-        :options="eventTypeOptions"
+        :items="eventTypeOptions"
         multiple
-        searchable
+       
         placeholder="Select event types..."
-        value-attribute="value"
+        value-key="value"
       >
         <template #label>
           <span v-if="!selectedEventTypes || selectedEventTypes.length === 0">
@@ -43,17 +43,17 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Event Names -->
-    <UFormGroup label="Specific Events" help="Filter by specific API calls">
+    <UFormField label="Specific Events" help="Filter by specific API calls">
       <USelectMenu
         v-model="selectedEventNames"
-        :options="eventNameOptions"
+        :items="eventNameOptions"
         multiple
-        searchable
+       
         placeholder="Select events..."
-        value-attribute="value"
+        value-key="value"
       >
         <template #label>
           <span v-if="!selectedEventNames || selectedEventNames.length === 0">
@@ -64,17 +64,17 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Services -->
-    <UFormGroup label="AWS Services" help="Filter by service source">
+    <UFormField label="AWS Services" help="Filter by service source">
       <USelectMenu
         v-model="selectedEventSources"
-        :options="serviceOptions"
+        :items="serviceOptions"
         multiple
-        searchable
+       
         placeholder="Select services..."
-        value-attribute="value"
+        value-key="value"
       >
         <template #label>
           <span v-if="!selectedEventSources || selectedEventSources.length === 0">
@@ -85,27 +85,27 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Filter Toggles -->
     <div class="space-y-2">
-      <UFormGroup>
+      <UFormField>
         <div class="flex items-center gap-2">
           <UCheckbox
             v-model="filters.writeEventsOnly"
             label="Write events only (exclude read operations)"
           />
         </div>
-      </UFormGroup>
+      </UFormField>
 
-      <UFormGroup>
+      <UFormField>
         <div class="flex items-center gap-2">
           <UCheckbox
             v-model="filters.errorsOnly"
             label="Errors only (failed API calls)"
           />
         </div>
-      </UFormGroup>
+      </UFormField>
     </div>
 
     <!-- Quick Filters -->
@@ -146,7 +146,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="clearFilters"
         >

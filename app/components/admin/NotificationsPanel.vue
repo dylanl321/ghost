@@ -13,25 +13,25 @@
       </template>
 
       <div class="flex flex-wrap gap-6 items-center">
-        <UFormGroup label="Type" class="min-w-[200px]">
+        <UFormField label="Type" class="min-w-[200px]">
           <USelect
             v-model="selectedType"
-            :options="notificationTypeOptions"
+            :items="notificationTypeOptions"
             placeholder="Select type"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Status" class="min-w-[200px]">
+        <UFormField label="Status" class="min-w-[200px]">
           <USelect
             v-model="selectedStatus"
-            :options="statusOptions"
+            :items="statusOptions"
             placeholder="Select status"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Search" class="min-w-[250px]">
+        <UFormField label="Search" class="min-w-[250px]">
           <UInput v-model="search" placeholder="Search subject or content..." />
-        </UFormGroup>
+        </UFormField>
       </div>
     </UCard>
 
@@ -43,12 +43,12 @@
             <div class="text-lg font-semibold">Results</div>
             <UBadge color="emerald" variant="subtle">{{ filteredItems.length }} results</UBadge>
           </div>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" :loading="loading" title="Refresh data" @click="fetchNotifications">Refresh</UButton>
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" :loading="loading" title="Refresh data" @click="fetchNotifications">Refresh</UButton>
         </div>
       </template>
 
       <UTable
-        :rows="paginatedItems"
+        :data="paginatedItems"
         :columns="columns"
         :loading="loading"
         class="min-w-full"
@@ -77,7 +77,7 @@
 
         <!-- Actions column -->
         <template #actions-data="{ row }">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-eye" @click="viewNotification(row)">
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-eye" @click="viewNotification(row)">
             View
           </UButton>
         </template>
@@ -85,79 +85,81 @@
 
       <div class="flex justify-end items-center mt-4">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredItems.length"
         />
       </div>
     </UCard>
 
     <!-- Notification Detail Modal -->
-    <UModal v-model="showDetailModal" :ui="{ width: 'max-w-4xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-semibold">{{ selectedNotification?.subject }}</h3>
-              <div class="flex items-center gap-2 mt-1">
-                <UBadge :color="getTypeColor(selectedNotification?.type)" variant="subtle" size="xs">
-                  {{ selectedNotification?.type }}
-                </UBadge>
-                <UBadge :color="selectedNotification?.status === 'SENT' ? 'green' : 'red'" size="xs">
-                  {{ selectedNotification?.status }}
-                </UBadge>
+    <UModal v-model:open="showDetailModal" :ui="{ content: 'max-w-4xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg font-semibold">{{ selectedNotification?.subject }}</h3>
+                <div class="flex items-center gap-2 mt-1">
+                  <UBadge :color="getTypeColor(selectedNotification?.type)" variant="subtle" size="xs">
+                    {{ selectedNotification?.type }}
+                  </UBadge>
+                  <UBadge :color="selectedNotification?.status === 'SENT' ? 'green' : 'red'" size="xs">
+                    {{ selectedNotification?.status }}
+                  </UBadge>
+                </div>
+              </div>
+              <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="showDetailModal = false" />
+            </div>
+          </template>
+
+          <div v-if="selectedNotification" class="space-y-6">
+            <!-- Metadata -->
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div class="text-gray-500">Sent At</div>
+                <div class="font-medium">{{ formatDateTime(selectedNotification.timestamp) }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500">Recipients</div>
+                <div class="font-medium">{{ selectedNotification.recipients.join(', ') }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500">Environment</div>
+                <div class="font-medium">{{ selectedNotification.environment }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500">Trigger</div>
+                <div class="font-medium">{{ selectedNotification.trigger }}</div>
+              </div>
+              <div v-if="selectedNotification.delivery_info?.messageId">
+                <div class="text-gray-500">SES Message ID</div>
+                <div class="font-mono text-xs">{{ selectedNotification.delivery_info.messageId }}</div>
+              </div>
+              <div v-if="selectedNotification.error">
+                <div class="text-red-500">Error</div>
+                <div class="text-red-600 text-sm">{{ selectedNotification.error }}</div>
               </div>
             </div>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showDetailModal = false" />
-          </div>
-        </template>
 
-        <div v-if="selectedNotification" class="space-y-6">
-          <!-- Metadata -->
-          <div class="grid grid-cols-2 gap-4 text-sm">
+            <!-- Email Preview -->
             <div>
-              <div class="text-gray-500">Sent At</div>
-              <div class="font-medium">{{ formatDateTime(selectedNotification.timestamp) }}</div>
+              <div class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email Preview</div>
+              <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800 max-h-96 overflow-auto">
+                <div v-html="selectedNotification.full_content" class="prose dark:prose-invert max-w-none"></div>
+              </div>
             </div>
-            <div>
-              <div class="text-gray-500">Recipients</div>
-              <div class="font-medium">{{ selectedNotification.recipients.join(', ') }}</div>
-            </div>
-            <div>
-              <div class="text-gray-500">Environment</div>
-              <div class="font-medium">{{ selectedNotification.environment }}</div>
-            </div>
-            <div>
-              <div class="text-gray-500">Trigger</div>
-              <div class="font-medium">{{ selectedNotification.trigger }}</div>
-            </div>
-            <div v-if="selectedNotification.delivery_info?.messageId">
-              <div class="text-gray-500">SES Message ID</div>
-              <div class="font-mono text-xs">{{ selectedNotification.delivery_info.messageId }}</div>
-            </div>
-            <div v-if="selectedNotification.error">
-              <div class="text-red-500">Error</div>
-              <div class="text-red-600 text-sm">{{ selectedNotification.error }}</div>
-            </div>
-          </div>
 
-          <!-- Email Preview -->
-          <div>
-            <div class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email Preview</div>
-            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800 max-h-96 overflow-auto">
-              <div v-html="selectedNotification.full_content" class="prose dark:prose-invert max-w-none"></div>
-            </div>
+            <!-- Raw Metadata -->
+            <details class="text-xs">
+              <summary class="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
+                View Raw Metadata
+              </summary>
+              <pre class="mt-2 p-3 bg-gray-100 dark:bg-gray-900 rounded overflow-auto">{{ JSON.stringify(selectedNotification.metadata, null, 2) }}</pre>
+            </details>
           </div>
-
-          <!-- Raw Metadata -->
-          <details class="text-xs">
-            <summary class="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
-              View Raw Metadata
-            </summary>
-            <pre class="mt-2 p-3 bg-gray-100 dark:bg-gray-900 rounded overflow-auto">{{ JSON.stringify(selectedNotification.metadata, null, 2) }}</pre>
-          </details>
-        </div>
-      </UCard>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

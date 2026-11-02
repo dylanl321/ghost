@@ -93,69 +93,73 @@
     />
 
     <!-- Execution History Modal -->
-    <UModal v-model="showHistoryModal" :ui="{ width: 'sm:max-w-4xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ selectedReport?.reportName }} - Execution History
-            </h3>
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              size="sm"
-              @click="showHistoryModal = false"
-            />
-          </div>
-        </template>
+    <UModal v-model:open="showHistoryModal" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ selectedReport?.reportName }} - Execution History
+              </h3>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-x-mark-20-solid"
+                size="sm"
+                @click="showHistoryModal = false"
+              />
+            </div>
+          </template>
 
-        <ExecutionHistoryTable
-          :executions="executions"
-          :loading="historyLoading"
-          :error="historyError"
-          @refresh="loadHistory"
-        />
-      </UCard>
+          <ExecutionHistoryTable
+            :executions="executions"
+            :loading="historyLoading"
+            :error="historyError"
+            @refresh="loadHistory"
+          />
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model="showDeleteModal" :ui="{ width: 'sm:max-w-md' }">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Delete Scheduled Report
-          </h3>
-        </template>
+    <UModal v-model:open="showDeleteModal" :ui="{ content: 'sm:max-w-md' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Delete Scheduled Report
+            </h3>
+          </template>
 
-        <div class="space-y-4">
-          <p class="text-gray-700 dark:text-gray-300">
-            Are you sure you want to delete <strong>{{ reportToDelete?.reportName }}</strong>?
-          </p>
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            This action cannot be undone. The report will stop running and all schedule data will be removed.
-          </p>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showDeleteModal = false"
-            >
-              Cancel
-            </UButton>
-            <UButton
-              color="red"
-              :loading="deleting"
-              @click="confirmDelete"
-            >
-              Delete Report
-            </UButton>
+          <div class="space-y-4">
+            <p class="text-gray-700 dark:text-gray-300">
+              Are you sure you want to delete <strong>{{ reportToDelete?.reportName }}</strong>?
+            </p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              This action cannot be undone. The report will stop running and all schedule data will be removed.
+            </p>
           </div>
-        </template>
-      </UCard>
+
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showDeleteModal = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                color="red"
+                :loading="deleting"
+                @click="confirmDelete"
+              >
+                Delete Report
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

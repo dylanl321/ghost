@@ -29,12 +29,12 @@
       <div class="flex items-center gap-2">
         <USelectMenu
           v-model="dateRange"
-          :options="dateRangeOptions"
-          value-attribute="value"
-          option-attribute="label"
+          :items="dateRangeOptions"
+          value-key="value"
+          label-key="label"
           size="sm"
           class="w-40"
-        />
+         :search-input="false"/>
 
         <!-- Search -->
         <UInput
@@ -127,7 +127,7 @@
                   <UTooltip text="View Details">
                     <UButton
                       icon="i-heroicons-eye"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="viewDetails(report)"
@@ -137,7 +137,7 @@
                   <UTooltip text="Download Report">
                     <UButton
                       icon="i-heroicons-arrow-down-tray"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="handleDownload(report)"
@@ -148,21 +148,21 @@
                   <UTooltip text="Re-run Report">
                     <UButton
                       icon="i-heroicons-arrow-path"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                       @click="handleRerun(report)"
                     />
                   </UTooltip>
 
-                  <UDropdown :items="getDropdownItems(report)" :ui="{ width: 'w-48' }">
+                  <UDropdownMenu :items="getDropdownItems(report)" :ui="{ content: 'w-48' }">
                     <UButton
                       icon="i-heroicons-ellipsis-vertical"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       size="xs"
                     />
-                  </UDropdown>
+                  </UDropdownMenu>
                 </div>
               </td>
             </tr>
@@ -178,7 +178,7 @@
         <div class="flex items-center gap-2">
           <UButton
             icon="i-heroicons-chevron-left"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="xs"
             :disabled="currentPage === 1"
@@ -187,7 +187,7 @@
           <span class="text-xs text-gray-400">Page {{ currentPage }} of {{ totalPages }}</span>
           <UButton
             icon="i-heroicons-chevron-right"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="xs"
             :disabled="currentPage === totalPages"

@@ -438,18 +438,18 @@ onMounted(async () => {
             </div>
             <USelectMenu
               v-model="selectedRole"
-              :options="[{ label: 'All Roles', value: '' }, ...allRoles.map(role => ({ label: role, value: role }))]"
+              :items="[{ label: 'All Roles', value: '' }, ...allRoles.map(role => ({ label: role, value: role }))]"
               placeholder="Filter by role"
               size="sm"
               class="min-w-[180px]"
-            />
+             :search-input="false"/>
             <USelectMenu
               v-model="selectedAccount"
-              :options="[{ label: 'All Accounts', value: '' }, ...allAccounts.map(acc => ({ label: acc.name, value: acc.id }))]"
+              :items="[{ label: 'All Accounts', value: '' }, ...allAccounts.map(acc => ({ label: acc.name, value: acc.id }))]"
               placeholder="Filter by account"
               size="sm"
               class="min-w-[200px]"
-            />
+             :search-input="false"/>
             <UCheckbox
               v-model="showOnlyAwsUsers"
               label="AWS users only"
@@ -586,7 +586,7 @@ onMounted(async () => {
                       icon="i-heroicons-envelope"
                       variant="ghost"
                       size="xs"
-                      color="gray"
+                      color="neutral"
                       title="Send Email"
                     />
                     <UButton
@@ -594,7 +594,7 @@ onMounted(async () => {
                       icon="i-simple-icons-microsoftteams"
                       variant="ghost"
                       size="xs"
-                      color="gray"
+                      color="neutral"
                       title="Start Teams Chat"
                     />
                   </div>
@@ -609,7 +609,7 @@ onMounted(async () => {
                     v-for="tag in user.tags"
                     :key="tag.title"
                     :text="tag.title"
-                    :popper="{ placement: 'top' }"
+                    :content="{ side: 'top' }"
                   >
                     <UBadge
                       :color="tag.color as any"
@@ -644,7 +644,7 @@ onMounted(async () => {
                   <UBadge
                     v-for="role in user.roles.slice(0, 3)"
                     :key="role"
-                    color="gray"
+                    color="neutral"
                     variant="soft"
                     size="xs"
                     class="cursor-pointer hover:bg-gray-600"
@@ -654,7 +654,7 @@ onMounted(async () => {
                   </UBadge>
                   <UBadge
                     v-if="user.roles.length > 3"
-                    color="gray"
+                    color="neutral"
                     variant="outline"
                     size="xs"
                   >

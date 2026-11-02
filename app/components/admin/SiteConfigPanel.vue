@@ -45,7 +45,7 @@
       />
       <USelect
         v-model="categoryFilter"
-        :options="categoryOptions"
+        :items="categoryOptions"
         placeholder="All Categories"
         class="w-48"
       />
@@ -73,7 +73,7 @@
       color="red"
       variant="soft"
       :title="error"
-      :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
       @close="error = null"
     />
 
@@ -84,7 +84,7 @@
       color="green"
       variant="soft"
       :title="successMessage"
-      :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'green', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'green', variant: 'link' }"
       @close="successMessage = null"
     />
 

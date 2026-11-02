@@ -87,7 +87,7 @@
 
       <div v-if="view === 'services' && row.sources.length" class="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
         <span>Telemetry sources:</span>
-        <UBadge v-for="source in telemetrySources" :key="source" color="gray" variant="soft" size="xs">{{ providerLabel(source) }}</UBadge>
+        <UBadge v-for="source in telemetrySources" :key="source" color="neutral" variant="soft" size="xs">{{ providerLabel(source) }}</UBadge>
       </div>
 
       <div class="mt-5 grid gap-5 xl:grid-cols-2">

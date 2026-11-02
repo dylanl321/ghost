@@ -19,13 +19,13 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
               All Share Links
             </h3>
-            <UBadge v-if="!shortlinksLoading" color="gray" variant="soft">
+            <UBadge v-if="!shortlinksLoading" color="neutral" variant="soft">
               {{ shortlinksTotal }} total
             </UBadge>
           </div>
           <UButton
             icon="i-heroicons-arrow-path"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
             @click="refreshShortlinks"
@@ -55,7 +55,7 @@
       <!-- Shortlinks Table -->
       <div v-else-if="shortlinks.length > 0" class="overflow-x-auto">
         <UTable
-          :rows="shortlinks"
+          :data="shortlinks"
           :columns="shortlinksColumns"
           :loading="shortlinksLoading"
         >
@@ -67,7 +67,7 @@
               <UButton
                 icon="i-heroicons-clipboard-document"
                 size="xs"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 @click="copyToClipboard(row.shortUrl)"
               />

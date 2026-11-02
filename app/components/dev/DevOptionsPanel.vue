@@ -60,7 +60,7 @@
               <span class="text-xs" :class="isAdminEnabled ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'">
                 {{ isAdminEnabled ? 'On' : 'Off' }}
               </span>
-              <UToggle
+              <USwitch
                 :model-value="isAdminEnabled"
                 @update:model-value="toggleAdmin"
               />
@@ -84,12 +84,12 @@
               icon="i-heroicons-magnifying-glass"
               placeholder="Search accounts..."
               size="sm"
-              :ui="{ icon: { trailing: { pointer: '' } } }"
+              :ui="{ trailing: 'pointer-events-auto' }"
             >
               <template #trailing>
                 <UButton
                   v-if="accountSearch"
-                  color="gray"
+                  color="neutral"
                   variant="link"
                   icon="i-heroicons-x-mark-20-solid"
                   :padded="false"
@@ -103,7 +103,7 @@
               <UButton size="xs" variant="soft" color="blue" @click="selectAllVisible" :disabled="filteredAccounts.length === 0">
                 Select All{{ accountSearch ? ' Filtered' : '' }}
               </UButton>
-              <UButton size="xs" variant="soft" color="gray" @click="deselectAll" :disabled="selectedAccountIds.length === 0">
+              <UButton size="xs" variant="soft" color="neutral" @click="deselectAll" :disabled="selectedAccountIds.length === 0">
                 Clear All
               </UButton>
             </div>
@@ -212,7 +212,7 @@
               </UButton>
 
               <UButton
-                color="gray"
+                color="neutral"
                 variant="soft"
                 size="sm"
                 class="flex-1"
@@ -240,28 +240,30 @@
     </Transition>
 
     <!-- Confirmation Modal -->
-    <UModal v-model="showConfirmModal">
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon :name="confirmIcon" class="w-5 h-5" :class="confirmIconClass" />
-            <h3 class="text-lg font-semibold">{{ confirmTitle }}</h3>
-          </div>
-        </template>
+    <UModal v-model:open="showConfirmModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon :name="confirmIcon" class="w-5 h-5" :class="confirmIconClass" />
+              <h3 class="text-lg font-semibold">{{ confirmTitle }}</h3>
+            </div>
+          </template>
 
-        <p class="text-gray-600 dark:text-gray-300">{{ confirmMessage }}</p>
+          <p class="text-gray-600 dark:text-gray-300">{{ confirmMessage }}</p>
 
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton color="gray" variant="soft" @click="showConfirmModal = false">
-              Cancel
-            </UButton>
-            <UButton :color="confirmColor" @click="executeConfirmedAction">
-              Confirm
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="soft" @click="showConfirmModal = false">
+                Cancel
+              </UButton>
+              <UButton :color="confirmColor" @click="executeConfirmedAction">
+                Confirm
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>
@@ -380,7 +382,7 @@ function toggleAdmin(enabled: boolean) {
       description: 'AWS-Product-Team group added',
       icon: 'i-heroicons-shield-check',
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } else if (!enabled) {
     userGroupStore.setDevGroups(groups.filter(g => g !== 'AWS-Product-Team'))
@@ -389,7 +391,7 @@ function toggleAdmin(enabled: boolean) {
       description: 'AWS-Product-Team group removed',
       icon: 'i-heroicons-shield-exclamation',
       color: 'amber',
-      timeout: 3000
+      duration: 3000
     })
   }
 }
@@ -456,7 +458,7 @@ async function applyDevSettings() {
       description: 'Could not apply dev account settings',
       icon: 'i-heroicons-x-circle',
       color: 'red',
-      timeout: 3000
+      duration: 3000
     })
   } finally {
     isApplying.value = false
@@ -524,7 +526,7 @@ async function resetAll() {
       description: 'All preferences and account selections have been cleared',
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } catch (error) {
     logger.error('Failed to reset preferences:', error)
@@ -533,7 +535,7 @@ async function resetAll() {
       description: 'An error occurred while resetting preferences',
       icon: 'i-heroicons-x-circle',
       color: 'red',
-      timeout: 3000
+      duration: 3000
     })
   } finally {
     isResetting.value = false
@@ -568,7 +570,7 @@ async function clearCachedData() {
       description: 'Cached data refreshed, selections preserved',
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } catch (error) {
     logger.error('Failed to clear cache:', error)
@@ -577,7 +579,7 @@ async function clearCachedData() {
       description: 'An error occurred while clearing cache',
       icon: 'i-heroicons-x-circle',
       color: 'red',
-      timeout: 3000
+      duration: 3000
     })
   } finally {
     isClearing.value = false

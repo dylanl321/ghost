@@ -54,7 +54,7 @@
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ ou.name }}</span>
               <UBadge
                 v-if="index === 0"
-                color="gray"
+                color="neutral"
                 variant="soft"
                 size="xs"
                 label="Root"

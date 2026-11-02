@@ -1,24 +1,24 @@
 <template>
-  <UPopover mode="hover" :popper="{ placement: 'bottom-start' }">
-    <UTooltip text="Cost Settings" :popper="{ placement: 'top' }">
+  <UPopover mode="hover" :content="{ side: 'bottom', align: 'start' }">
+    <UTooltip text="Cost Settings" :content="{ side: 'top' }">
       <UButton
         data-tour="costs-settings"
         size="sm"
         variant="ghost"
-        color="gray"
+        color="neutral"
         icon="i-heroicons-cog-6-tooth"
         :class="{ 'text-blue-400': hasActiveFilters }"
       />
     </UTooltip>
     
-    <template #panel="{ close }">
+    <template #content="{ close }">
       <div class="p-4 w-72 sm:w-80 max-w-[calc(100vw-2rem)]">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold text-gray-200">Cost Settings</h3>
           <UButton
             size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             @click="resetSettings"
             v-if="hasActiveFilters"
           >
@@ -101,7 +101,7 @@
             <h4 class="text-xs font-medium text-gray-300 mb-2">Currency Display</h4>
             <URadioGroup
               v-model="settings.currencyFormat"
-              :options="currencyOptions"
+              :items="currencyOptions"
               size="sm"
             />
           </div>
@@ -177,22 +177,24 @@
   </UPopover>
 
   <!-- Forecast Upload Modal -->
-  <UModal v-model="showForecastUpload">
-    <UCard>
-      <template #header>
-        <h3 class="text-lg font-semibold text-white">Import Forecast Data</h3>
-      </template>
+  <UModal v-model:open="showForecastUpload" scrollable>
+    <template #content>
+      <UCard>
+        <template #header>
+          <h3 class="text-lg font-semibold text-white">Import Forecast Data</h3>
+        </template>
 
-      <ForecastUpload @close="showForecastUpload = false" />
+        <ForecastUpload @close="showForecastUpload = false" />
 
-      <template #footer>
-        <div class="flex justify-end">
-          <UButton variant="ghost" @click="showForecastUpload = false">
-            Close
-          </UButton>
-        </div>
-      </template>
-    </UCard>
+        <template #footer>
+          <div class="flex justify-end">
+            <UButton variant="ghost" @click="showForecastUpload = false">
+              Close
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

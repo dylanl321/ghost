@@ -2,9 +2,9 @@
   <div>
     <UTable
       v-if="groups.length > 0"
-      :rows="groups"
+      :data="groups"
       :columns="columns"
-      :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }"
+      :ui="{ td: 'text-xs', th: 'text-xs' }"
     >
       <template #cveId-data="{ row }">
         <a

@@ -95,14 +95,14 @@ onMounted(() => submit('details'))
         <UIcon name="i-heroicons-exclamation-circle" class="mt-0.5 size-5 shrink-0" />
         <div>
           <p>{{ error }}</p>
-          <UButton v-if="!details" icon="i-heroicons-arrow-path" color="gray" variant="soft" size="xs" class="mt-3" @click="submit('details')">
+          <UButton v-if="!details" icon="i-heroicons-arrow-path" color="neutral" variant="soft" size="xs" class="mt-3" @click="submit('details')">
             Try again
           </UButton>
         </div>
       </div>
 
       <div v-if="details?.prompt === 'consent'" class="oauth-consent-actions flex justify-end gap-3">
-        <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" :disabled="submitting" @click="submit('deny')">
+        <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" :disabled="submitting" @click="submit('deny')">
           Cancel
         </UButton>
         <UButton icon="i-heroicons-check" :loading="submitting" :disabled="!details" @click="submit('approve')">

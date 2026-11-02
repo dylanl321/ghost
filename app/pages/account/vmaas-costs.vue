@@ -13,7 +13,7 @@
         <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Allocated month
           <input v-model="allocationMonth" type="month" class="mt-1 block rounded border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
         </label>
-        <UButton icon="i-heroicons-arrow-path" color="gray" variant="soft" :loading="pending" @click="refresh()">Refresh</UButton>
+        <UButton icon="i-heroicons-arrow-path" color="neutral" variant="soft" :loading="pending" @click="refresh()">Refresh</UButton>
       </div>
     </header>
 
@@ -35,7 +35,7 @@
 
     <template v-else-if="report">
       <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="VMaaS cost summary">
-        <UCard v-for="metric in summaryMetrics" :key="metric.label" :ui="{ body: { padding: 'p-4 sm:p-4' } }">
+        <UCard v-for="metric in summaryMetrics" :key="metric.label" :ui="{ body: 'p-4 sm:p-4' }">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ metric.label }}</p>
@@ -62,8 +62,8 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">Closed-month direct usage allocated from the account pro forma total</p>
           </div>
           <div v-if="report.allocation.status === 'available'" class="flex gap-2">
-            <UButton :to="exportUrl('csv')" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft">CSV</UButton>
-            <UButton :to="exportUrl('xlsx')" icon="i-heroicons-table-cells" color="gray" variant="soft">XLSX</UButton>
+            <UButton :to="exportUrl('csv')" icon="i-heroicons-arrow-down-tray" color="neutral" variant="soft">CSV</UButton>
+            <UButton :to="exportUrl('xlsx')" icon="i-heroicons-table-cells" color="neutral" variant="soft">XLSX</UButton>
           </div>
         </header>
         <UAlert
@@ -109,7 +109,7 @@
           </div>
           <div class="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_150px]">
             <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Search server, team, or department" />
-            <USelect v-model="osFilter" :options="osOptions" />
+            <USelect v-model="osFilter" :items="osOptions" />
           </div>
         </header>
 

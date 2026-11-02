@@ -131,7 +131,7 @@
             >
               <UTooltip
                 :text="budgetExceedTooltipText"
-                :popper="{ placement: 'top' }"
+                :content="{ side: 'top' }"
               >
                 <div
                   class="bg-white dark:bg-gray-800 rounded-full p-0.5 ring-2 ring-orange-500/40 hover:ring-orange-500/60 transition-all"

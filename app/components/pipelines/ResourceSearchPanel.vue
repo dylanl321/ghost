@@ -14,20 +14,20 @@
       />
       <USelectMenu
         v-model="actionFilter"
-        :options="actionOptions"
-        value-attribute="value"
-        option-attribute="label"
+        :items="actionOptions"
+        value-key="value"
+        label-key="label"
         class="w-40"
         placeholder="Action"
-      />
+       :search-input="false"/>
       <USelectMenu
         v-model="appliedFilter"
-        :options="appliedOptions"
-        value-attribute="value"
-        option-attribute="label"
+        :items="appliedOptions"
+        value-key="value"
+        label-key="label"
         class="w-40"
         placeholder="Applied"
-      />
+       :search-input="false"/>
     </div>
 
     <!-- Loading state -->
@@ -46,7 +46,7 @@
     <!-- Results table -->
     <div v-else>
       <UTable
-        :rows="results"
+        :data="results"
         :columns="columns"
       >
         <template #account_id-data="{ row }">
@@ -94,8 +94,8 @@
         </div>
         <UPagination
           v-if="totalResults > pageSize"
-          v-model="page"
-          :page-count="pageSize"
+          v-model:page="page"
+          :items-per-page="pageSize"
           :total="totalResults"
         />
       </div>

@@ -1,26 +1,28 @@
 <template>
-  <USlideover v-model="isOpen" :ui="{ width: 'max-w-3xl' }">
-    <div class="flex flex-col h-full">
-      <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ title }}</h3>
-          <p v-if="subtitle" class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ subtitle }}</p>
+  <USlideover v-model:open="isOpen" :ui="{ content: 'max-w-3xl' }">
+    <template #content>
+      <div class="flex flex-col h-full">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ title }}</h3>
+            <p v-if="subtitle" class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ subtitle }}</p>
+          </div>
+          <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" @click="isOpen = false" />
         </div>
-        <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isOpen = false" />
-      </div>
 
-      <!-- Body -->
-      <div class="flex-1 overflow-y-auto p-4">
-        <div v-if="filteredFindings.length > 0">
-          <SecurityFindingsTable :findings="filteredFindings" />
-        </div>
-        <div v-else class="flex flex-col items-center justify-center py-16 gap-3">
-          <UIcon name="i-heroicons-shield-check" class="w-12 h-12 text-green-400 opacity-70" />
-          <p class="text-sm text-gray-500 dark:text-gray-400">No findings match the current filter</p>
+        <!-- Body -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <div v-if="filteredFindings.length > 0">
+            <SecurityFindingsTable :findings="filteredFindings" />
+          </div>
+          <div v-else class="flex flex-col items-center justify-center py-16 gap-3">
+            <UIcon name="i-heroicons-shield-check" class="w-12 h-12 text-green-400 opacity-70" />
+            <p class="text-sm text-gray-500 dark:text-gray-400">No findings match the current filter</p>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
   </USlideover>
 </template>
 

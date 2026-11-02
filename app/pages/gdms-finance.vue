@@ -59,7 +59,7 @@
           <UBadge v-if="selectedYear !== currentYear" color="amber" variant="subtle" size="sm">
             Viewing {{ selectedYear }}
           </UBadge>
-          <USelectMenu v-model="selectedYear" :options="yearOptions" class="w-24" size="sm" />
+          <USelectMenu v-model="selectedYear" :items="yearOptions" class="w-24" size="sm"  :search-input="false"/>
           <UButton
             v-if="activeDept && selectedYear === currentYear"
             color="purple"
@@ -69,7 +69,7 @@
             @click="showForecastYear = !showForecastYear"
           >{{ showForecastYear ? `${currentYear} + ${currentYear + 1}` : `Show ${currentYear + 1}` }}</UButton>
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-path"
             size="sm"
@@ -83,17 +83,17 @@
       <template v-if="activeTab === 0">
         <!-- Grand summary metrics: top 3 KPI cards -->
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Plan</div>
             <div class="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{{ formatCurrency(grandBudget, 0) }}</div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD budgeted spend across all departments for {{ selectedYear }}</div>
           </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Actual</div>
             <div class="text-lg font-bold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(grandActual, 0) }}</div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD real charges billed to date across all departments</div>
           </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">YTD Variance</div>
             <div class="text-lg font-bold tabular-nums" :class="grandVariance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
               {{ grandVariance > 0 ? '+' : '' }}{{ formatCurrency(grandVariance, 0) }}
@@ -116,7 +116,7 @@
                     icon="i-heroicons-calendar"
                     @click="overviewFullYear = !overviewFullYear"
                   >Full Year</UButton>
-                  <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                  <UBadge color="neutral" variant="soft" size="sm">{{ selectedYear }}</UBadge>
                 </div>
               </div>
             </template>
@@ -135,7 +135,7 @@
                     icon="i-heroicons-calendar"
                     @click="overviewFullYear = !overviewFullYear"
                   >Full Year</UButton>
-                  <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                  <UBadge color="neutral" variant="soft" size="sm">{{ selectedYear }}</UBadge>
                 </div>
               </div>
             </template>
@@ -145,19 +145,19 @@
 
         <!-- Remaining summary metrics -->
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Monthly Burn Rate</div>
             <div class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(grandBurnRate, 0) }}</div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Average YTD actual spend per month across all departments</div>
           </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forecast to Year-End</div>
             <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
               {{ formatCurrency(grandForecast, 0) }}
             </div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandMonthsWithData.length }} of 12 months elapsed ({{ Math.round(grandMonthsWithData.length / 12 * 100) }}% of year)</div>
           </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+          <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Projected Variance</div>
             <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
               {{ grandProjectedVariance > 0 ? '+' : '' }}{{ formatCurrency(grandProjectedVariance, 0) }} ({{ grandProjectedVariancePercent > 0 ? '+' : '' }}{{ grandProjectedVariancePercent.toFixed(1) }}%)
@@ -246,7 +246,7 @@
                     <UButton color="purple" variant="soft" icon="i-heroicons-chart-bar-square" size="xs" :loading="forecastGenerating" @click="generateForecast">
                       Generate Forecast
                     </UButton>
-                    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
+                    <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
                       {{ excelExporting ? 'Generating…' : 'Export Excel' }}
                     </UButton>
                   </div>
@@ -362,46 +362,42 @@
             <template #description><div v-for="account in forecastExcludedAccounts" :key="account.accountId" class="mt-1"><span class="font-mono">{{ account.accountId }}</span> {{ account.name }}: {{ account.reason }}</div></template>
           </UAlert>
 
-          <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-5xl' }">
-            <UCard
-              :ui="{
-                ring: '',
-                divide: 'divide-y divide-gray-700',
-                body: { base: 'p-6', padding: '' },
-                header: { base: 'px-6 py-4 bg-gray-900' },
-                footer: { base: 'px-6 py-4 bg-gray-900' }
-              }"
-            >
-              <template #header>
-                <div class="flex items-center justify-between gap-4">
-                  <div><div class="flex items-center gap-2"><UIcon name="i-heroicons-chart-bar-square" class="h-5 w-5 text-blue-400" /><h2 class="text-lg font-semibold text-white">Forecast Decision Review</h2></div><p class="mt-1 text-sm text-gray-400">{{ activeDept?.department }} plan changes are calculated but not saved until confirmed.</p></div>
-                  <div class="flex items-center gap-2"><UButton color="gray" :variant="showNextForecastYear ? 'soft' : 'ghost'" icon="i-heroicons-calendar-days" size="sm" @click="showNextForecastYear = !showNextForecastYear">{{ showNextForecastYear ? `${selectedYear} + ${selectedYear + 1}` : selectedYear }}</UButton><UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" /></div>
-                </div>
-              </template>
-              <div class="max-h-[58vh] overflow-y-auto space-y-5">
-                <div v-if="previewView === 'overview'" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Forecast Components</div><div class="mt-1 text-xl font-semibold text-blue-500">{{ forecastPreviewRows.length }}</div><div class="mt-1 text-xs text-gray-500">AWS account and special scopes</div></div>
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Past Months Rebased</div><div class="mt-1 text-xl font-semibold text-orange-500">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="mt-1 text-xs text-gray-500">set to posted actuals</div></div>
-                </div>
-                <div v-if="previewView === 'overview'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div v-for="annual in forecastPreviewAnnualSummaries" :key="annual.year" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                    <div class="flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ annual.year }} Plan</h3><span class="text-xs" :class="annual.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ annual.delta >= 0 ? '+' : '' }}{{ formatCurrency(annual.delta, 0) }}</span></div>
-                    <div class="mt-2 grid grid-cols-2 gap-3 text-sm"><div><div class="text-xs text-gray-500">Current</div><div class="font-medium">{{ formatCurrency(annual.current, 0) }}</div></div><div><div class="text-xs text-gray-500">Proposed</div><div class="font-medium text-blue-500">{{ formatCurrency(annual.proposed, 0) }}</div></div></div>
+          <UModal v-model:open="showForecastPreview" :ui="{ content: 'sm:max-w-5xl' }" scrollable>
+            <template #content>
+              <UCard
+                :ui="{ root: 'border-0 divide-y divide-gray-700', body: 'p-6 sm:p-6', header: 'px-6 py-4 sm:px-6 bg-gray-900', footer: 'px-6 py-4 sm:px-6 bg-gray-900' }"
+              >
+                <template #header>
+                  <div class="flex items-center justify-between gap-4">
+                    <div><div class="flex items-center gap-2"><UIcon name="i-heroicons-chart-bar-square" class="h-5 w-5 text-blue-400" /><h2 class="text-lg font-semibold text-white">Forecast Decision Review</h2></div><p class="mt-1 text-sm text-gray-400">{{ activeDept?.department }} plan changes are calculated but not saved until confirmed.</p></div>
+                    <div class="flex items-center gap-2"><UButton color="neutral" :variant="showNextForecastYear ? 'soft' : 'ghost'" icon="i-heroicons-calendar-days" size="sm" @click="showNextForecastYear = !showNextForecastYear">{{ showNextForecastYear ? `${selectedYear} + ${selectedYear + 1}` : selectedYear }}</UButton><UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" /></div>
                   </div>
+                </template>
+                <div class="max-h-[58vh] overflow-y-auto space-y-5">
+                  <div v-if="previewView === 'overview'" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
+                    <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
+                    <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Forecast Components</div><div class="mt-1 text-xl font-semibold text-blue-500">{{ forecastPreviewRows.length }}</div><div class="mt-1 text-xs text-gray-500">AWS account and special scopes</div></div>
+                    <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Past Months Rebased</div><div class="mt-1 text-xl font-semibold text-orange-500">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="mt-1 text-xs text-gray-500">set to posted actuals</div></div>
+                  </div>
+                  <div v-if="previewView === 'overview'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div v-for="annual in forecastPreviewAnnualSummaries" :key="annual.year" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                      <div class="flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ annual.year }} Plan</h3><span class="text-xs" :class="annual.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ annual.delta >= 0 ? '+' : '' }}{{ formatCurrency(annual.delta, 0) }}</span></div>
+                      <div class="mt-2 grid grid-cols-2 gap-3 text-sm"><div><div class="text-xs text-gray-500">Current</div><div class="font-medium">{{ formatCurrency(annual.current, 0) }}</div></div><div><div class="text-xs text-gray-500">Proposed</div><div class="font-medium text-blue-500">{{ formatCurrency(annual.proposed, 0) }}</div></div></div>
+                    </div>
+                  </div>
+                  <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Largest forecast drivers</h3><div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div v-for="row in forecastPreviewRows.slice(0, 3)" :key="row.accountId" class="border border-gray-200 p-3 dark:border-gray-700"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of proposed forecast</div><div class="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700"><div class="h-full bg-blue-500" :style="{ width: row.share + '%' }" /></div></div></div></div>
+                  <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
+                  <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreviewVisibleChanges" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
+                  <div v-if="previewView === 'actuals'"><div class="flex items-center justify-between mb-2"><h3 class="text-sm font-medium">Month calculation ledger</h3><USelectMenu v-model="selectedPreviewMonth" :items="previewMonthOptions" size="xs" class="w-28"  :search-input="false"/></div><p class="mb-2 text-xs text-gray-500">{{ selectedPreviewMonthIsHistorical ? 'Completed month: proposed plan equals approved actual charges.' : 'Open month: proposed plan combines charges to date with the forecast remainder.' }}</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="entry in selectedPreviewMonthLedger" :key="entry.key" class="flex items-center gap-3 border-b border-gray-100 p-2 text-sm last:border-b-0 dark:border-gray-700"><span class="w-2 h-2" :class="entry.kind === 'actual' ? 'bg-orange-500' : entry.kind === 'special' ? 'bg-violet-500' : 'bg-blue-500'"/><span class="flex-1 truncate">{{ entry.name }}</span><span class="text-xs text-gray-500">{{ entry.label }}</span><span class="font-medium">{{ formatCurrency(entry.value, 0) }}</span></div><div v-if="!selectedPreviewMonthLedger.length" class="p-3 text-sm text-gray-500">No component detail is available for this month.</div></div></div>
+                  <div v-if="previewView === 'actuals'"><h3 class="text-sm font-medium mb-2">Completed-month actual basis</h3><p class="mb-2 text-xs text-gray-500">These charged values replace past plan months before the forecast is applied.</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="month in historicalActualMonths" :key="month.month" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="toggleHistoricalMonth(month.month)"><UIcon :name="expandedHistoricalMonths.has(month.month) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><span class="flex-1 text-sm font-medium">{{ formatMonthShort(month.month) }}</span><span class="text-sm font-medium">{{ formatCurrency(month.total, 0) }}</span></button><div v-if="expandedHistoricalMonths.has(month.month)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div v-for="entry in month.entries" :key="entry.key" class="flex items-center gap-3 py-1.5 text-sm"><span class="flex-1"><span class="font-medium">{{ entry.name }}</span><span class="ml-2 font-mono text-xs text-gray-500">{{ entry.accountId }}</span></span><span>{{ formatCurrency(entry.value, 0) }}</span></div></div></div></div></div>
+                  <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
+                  <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Data provenance</h3><div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div v-for="item in forecastPreview?.forecastComposition?.methodology" :key="item.component" class="border border-gray-200 p-3 text-xs dark:border-gray-700"><div class="font-medium text-sm">{{ item.component }}</div><div class="mt-1 text-gray-500">{{ item.source }}</div><div class="mt-2"><span class="font-medium">Operation:</span> {{ item.operation }}</div><div class="mt-1"><span class="font-medium">Value basis:</span> {{ item.valuation }}</div></div></div></div>
+                  <div v-if="previewView === 'accounts'"><h3 class="text-sm font-medium mb-2">Forecast composition</h3><div class="border border-gray-200 dark:border-gray-700"><div v-for="row in forecastPreviewRows" :key="row.accountId" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="togglePreviewAccount(row.accountId)"><UIcon :name="expandedPreviewAccounts.has(row.accountId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="font-mono text-xs text-gray-500">{{ row.special ? 'Special component' : row.accountId }} · {{ row.lifecycle }}</div></div><div class="text-right"><div class="text-sm font-medium">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of forecast total</div></div></button><div v-if="expandedPreviewAccounts.has(row.accountId)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div class="grid grid-cols-3 gap-2 text-xs"><div v-for="month in row.months" :key="month.month" class="border border-gray-100 p-2 dark:border-gray-700"><div class="text-gray-500">{{ formatMonthShort(month.month) }}</div><div class="mt-1 font-medium">{{ formatCurrency(month.value, 0) }}</div></div></div></div></div></div></div>
                 </div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Largest forecast drivers</h3><div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div v-for="row in forecastPreviewRows.slice(0, 3)" :key="row.accountId" class="border border-gray-200 p-3 dark:border-gray-700"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of proposed forecast</div><div class="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700"><div class="h-full bg-blue-500" :style="{ width: row.share + '%' }" /></div></div></div></div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreviewVisibleChanges" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
-                <div v-if="previewView === 'actuals'"><div class="flex items-center justify-between mb-2"><h3 class="text-sm font-medium">Month calculation ledger</h3><USelectMenu v-model="selectedPreviewMonth" :options="previewMonthOptions" size="xs" class="w-28" /></div><p class="mb-2 text-xs text-gray-500">{{ selectedPreviewMonthIsHistorical ? 'Completed month: proposed plan equals approved actual charges.' : 'Open month: proposed plan combines charges to date with the forecast remainder.' }}</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="entry in selectedPreviewMonthLedger" :key="entry.key" class="flex items-center gap-3 border-b border-gray-100 p-2 text-sm last:border-b-0 dark:border-gray-700"><span class="w-2 h-2" :class="entry.kind === 'actual' ? 'bg-orange-500' : entry.kind === 'special' ? 'bg-violet-500' : 'bg-blue-500'"/><span class="flex-1 truncate">{{ entry.name }}</span><span class="text-xs text-gray-500">{{ entry.label }}</span><span class="font-medium">{{ formatCurrency(entry.value, 0) }}</span></div><div v-if="!selectedPreviewMonthLedger.length" class="p-3 text-sm text-gray-500">No component detail is available for this month.</div></div></div>
-                <div v-if="previewView === 'actuals'"><h3 class="text-sm font-medium mb-2">Completed-month actual basis</h3><p class="mb-2 text-xs text-gray-500">These charged values replace past plan months before the forecast is applied.</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="month in historicalActualMonths" :key="month.month" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="toggleHistoricalMonth(month.month)"><UIcon :name="expandedHistoricalMonths.has(month.month) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><span class="flex-1 text-sm font-medium">{{ formatMonthShort(month.month) }}</span><span class="text-sm font-medium">{{ formatCurrency(month.total, 0) }}</span></button><div v-if="expandedHistoricalMonths.has(month.month)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div v-for="entry in month.entries" :key="entry.key" class="flex items-center gap-3 py-1.5 text-sm"><span class="flex-1"><span class="font-medium">{{ entry.name }}</span><span class="ml-2 font-mono text-xs text-gray-500">{{ entry.accountId }}</span></span><span>{{ formatCurrency(entry.value, 0) }}</span></div></div></div></div></div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Data provenance</h3><div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div v-for="item in forecastPreview?.forecastComposition?.methodology" :key="item.component" class="border border-gray-200 p-3 text-xs dark:border-gray-700"><div class="font-medium text-sm">{{ item.component }}</div><div class="mt-1 text-gray-500">{{ item.source }}</div><div class="mt-2"><span class="font-medium">Operation:</span> {{ item.operation }}</div><div class="mt-1"><span class="font-medium">Value basis:</span> {{ item.valuation }}</div></div></div></div>
-                <div v-if="previewView === 'accounts'"><h3 class="text-sm font-medium mb-2">Forecast composition</h3><div class="border border-gray-200 dark:border-gray-700"><div v-for="row in forecastPreviewRows" :key="row.accountId" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="togglePreviewAccount(row.accountId)"><UIcon :name="expandedPreviewAccounts.has(row.accountId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="font-mono text-xs text-gray-500">{{ row.special ? 'Special component' : row.accountId }} · {{ row.lifecycle }}</div></div><div class="text-right"><div class="text-sm font-medium">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of forecast total</div></div></button><div v-if="expandedPreviewAccounts.has(row.accountId)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div class="grid grid-cols-3 gap-2 text-xs"><div v-for="month in row.months" :key="month.month" class="border border-gray-100 p-2 dark:border-gray-700"><div class="text-gray-500">{{ formatMonthShort(month.month) }}</div><div class="mt-1 font-medium">{{ formatCurrency(month.value, 0) }}</div></div></div></div></div></div></div>
-              </div>
-              <template #footer><div class="flex justify-end gap-2"><UButton color="gray" variant="ghost" @click="showForecastPreview = false">Cancel</UButton><UButton color="purple" :loading="forecastApplying" @click="applyForecast">Apply Forecast</UButton></div></template>
-            </UCard>
+                <template #footer><div class="flex justify-end gap-2"><UButton color="neutral" variant="ghost" @click="showForecastPreview = false">Cancel</UButton><UButton color="purple" :loading="forecastApplying" @click="applyForecast">Apply Forecast</UButton></div></template>
+              </UCard>
+            </template>
           </UModal>
 
           <!-- Charts: side-by-side -->
@@ -477,12 +473,12 @@
 
           <!-- Metrics strip -->
           <div class="grid grid-cols-3 gap-3 mb-6">
-            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
               <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forecast to Year-End</div>
               <div class="text-lg font-bold tabular-nums" :class="deptForecast > deptFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ formatCurrency(deptForecast, 0) }}</div>
               <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ hasPointInTimeForecast ? 'AWS preview estimate' : 'Full-year plan' }}: {{ formatCurrency(hasPointInTimeForecast ? deptForecast : deptFullYearPlan, 0) }}</div>
             </UCard>
-            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
               <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Top Cost Driver</div>
               <template v-if="deptTopCostDriver">
                 <div class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(deptTopCostDriver.actual, 0) }}</div>
@@ -493,7 +489,7 @@
                 <div class="text-lg font-bold text-gray-400 dark:text-gray-500">—</div>
               </template>
             </UCard>
-            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <UCard :ui="{ body: 'px-4 py-3 sm:px-4 sm:py-3' }">
               <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Highest Monthly Variance</div>
               <template v-if="biggestVarianceAccount">
                 <div class="text-lg font-bold tabular-nums" :class="biggestVarianceAccount.variance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ biggestVarianceAccount.variance > 0 ? '+' : '' }}{{ formatCurrency(biggestVarianceAccount.variance, 0) }}</div>
@@ -652,7 +648,7 @@
                       <template v-if="cat.accounts[0]?.pendingPep">
                         <span class="inline-flex items-center gap-1">
                           <span class="text-gray-400 dark:text-gray-500">$0</span>
-                          <UTooltip text="PEP record is being created for this account. No historical budget is available yet — budget for prior months flows into GDMS Cloud." :popper="{ placement: 'top' }">
+                          <UTooltip text="PEP record is being created for this account. No historical budget is available yet — budget for prior months flows into GDMS Cloud." :content="{ side: 'top' }">
                             <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-500 cursor-help" />
                           </UTooltip>
                         </span>
@@ -682,7 +678,7 @@
           </UCard>
 
           <div class="space-y-3 mb-4">
-            <UCard v-if="planHistory.length" :ui="{ body: { padding: 'p-0' } }">
+            <UCard v-if="planHistory.length" :ui="{ body: 'p-0 sm:p-0' }">
               <template #header>
                 <button
                   type="button"
@@ -702,12 +698,12 @@
                   <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
                   <span class="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">{{ entry.actor }}</span>
                   <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
-                  <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
+                  <UButton color="neutral" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
                 </div>
               </div>
             </UCard>
 
-            <UCard v-if="forecastComposition" :ui="{ body: { padding: 'p-0' } }">
+            <UCard v-if="forecastComposition" :ui="{ body: 'p-0 sm:p-0' }">
               <template #header>
                 <button
                   type="button"

@@ -1,186 +1,188 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-3xl' }">
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-lg font-semibold text-white">Execution Details</h3>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ report?.reportName }}
-            </p>
-          </div>
-          <UButton
-            icon="i-heroicons-x-mark"
-            variant="ghost"
-            color="gray"
-            size="sm"
-            @click="close"
-          />
-        </div>
-      </template>
-
-      <div v-if="loading" class="py-12 text-center">
-        <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 animate-spin text-blue-400 mx-auto mb-3" />
-        <p class="text-gray-400">Loading execution details...</p>
-      </div>
-
-      <div v-else-if="execution" class="space-y-6">
-        <!-- Status Overview -->
-        <div class="grid grid-cols-4 gap-4">
-          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-            <div class="text-xs text-gray-400 mb-1">Status</div>
-            <UBadge
-              :color="getStatusColor(execution.status)"
-              :icon="getStatusIcon(execution.status)"
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-3xl' }" scrollable>
+    <template #content>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-white">Execution Details</h3>
+              <p class="text-sm text-gray-400 mt-1">
+                {{ report?.reportName }}
+              </p>
+            </div>
+            <UButton
+              icon="i-heroicons-x-mark"
+              variant="ghost"
+              color="neutral"
               size="sm"
-            >
-              {{ execution.status }}
-            </UBadge>
+              @click="close"
+            />
           </div>
+        </template>
 
-          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-            <div class="text-xs text-gray-400 mb-1">Duration</div>
-            <div class="text-lg font-semibold text-white">
-              {{ formatDuration(execution.duration) }}
-            </div>
-          </div>
-
-          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-            <div class="text-xs text-gray-400 mb-1">Report Size</div>
-            <div class="text-lg font-semibold text-white">
-              {{ formatFileSize(execution.reportSize) }}
-            </div>
-          </div>
-
-          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-            <div class="text-xs text-gray-400 mb-1">Downloads</div>
-            <div class="text-lg font-semibold text-white">
-              {{ execution.downloadCount || 0 }}
-            </div>
-          </div>
+        <div v-if="loading" class="py-12 text-center">
+          <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 animate-spin text-blue-400 mx-auto mb-3" />
+          <p class="text-gray-400">Loading execution details...</p>
         </div>
 
-        <!-- Execution Time -->
-        <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <div class="flex items-center gap-2 mb-2">
-            <UIcon name="i-heroicons-clock" class="w-4 h-4 text-gray-400" />
-            <h4 class="text-sm font-semibold text-white">Execution Time</h4>
-          </div>
-          <div class="text-sm text-gray-300">
-            {{ formatDateTime(execution.executionTime) }}
-          </div>
-          <div class="text-xs text-gray-500 mt-1">
-            {{ formatTimeAgo(execution.executionTime) }}
-          </div>
-        </div>
-
-        <!-- Error Details (if failed) -->
-        <div v-if="execution.status === 'failed' && execution.error" class="bg-red-900/10 rounded-lg p-4 border border-red-800">
-          <div class="flex items-center gap-2 mb-2">
-            <UIcon name="i-heroicons-exclamation-circle" class="w-5 h-5 text-red-400" />
-            <h4 class="text-sm font-semibold text-red-300">Error Details</h4>
-          </div>
-          <pre class="text-xs text-red-200 bg-red-950/30 rounded p-3 overflow-x-auto">{{ execution.error }}</pre>
-        </div>
-
-        <!-- Email Delivery Status -->
-        <div v-if="execution.emailDelivery" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-gray-400" />
-            <h4 class="text-sm font-semibold text-white">Email Delivery</h4>
-          </div>
-
-          <!-- Summary -->
-          <div class="flex items-center gap-4 mb-4 text-sm">
-            <div class="flex items-center gap-2">
-              <span class="text-gray-400">Sent:</span>
-              <span class="text-green-400 font-medium">{{ execution.emailsSent || 0 }}</span>
+        <div v-else-if="execution" class="space-y-6">
+          <!-- Status Overview -->
+          <div class="grid grid-cols-4 gap-4">
+            <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <div class="text-xs text-gray-400 mb-1">Status</div>
+              <UBadge
+                :color="getStatusColor(execution.status)"
+                :icon="getStatusIcon(execution.status)"
+                size="sm"
+              >
+                {{ execution.status }}
+              </UBadge>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-gray-400">Failed:</span>
-              <span class="text-red-400 font-medium">{{ execution.emailsFailed || 0 }}</span>
-            </div>
-          </div>
 
-          <!-- Recipient Details -->
-          <div v-if="execution.emailDelivery.recipients && execution.emailDelivery.recipients.length > 0" class="space-y-2">
-            <div
-              v-for="recipient in execution.emailDelivery.recipients"
-              :key="recipient.email"
-              class="flex items-center justify-between p-2 bg-gray-950/50 rounded border border-gray-700"
-            >
-              <div class="flex items-center gap-2">
-                <UIcon
-                  :name="recipient.status === 'sent' ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'"
-                  :class="recipient.status === 'sent' ? 'text-green-400' : 'text-red-400'"
-                  class="w-4 h-4"
-                />
-                <span class="text-sm text-gray-300">{{ recipient.email }}</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">
-                  {{ formatDateTime(recipient.timestamp) }}
-                </span>
-                <UBadge
-                  :color="recipient.status === 'sent' ? 'green' : 'red'"
-                  size="xs"
-                >
-                  {{ recipient.status }}
-                </UBadge>
+            <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <div class="text-xs text-gray-400 mb-1">Duration</div>
+              <div class="text-lg font-semibold text-white">
+                {{ formatDuration(execution.duration) }}
               </div>
             </div>
 
-            <!-- Error messages for failed recipients -->
-            <div
-              v-for="recipient in execution.emailDelivery.recipients.filter(r => r.status === 'failed' && r.error)"
-              :key="recipient.email + '-error'"
-              class="ml-6 p-2 bg-red-950/20 rounded border border-red-900/30"
-            >
-              <div class="text-xs text-red-300">{{ recipient.error }}</div>
+            <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <div class="text-xs text-gray-400 mb-1">Report Size</div>
+              <div class="text-lg font-semibold text-white">
+                {{ formatFileSize(execution.reportSize) }}
+              </div>
+            </div>
+
+            <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <div class="text-xs text-gray-400 mb-1">Downloads</div>
+              <div class="text-lg font-semibold text-white">
+                {{ execution.downloadCount || 0 }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Execution Time -->
+          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-clock" class="w-4 h-4 text-gray-400" />
+              <h4 class="text-sm font-semibold text-white">Execution Time</h4>
+            </div>
+            <div class="text-sm text-gray-300">
+              {{ formatDateTime(execution.executionTime) }}
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              {{ formatTimeAgo(execution.executionTime) }}
+            </div>
+          </div>
+
+          <!-- Error Details (if failed) -->
+          <div v-if="execution.status === 'failed' && execution.error" class="bg-red-900/10 rounded-lg p-4 border border-red-800">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-exclamation-circle" class="w-5 h-5 text-red-400" />
+              <h4 class="text-sm font-semibold text-red-300">Error Details</h4>
+            </div>
+            <pre class="text-xs text-red-200 bg-red-950/30 rounded p-3 overflow-x-auto">{{ execution.error }}</pre>
+          </div>
+
+          <!-- Email Delivery Status -->
+          <div v-if="execution.emailDelivery" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+            <div class="flex items-center gap-2 mb-3">
+              <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-gray-400" />
+              <h4 class="text-sm font-semibold text-white">Email Delivery</h4>
+            </div>
+
+            <!-- Summary -->
+            <div class="flex items-center gap-4 mb-4 text-sm">
+              <div class="flex items-center gap-2">
+                <span class="text-gray-400">Sent:</span>
+                <span class="text-green-400 font-medium">{{ execution.emailsSent || 0 }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-gray-400">Failed:</span>
+                <span class="text-red-400 font-medium">{{ execution.emailsFailed || 0 }}</span>
+              </div>
+            </div>
+
+            <!-- Recipient Details -->
+            <div v-if="execution.emailDelivery.recipients && execution.emailDelivery.recipients.length > 0" class="space-y-2">
+              <div
+                v-for="recipient in execution.emailDelivery.recipients"
+                :key="recipient.email"
+                class="flex items-center justify-between p-2 bg-gray-950/50 rounded border border-gray-700"
+              >
+                <div class="flex items-center gap-2">
+                  <UIcon
+                    :name="recipient.status === 'sent' ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'"
+                    :class="recipient.status === 'sent' ? 'text-green-400' : 'text-red-400'"
+                    class="w-4 h-4"
+                  />
+                  <span class="text-sm text-gray-300">{{ recipient.email }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-500">
+                    {{ formatDateTime(recipient.timestamp) }}
+                  </span>
+                  <UBadge
+                    :color="recipient.status === 'sent' ? 'green' : 'red'"
+                    size="xs"
+                  >
+                    {{ recipient.status }}
+                  </UBadge>
+                </div>
+              </div>
+
+              <!-- Error messages for failed recipients -->
+              <div
+                v-for="recipient in execution.emailDelivery.recipients.filter(r => r.status === 'failed' && r.error)"
+                :key="recipient.email + '-error'"
+                class="ml-6 p-2 bg-red-950/20 rounded border border-red-900/30"
+              >
+                <div class="text-xs text-red-300">{{ recipient.error }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Storage Information -->
+          <div v-if="execution.s3Key" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-cloud-arrow-down" class="w-4 h-4 text-gray-400" />
+              <h4 class="text-sm font-semibold text-white">Storage</h4>
+            </div>
+            <div class="text-xs text-gray-400 font-mono">
+              {{ execution.s3Key }}
+            </div>
+            <div v-if="execution.expiresAt" class="text-xs text-gray-500 mt-2">
+              Expires: {{ formatDateTime(new Date(execution.expiresAt * 1000).toISOString()) }}
             </div>
           </div>
         </div>
 
-        <!-- Storage Information -->
-        <div v-if="execution.s3Key" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <div class="flex items-center gap-2 mb-2">
-            <UIcon name="i-heroicons-cloud-arrow-down" class="w-4 h-4 text-gray-400" />
-            <h4 class="text-sm font-semibold text-white">Storage</h4>
-          </div>
-          <div class="text-xs text-gray-400 font-mono">
-            {{ execution.s3Key }}
-          </div>
-          <div v-if="execution.expiresAt" class="text-xs text-gray-500 mt-2">
-            Expires: {{ formatDateTime(new Date(execution.expiresAt * 1000).toISOString()) }}
-          </div>
+        <div v-else class="py-12 text-center">
+          <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <p class="text-gray-400">No execution details found</p>
         </div>
-      </div>
 
-      <div v-else class="py-12 text-center">
-        <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-gray-600 mx-auto mb-3" />
-        <p class="text-gray-400">No execution details found</p>
-      </div>
-
-      <template #footer>
-        <div class="flex items-center justify-end gap-2">
-          <UButton
-            v-if="execution && execution.status === 'success' && execution.s3Key"
-            icon="i-heroicons-arrow-down-tray"
-            color="primary"
-            @click="handleDownload"
-          >
-            Download Report
-          </UButton>
-          <UButton
-            color="gray"
-            variant="ghost"
-            @click="close"
-          >
-            Close
-          </UButton>
-        </div>
-      </template>
-    </UCard>
+        <template #footer>
+          <div class="flex items-center justify-end gap-2">
+            <UButton
+              v-if="execution && execution.status === 'success' && execution.s3Key"
+              icon="i-heroicons-arrow-down-tray"
+              color="primary"
+              @click="handleDownload"
+            >
+              Download Report
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              @click="close"
+            >
+              Close
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

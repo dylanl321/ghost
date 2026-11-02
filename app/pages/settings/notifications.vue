@@ -32,16 +32,16 @@
             <UInput v-model="searchText" placeholder="Search notifications..." icon="i-heroicons-magnifying-glass" class="flex-1" />
             <USelectMenu
               v-model="categoryFilter"
-              :options="categoryFilterOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="categoryFilterOptions"
+              label-key="label"
+              value-key="value"
               placeholder="Category"
               class="w-40"
-            />
+             :search-input="false"/>
           </div>
 
           <!-- History Table -->
-          <UTable :rows="filteredNotifications" :columns="historyColumns" :loading="isLoading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications yet' }">
+          <UTable :data="filteredNotifications" :columns="historyColumns" :loading="isLoading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications yet' }">
             <template #category-data="{ row }">
               <UBadge :color="getCategoryColor(row.category)" variant="subtle" size="xs">
                 {{ getCategoryLabel(row.category) }}

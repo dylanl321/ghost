@@ -14,9 +14,9 @@
         <UTooltip text="Regenerate insight">
           <UButton
             icon="i-heroicons-arrow-path"
-            size="2xs"
+            size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             :loading="loading"
             @click="fetchInsight(true)"
           />
@@ -24,18 +24,18 @@
         <UTooltip v-if="collapsible" :text="collapsed ? 'Expand' : 'Collapse'">
           <UButton
             :icon="collapsed ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-up'"
-            size="2xs"
+            size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             @click="toggleCollapsed"
           />
         </UTooltip>
         <UTooltip v-if="dismissible" text="Dismiss">
           <UButton
             icon="i-heroicons-x-mark"
-            size="2xs"
+            size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             @click="dismiss"
           />
         </UTooltip>

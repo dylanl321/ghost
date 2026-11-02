@@ -1,462 +1,458 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-2xl' }" @close="handleClose">
-    <UCard
-      :ui="{
-        ring: '',
-        divide: 'divide-y divide-gray-200 dark:divide-gray-700',
-        body: { base: 'p-0', padding: '' },
-        header: { base: 'py-4 px-6' },
-        footer: { base: 'py-4 px-6' }
-      }"
-    >
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ editingReport ? 'Edit Report' : 'Create Scheduled Report' }}
-            </h3>
-            <UTooltip text="Learn how to configure scheduled reports">
-              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
-                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
-              </NuxtLink>
-            </UTooltip>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark-20-solid"
-            size="sm"
-            @click="handleClose"
-          />
-        </div>
-      </template>
-
-      <!-- Step Progress -->
-      <div class="px-6 pt-6 pb-4">
-        <div class="flex items-center justify-between">
-          <div
-            v-for="(step, index) in steps"
-            :key="index"
-            class="flex items-center flex-1"
-          >
-            <div class="flex flex-col items-center flex-1">
-              <div
-                :class="[
-                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors',
-                  currentStep >= index
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                ]"
-              >
-                {{ index + 1 }}
-              </div>
-              <span
-                :class="[
-                  'text-xs mt-1',
-                  currentStep >= index
-                    ? 'text-gray-900 dark:text-white font-medium'
-                    : 'text-gray-500 dark:text-gray-400'
-                ]"
-              >
-                {{ step }}
-              </span>
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-2xl' }" @close="handleClose" scrollable>
+    <template #content>
+      <UCard
+        :ui="{ root: 'border-0 divide-y divide-gray-200 dark:divide-gray-700', body: 'p-0 sm:p-0', header: 'py-4 px-6 sm:px-6', footer: 'py-4 px-6 sm:px-6' }"
+      >
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ editingReport ? 'Edit Report' : 'Create Scheduled Report' }}
+              </h3>
+              <UTooltip text="Learn how to configure scheduled reports">
+                <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                  <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+                </NuxtLink>
+              </UTooltip>
             </div>
-            <div
-              v-if="index < steps.length - 1"
-              :class="[
-                'h-0.5 flex-1 transition-colors',
-                currentStep > index
-                  ? 'bg-blue-600'
-                  : 'bg-gray-200 dark:bg-gray-700'
-              ]"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Form Content -->
-      <div class="px-6 py-6 space-y-6">
-        <!-- Step 1: Basic Info -->
-        <div v-show="currentStep === 0" class="space-y-4">
-          <UFormGroup label="Report Name" required>
-            <UInput
-              v-model="form.reportName"
-              placeholder="e.g., Monthly Cost Summary"
-              :error="errors.reportName"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Description" help="Optional description of this report">
-            <UTextarea
-              v-model="form.description"
-              placeholder="Brief description of what this report covers"
-              :rows="3"
-            />
-          </UFormGroup>
-        </div>
-
-        <!-- Step 2: Report Configuration -->
-        <div v-show="currentStep === 1" class="space-y-4">
-          <UFormGroup label="Accounts" help="Leave empty for org-wide report">
-            <USelectMenu
-              v-model="form.accounts"
-              :options="accountOptions"
-              multiple
-              placeholder="Select accounts (or leave empty for all)"
-              value-attribute="id"
-              option-attribute="name"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Timeframe" required>
-            <USelect
-              v-model="form.reportConfig.timeframe"
-              :options="timeframeOptions"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Data Mode" required>
-            <div class="flex gap-4">
-              <URadio
-                v-model="form.reportConfig.dataMode"
-                value="billable"
-                label="Billable (Raw AWS costs)"
-              />
-              <URadio
-                v-model="form.reportConfig.dataMode"
-                value="proforma"
-                label="Proforma (With savings plans)"
-              />
-            </div>
-          </UFormGroup>
-
-          <UFormGroup label="Report Format" required>
-            <div class="grid grid-cols-2 gap-3">
-              <URadio
-                v-for="format in formatOptions"
-                :key="format.value"
-                v-model="form.reportConfig.format"
-                :value="format.value"
-                :label="format.label"
-              />
-            </div>
-          </UFormGroup>
-
-          <UFormGroup label="Include in Report">
-            <div class="space-y-2">
-              <UCheckbox
-                v-model="form.reportConfig.includeServices"
-                label="Include service breakdown"
-              />
-              <UCheckbox
-                v-model="form.reportConfig.includeHistorical"
-                label="Include historical trends"
-              />
-              <UCheckbox
-                v-model="form.reportConfig.includeForecast"
-                label="Include cost forecast"
-              />
-            </div>
-          </UFormGroup>
-
-          <UFormGroup label="AI Enhancements" help="Available for PDF reports only">
-            <UCheckbox
-              v-model="form.includeAI"
-              label="Include AI-powered cost analysis (recommended)"
-              :disabled="form.reportConfig.format !== 'pdf'"
-            />
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-              Add intelligent insights and recommendations using Claude AI
-            </p>
-          </UFormGroup>
-        </div>
-
-        <!-- Step 3: Schedule -->
-        <div v-show="currentStep === 2" class="space-y-4">
-          <UFormGroup label="Frequency" required>
-            <USelect
-              v-model="form.schedule.frequency"
-              :options="frequencyOptions"
-              @change="handleFrequencyChange"
-            />
-          </UFormGroup>
-
-          <!-- Day of Week (Weekly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'weekly'"
-            label="Day of Week"
-            required
-          >
-            <USelect
-              v-model="form.schedule.dayOfWeek"
-              :options="dayOfWeekOptions"
-            />
-          </UFormGroup>
-
-          <!-- Day of Month (Monthly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'monthly'"
-            label="Day of Month"
-            required
-          >
-            <USelect
-              v-model="form.schedule.dayOfMonth"
-              :options="dayOfMonthOptions"
-            />
-          </UFormGroup>
-
-          <!-- Month of Quarter (Quarterly) -->
-          <UFormGroup
-            v-if="form.schedule.frequency === 'quarterly'"
-            label="Month of Quarter"
-            required
-          >
-            <USelect
-              v-model="form.schedule.monthOfQuarter"
-              :options="monthOfQuarterOptions"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Time" required>
-            <UInput
-              v-model="form.schedule.time"
-              type="time"
-              placeholder="09:00"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Timezone" required>
-            <USelect
-              v-model="form.schedule.timezone"
-              :options="timezoneOptions"
-            />
-          </UFormGroup>
-
-          <!-- Next Run Preview -->
-          <div v-if="nextRunPreview" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div class="flex items-start gap-2">
-              <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div>
-                <p class="text-sm font-medium text-blue-900 dark:text-blue-100">
-                  Next scheduled run:
-                </p>
-                <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  {{ nextRunPreview }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step 4: Email Settings -->
-        <div v-show="currentStep === 3" class="space-y-4">
-          <UFormGroup
-            label="Recipients"
-            :help="isAdmin ? 'Enter email addresses separated by commas' : 'Reports will be sent to your email'"
-            required
-          >
-            <UInput
-              v-if="isAdmin"
-              v-model="recipientsInput"
-              placeholder="user1@example.com, user2@example.com"
-              :error="errors.recipients"
-            />
-            <UInput
-              v-else
-              :model-value="userEmail"
-              readonly
-              disabled
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Email Subject">
-            <UInput
-              v-model="form.emailTemplate.subject"
-              placeholder="AWS Cost Report for {{reportPeriod}}"
-            />
-            <template #help>
-              <details class="mt-2">
-                <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
-                  View all available variables (click to expand)
-                </summary>
-                <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{dateRange}}, {{reportPeriod}}, {{quarter}}
-                    </p>
-                  </div>
-                  <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
-                    <p class="text-gray-700 dark:text-gray-300 italic">
-                      <span class="font-semibold">Example:</span> "Cost Report for {{startMonth}} {{startYear}}"
-                      <br>
-                      <span class="text-gray-500 dark:text-gray-400">(For a report on Oct 5th covering September, this becomes "Cost Report for September 2025")</span>
-                    </p>
-                  </div>
-                </div>
-              </details>
-            </template>
-          </UFormGroup>
-
-          <UFormGroup>
-            <UCheckbox
-              v-model="customizeBody"
-              label="Customize email body (Advanced)"
-              help="Customize the email content using template variables"
-            />
-          </UFormGroup>
-
-          <!-- Custom Body Editor -->
-          <UFormGroup
-            v-if="customizeBody"
-            label="Email Body"
-            help="Enter custom HTML or plain text. Use variables like {{reportName}}, {{timeframe}}, etc."
-          >
-            <UTextarea
-              v-model="form.emailTemplate.body"
-              placeholder="<p>Hello {{userName}},</p><p>Your AWS cost report for {{reportPeriod}} is ready. Total accounts: {{accountCount}}.</p>"
-              :rows="10"
-            />
-            <template #help>
-              <details class="mt-2">
-                <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
-                  View all available variables (click to expand)
-                </summary>
-                <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{dateRange}}, {{reportPeriod}}, {{quarter}}
-                    </p>
-                  </div>
-                  <div>
-                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Additional:</p>
-                    <p class="text-gray-600 dark:text-gray-400">
-                      {{userName}}, {{timestamp}}, {{siteUrl}}, {{recipientEmail}}
-                    </p>
-                  </div>
-                  <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
-                    <p class="text-gray-700 dark:text-gray-300 italic">
-                      <span class="font-semibold">HTML Example:</span> "&lt;p&gt;Report for {{startMonth}} {{startYear}}&lt;/p&gt;"
-                      <br>
-                      <span class="text-gray-500 dark:text-gray-400">(You can use HTML tags for formatting)</span>
-                    </p>
-                  </div>
-                </div>
-              </details>
-            </template>
-          </UFormGroup>
-
-          <!-- View Default Template Helper -->
-          <div v-if="customizeBody" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <details>
-              <summary class="text-sm font-medium text-blue-900 dark:text-blue-100 cursor-pointer hover:underline">
-                View default email template (for reference)
-              </summary>
-              <div class="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-200 dark:border-blue-700 text-xs overflow-x-auto">
-                <pre class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{defaultTemplatePreview}}</pre>
-              </div>
-            </details>
-          </div>
-
-          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              <Icon name="i-heroicons-information-circle" class="w-4 h-4 inline mr-1" />
-              A formatted email will be used with your report attached.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="flex justify-between">
-          <UButton
-            v-if="currentStep > 0"
-            color="gray"
-            variant="ghost"
-            @click="prevStep"
-          >
-            Back
-          </UButton>
-          <div v-else></div>
-
-          <div class="flex gap-2">
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
+              icon="i-heroicons-x-mark-20-solid"
+              size="sm"
               @click="handleClose"
+            />
+          </div>
+        </template>
+
+        <!-- Step Progress -->
+        <div class="px-6 pt-6 pb-4">
+          <div class="flex items-center justify-between">
+            <div
+              v-for="(step, index) in steps"
+              :key="index"
+              class="flex items-center flex-1"
             >
-              Cancel
-            </UButton>
-            <UButton
-              v-if="currentStep < steps.length - 1"
-              color="blue"
-              @click="nextStep"
-              :disabled="!canProceed"
-            >
-              Next
-            </UButton>
-            <UButton
-              v-else
-              color="blue"
-              @click="handleSubmit"
-              :loading="submitting"
-              :disabled="!canProceed"
-            >
-              {{ editingReport ? 'Save Changes' : 'Create Report' }}
-            </UButton>
+              <div class="flex flex-col items-center flex-1">
+                <div
+                  :class="[
+                    'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors',
+                    currentStep >= index
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  ]"
+                >
+                  {{ index + 1 }}
+                </div>
+                <span
+                  :class="[
+                    'text-xs mt-1',
+                    currentStep >= index
+                      ? 'text-gray-900 dark:text-white font-medium'
+                      : 'text-gray-500 dark:text-gray-400'
+                  ]"
+                >
+                  {{ step }}
+                </span>
+              </div>
+              <div
+                v-if="index < steps.length - 1"
+                :class="[
+                  'h-0.5 flex-1 transition-colors',
+                  currentStep > index
+                    ? 'bg-blue-600'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                ]"
+              />
+            </div>
           </div>
         </div>
-      </template>
-    </UCard>
+
+        <!-- Form Content -->
+        <div class="px-6 py-6 space-y-6">
+          <!-- Step 1: Basic Info -->
+          <div v-show="currentStep === 0" class="space-y-4">
+            <UFormField label="Report Name" required>
+              <UInput
+                v-model="form.reportName"
+                placeholder="e.g., Monthly Cost Summary"
+                :error="errors.reportName"
+              />
+            </UFormField>
+
+            <UFormField label="Description" help="Optional description of this report">
+              <UTextarea
+                v-model="form.description"
+                placeholder="Brief description of what this report covers"
+                :rows="3"
+              />
+            </UFormField>
+          </div>
+
+          <!-- Step 2: Report Configuration -->
+          <div v-show="currentStep === 1" class="space-y-4">
+            <UFormField label="Accounts" help="Leave empty for org-wide report">
+              <USelectMenu
+                v-model="form.accounts"
+                :items="accountOptions"
+                multiple
+                placeholder="Select accounts (or leave empty for all)"
+                value-key="id"
+                label-key="name"
+               :search-input="false"/>
+            </UFormField>
+
+            <UFormField label="Timeframe" required>
+              <USelect
+                v-model="form.reportConfig.timeframe"
+                :items="timeframeOptions"
+              />
+            </UFormField>
+
+            <UFormField label="Data Mode" required>
+              <div class="flex gap-4">
+                <URadio
+                  v-model="form.reportConfig.dataMode"
+                  value="billable"
+                  label="Billable (Raw AWS costs)"
+                />
+                <URadio
+                  v-model="form.reportConfig.dataMode"
+                  value="proforma"
+                  label="Proforma (With savings plans)"
+                />
+              </div>
+            </UFormField>
+
+            <UFormField label="Report Format" required>
+              <div class="grid grid-cols-2 gap-3">
+                <URadio
+                  v-for="format in formatOptions"
+                  :key="format.value"
+                  v-model="form.reportConfig.format"
+                  :value="format.value"
+                  :label="format.label"
+                />
+              </div>
+            </UFormField>
+
+            <UFormField label="Include in Report">
+              <div class="space-y-2">
+                <UCheckbox
+                  v-model="form.reportConfig.includeServices"
+                  label="Include service breakdown"
+                />
+                <UCheckbox
+                  v-model="form.reportConfig.includeHistorical"
+                  label="Include historical trends"
+                />
+                <UCheckbox
+                  v-model="form.reportConfig.includeForecast"
+                  label="Include cost forecast"
+                />
+              </div>
+            </UFormField>
+
+            <UFormField label="AI Enhancements" help="Available for PDF reports only">
+              <UCheckbox
+                v-model="form.includeAI"
+                label="Include AI-powered cost analysis (recommended)"
+                :disabled="form.reportConfig.format !== 'pdf'"
+              />
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+                Add intelligent insights and recommendations using Claude AI
+              </p>
+            </UFormField>
+          </div>
+
+          <!-- Step 3: Schedule -->
+          <div v-show="currentStep === 2" class="space-y-4">
+            <UFormField label="Frequency" required>
+              <USelect
+                v-model="form.schedule.frequency"
+                :items="frequencyOptions"
+                @change="handleFrequencyChange"
+              />
+            </UFormField>
+
+            <!-- Day of Week (Weekly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'weekly'"
+              label="Day of Week"
+              required
+            >
+              <USelect
+                v-model="form.schedule.dayOfWeek"
+                :items="dayOfWeekOptions"
+              />
+            </UFormField>
+
+            <!-- Day of Month (Monthly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'monthly'"
+              label="Day of Month"
+              required
+            >
+              <USelect
+                v-model="form.schedule.dayOfMonth"
+                :items="dayOfMonthOptions"
+              />
+            </UFormField>
+
+            <!-- Month of Quarter (Quarterly) -->
+            <UFormField
+              v-if="form.schedule.frequency === 'quarterly'"
+              label="Month of Quarter"
+              required
+            >
+              <USelect
+                v-model="form.schedule.monthOfQuarter"
+                :items="monthOfQuarterOptions"
+              />
+            </UFormField>
+
+            <UFormField label="Time" required>
+              <UInput
+                v-model="form.schedule.time"
+                type="time"
+                placeholder="09:00"
+              />
+            </UFormField>
+
+            <UFormField label="Timezone" required>
+              <USelect
+                v-model="form.schedule.timezone"
+                :items="timezoneOptions"
+              />
+            </UFormField>
+
+            <!-- Next Run Preview -->
+            <div v-if="nextRunPreview" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div class="flex items-start gap-2">
+                <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div>
+                  <p class="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Next scheduled run:
+                  </p>
+                  <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    {{ nextRunPreview }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Email Settings -->
+          <div v-show="currentStep === 3" class="space-y-4">
+            <UFormField
+              label="Recipients"
+              :help="isAdmin ? 'Enter email addresses separated by commas' : 'Reports will be sent to your email'"
+              required
+            >
+              <UInput
+                v-if="isAdmin"
+                v-model="recipientsInput"
+                placeholder="user1@example.com, user2@example.com"
+                :error="errors.recipients"
+              />
+              <UInput
+                v-else
+                :model-value="userEmail"
+                readonly
+                disabled
+              />
+            </UFormField>
+
+            <UFormField label="Email Subject">
+              <UInput
+                v-model="form.emailTemplate.subject"
+                placeholder="AWS Cost Report for {{reportPeriod}}"
+              />
+              <template #help>
+                <details class="mt-2">
+                  <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                    View all available variables (click to expand)
+                  </summary>
+                  <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{dateRange}}, {{reportPeriod}}, {{quarter}}
+                      </p>
+                    </div>
+                    <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
+                      <p class="text-gray-700 dark:text-gray-300 italic">
+                        <span class="font-semibold">Example:</span> "Cost Report for {{startMonth}} {{startYear}}"
+                        <br>
+                        <span class="text-gray-500 dark:text-gray-400">(For a report on Oct 5th covering September, this becomes "Cost Report for September 2025")</span>
+                      </p>
+                    </div>
+                  </div>
+                </details>
+              </template>
+            </UFormField>
+
+            <UFormField>
+              <UCheckbox
+                v-model="customizeBody"
+                label="Customize email body (Advanced)"
+                description="Customize the email content using template variables"
+              />
+            </UFormField>
+
+            <!-- Custom Body Editor -->
+            <UFormField
+              v-if="customizeBody"
+              label="Email Body"
+              help="Enter custom HTML or plain text. Use variables like {{reportName}}, {{timeframe}}, etc."
+            >
+              <UTextarea
+                v-model="form.emailTemplate.body"
+                placeholder="<p>Hello {{userName}},</p><p>Your AWS cost report for {{reportPeriod}} is ready. Total accounts: {{accountCount}}.</p>"
+                :rows="10"
+              />
+              <template #help>
+                <details class="mt-2">
+                  <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                    View all available variables (click to expand)
+                  </summary>
+                  <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{dateRange}}, {{reportPeriod}}, {{quarter}}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-gray-900 dark:text-white mb-1">Additional:</p>
+                      <p class="text-gray-600 dark:text-gray-400">
+                        {{userName}}, {{timestamp}}, {{siteUrl}}, {{recipientEmail}}
+                      </p>
+                    </div>
+                    <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
+                      <p class="text-gray-700 dark:text-gray-300 italic">
+                        <span class="font-semibold">HTML Example:</span> "&lt;p&gt;Report for {{startMonth}} {{startYear}}&lt;/p&gt;"
+                        <br>
+                        <span class="text-gray-500 dark:text-gray-400">(You can use HTML tags for formatting)</span>
+                      </p>
+                    </div>
+                  </div>
+                </details>
+              </template>
+            </UFormField>
+
+            <!-- View Default Template Helper -->
+            <div v-if="customizeBody" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <details>
+                <summary class="text-sm font-medium text-blue-900 dark:text-blue-100 cursor-pointer hover:underline">
+                  View default email template (for reference)
+                </summary>
+                <div class="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-200 dark:border-blue-700 text-xs overflow-x-auto">
+                  <pre class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{defaultTemplatePreview}}</pre>
+                </div>
+              </details>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                <Icon name="i-heroicons-information-circle" class="w-4 h-4 inline mr-1" />
+                A formatted email will be used with your report attached.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="flex justify-between">
+            <UButton
+              v-if="currentStep > 0"
+              color="neutral"
+              variant="ghost"
+              @click="prevStep"
+            >
+              Back
+            </UButton>
+            <div v-else></div>
+
+            <div class="flex gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="handleClose"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                v-if="currentStep < steps.length - 1"
+                color="blue"
+                @click="nextStep"
+                :disabled="!canProceed"
+              >
+                Next
+              </UButton>
+              <UButton
+                v-else
+                color="blue"
+                @click="handleSubmit"
+                :loading="submitting"
+                :disabled="!canProceed"
+              >
+                {{ editingReport ? 'Save Changes' : 'Create Report' }}
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

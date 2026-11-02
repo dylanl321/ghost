@@ -13,11 +13,11 @@
         </div>
         <div class="w-40">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-          <USelectMenu v-model="filters.category" :options="categoryOptions" placeholder="All" />
+          <USelectMenu v-model="filters.category" :items="categoryOptions" placeholder="All"  :search-input="false"/>
         </div>
         <div class="w-36">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-          <USelectMenu v-model="filters.status" :options="statusOptions" placeholder="All" />
+          <USelectMenu v-model="filters.status" :items="statusOptions" placeholder="All"  :search-input="false"/>
         </div>
         <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications" :loading="loading">
           Search
@@ -49,7 +49,7 @@
 
     <!-- Notifications Table -->
     <UCard>
-      <UTable :rows="notifications" :columns="columns" :loading="loading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications found' }">
+      <UTable :data="notifications" :columns="columns" :loading="loading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications found' }">
         <template #userId-data="{ row }">
           <span class="text-xs font-mono truncate max-w-[160px] inline-block">{{ row.userId }}</span>
         </template>

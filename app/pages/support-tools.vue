@@ -46,7 +46,7 @@
               v-if="expandedCard"
               size="xs"
               variant="ghost"
-              color="gray"
+              color="neutral"
               @click="expandedCard = null"
             >
               <Icon name="i-heroicons-x-mark" class="w-4 h-4 mr-1" />
@@ -97,13 +97,13 @@
           icon="i-heroicons-magnifying-glass"
           size="sm"
           class="w-full sm:w-64"
-          :ui="{ icon: { trailing: { pointer: '' } } }"
+          :ui="{ trailing: 'pointer-events-auto' }"
         >
           <template v-if="searchQuery" #trailing>
             <UButton
-              size="2xs"
+              size="xs"
               variant="ghost"
-              color="gray"
+              color="neutral"
               icon="i-heroicons-x-mark"
               @click="searchQuery = ''"
             />
