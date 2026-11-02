@@ -1,98 +1,42 @@
 <template>
-  <div class="space-y-6 lg:space-y-8 p-6 max-w-[1600px] mx-auto">
-    <!-- Welcome Header Card -->
-    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-      <div class="flex items-center justify-between mb-4">
-        <div>
+  <div class="-mt-4">
+    <!-- -mt-4 cancels the layout's top padding so the band meets the top bar, as on Costs -->
+    <!-- Header band: greeting, scope, the month in one sentence, and quick links -->
+    <section class="dark !bg-[#0f172a] px-4 pb-7 pt-5 !text-white md:px-8">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="mr-auto min-w-0">
           <ClientOnly>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-0.5">{{ currentGreeting }}</p>
+            <p class="m-0 text-sm text-slate-400">{{ currentGreeting }}, {{ user?.claims?.given_name || 'there' }}</p>
             <template #fallback>
-              <p class="text-sm text-gray-500 dark:text-gray-400 mb-0.5">Hello</p>
+              <p class="m-0 text-sm text-slate-400">Hello</p>
             </template>
           </ClientOnly>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-            {{ user?.claims?.given_name || 'User' }}
-          </h1>
+          <h1 class="sr-only">Dashboard</h1>
         </div>
-
-        <!-- Personal summary stats -->
-        <ClientOnly>
-          <div class="flex items-center gap-5">
-            <div v-if="userAccountCount > 0" class="text-right">
-              <p class="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">My Accounts</p>
-              <p class="text-xl font-bold text-gray-900 dark:text-white">{{ userAccountCount }}</p>
-            </div>
-            <div v-if="userAccountCount > 0" class="w-px h-10 bg-gray-200 dark:bg-gray-700" />
-            <div class="text-right">
-              <p class="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                {{ userAccountCount > 0 ? 'My MTD Cost' : 'Org MTD Cost' }}
-              </p>
-              <p class="text-xl font-bold text-gray-900 dark:text-white">
-                {{ formatCurrency(userAccountCount > 0 ? userTotalCost : mtdTotal, 0) }}
-              </p>
-            </div>
-          </div>
-          <template #fallback>
-            <div class="flex items-center gap-5">
-              <div class="text-right animate-pulse">
-                <div class="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-1.5 ml-auto" />
-                <div class="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
-              </div>
-            </div>
-          </template>
-        </ClientOnly>
-      </div>
-
-      <!-- Quick Actions + Scope/Timeframe Controls -->
-      <div class="flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
-        <NuxtLink to="/account/explorer">
-          <UButton icon="i-heroicons-magnifying-glass" size="xs" variant="soft" color="blue">
-            Search Accounts
-          </UButton>
-        </NuxtLink>
-        <NuxtLink to="/account/costs">
-          <UButton icon="i-heroicons-chart-bar" size="xs" variant="soft" color="purple">
-            Cost Reports
-          </UButton>
-        </NuxtLink>
-        <NuxtLink to="/account/user">
-          <UButton icon="i-heroicons-users" size="xs" variant="soft" color="emerald">
-            User Access
-          </UButton>
-        </NuxtLink>
-        <NuxtLink to="/support/docs">
-          <UButton icon="i-heroicons-book-open" size="xs" variant="ghost">
-            Support
-          </UButton>
-        </NuxtLink>
-        <div class="flex-1" />
 
         <!-- Scope & Timeframe selectors -->
         <ClientOnly>
-          <div class="flex items-center gap-2">
-            <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex rounded-lg bg-white/10 p-0.5" role="group" aria-label="Scope">
               <button
                 v-for="option in dashboardScopeOptions"
                 :key="option.value"
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150"
+                :class="dashboardScope === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'"
                 @click="handleScopeChange(option.value)"
-                class="px-2 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
-                :class="dashboardScope === option.value
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
               >
                 {{ option.label }}
               </button>
             </div>
-            <div class="w-px h-5 bg-gray-200 dark:bg-gray-700" />
-            <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            <div class="flex rounded-lg bg-white/10 p-0.5" role="group" aria-label="Trend range">
               <button
                 v-for="option in dashboardDateRangeOptions"
                 :key="option.value"
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150"
+                :class="dashboardDateRange === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'"
                 @click="handleDateRangeChange(option.value)"
-                class="px-2 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
-                :class="dashboardDateRange === option.value
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
               >
                 {{ option.label }}
               </button>
@@ -100,8 +44,8 @@
           </div>
           <template #fallback>
             <div class="flex items-center gap-2">
-              <div class="h-7 w-36 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
-              <div class="h-7 w-28 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+              <div class="h-7 w-36 animate-pulse rounded-lg bg-white/10" />
+              <div class="h-7 w-28 animate-pulse rounded-lg bg-white/10" />
             </div>
           </template>
         </ClientOnly>
@@ -110,10 +54,11 @@
           <UTooltip text="Customize dashboard">
             <div class="relative" @click.capture="handleCustomizeClick">
               <UButton
-                icon="i-heroicons-cog-6-tooth"
-                size="xs"
-                variant="ghost"
+                icon="i-heroicons-squares-2x2"
+                size="sm"
+                variant="soft"
                 color="neutral"
+                label="Customize"
               />
               <span v-if="!customizeDashboardSeen"
                 class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -136,8 +81,30 @@
           </template>
         </UPopover>
       </div>
-    </div>
 
+      <ClientOnly>
+        <CostsHero
+          v-if="!loading && orgOverview"
+          class="mt-6"
+          :narrative="homeNarrative"
+          :stats="homeStats"
+          :pace="homePace"
+        />
+        <div v-else class="mt-6 space-y-3" aria-busy="true">
+          <div class="h-8 w-2/3 animate-pulse rounded bg-white/10" />
+          <div class="h-6 w-1/2 animate-pulse rounded bg-white/10" />
+        </div>
+      </ClientOnly>
+
+      <nav class="mt-6 flex flex-wrap gap-2" aria-label="Quick links">
+        <UButton to="/account/costs" icon="i-heroicons-chart-bar" color="neutral" variant="soft" size="sm">Costs</UButton>
+        <UButton to="/account/explorer" icon="i-heroicons-magnifying-glass" color="neutral" variant="soft" size="sm">Account explorer</UButton>
+        <UButton to="/account/user" icon="i-heroicons-users" color="neutral" variant="soft" size="sm">User access</UButton>
+        <UButton to="/support/docs" icon="i-heroicons-book-open" color="neutral" variant="soft" size="sm">Docs</UButton>
+      </nav>
+    </section>
+
+    <div class="space-y-5 p-6 max-w-[1600px] mx-auto">
     <ClientOnly>
       <DashboardMcpOfferingBanner />
     </ClientOnly>
@@ -155,7 +122,7 @@
 
     <!-- Dynamic Sections (ordered by user preference, client-only to avoid hydration mismatch from localStorage-based layout) -->
     <ClientOnly>
-      <div class="grid grid-cols-12 gap-6 lg:gap-8">
+      <div class="grid grid-cols-12 gap-4 lg:gap-5">
         <template v-for="section in visibleSections" :key="section.id">
           <div class="grid min-w-0 overflow-hidden" :class="sectionColSpan(section.displayStyle)">
             <QuickStartCard v-if="section.id === 'quickStart'" :display-style="section.displayStyle || 'full'" />
@@ -329,10 +296,15 @@
 
     <!-- Customize Panel -->
     <DashboardCustomizePanel v-model="showCustomizePanel" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import CostsHero from '~/components/costs/CostsHero.vue'
+import type { HeroStat, HeroPace } from '~/components/costs/CostsHero.vue'
+import { buildCostNarrative, formatCompactCurrency } from '#shared/utils/cost-dashboard'
+import { getCurrentPeriodWindow } from '~/utils/cost-period'
 
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
@@ -492,6 +464,86 @@ const userTotalCost = computed(() => {
   if (!costs) return 0
   const userAccountIds = Object.keys(userGroupStore.myEnclaves)
   return userAccountIds.reduce((sum, id) => sum + (costs[id] || 0), 0)
+})
+
+// =============================================================================
+// Header summary: the month so far for the chosen scope, in one sentence
+// =============================================================================
+const monthWindow = computed(() => getCurrentPeriodWindow('thisMonth'))
+
+const scopeAccountIds = computed<string[]>(() => {
+  const costs = orgOverview.value?.data?.allAccountCosts || {}
+  if (dashboardScope.value === 'mine') return Object.keys(userGroupStore.myEnclaves)
+  if (dashboardScope.value === 'favorites') return [...favoriteIds.value]
+  return Object.keys(costs)
+})
+
+const homeAccounts = computed(() => {
+  const costs = orgOverview.value?.data?.allAccountCosts || {}
+  const budgets = orgOverview.value?.data?.accountBudgets || {}
+  const w = monthWindow.value
+  const pace = w && w.totalDays > 0 ? w.observedDays / w.totalDays : 1
+  return scopeAccountIds.value.map(id => ({
+    id,
+    name: enclaveStore.enclaves[id]?.projectName || id,
+    spend: costs[id] || 0,
+    budget: (budgets[id] || 0) * pace,
+    fullBudget: budgets[id] || 0
+  }))
+})
+
+const homeScopeLabel = computed(() => {
+  const count = homeAccounts.value.length
+  if (dashboardScope.value === 'mine') return count === 1 ? 'your account' : `your ${count} accounts`
+  if (dashboardScope.value === 'favorites') return count === 1 ? 'your favorite account' : `your ${count} favorite accounts`
+  return `all ${count} accounts`
+})
+
+const homeNarrative = computed(() => buildCostNarrative({
+  periodPhrase: 'So far this month',
+  scopeLabel: homeScopeLabel.value,
+  accounts: homeAccounts.value,
+  budgetNoun: 'budget to date',
+  noBudgetText: monthWindow.value?.observedDays === 0 ? 'No complete days of data yet this month.' : undefined
+}))
+
+// Whole dollars until seven figures, then compact ($1.0M) so the stats row stays on one line
+const heroMoney = (value: number) => Math.abs(value) >= 1_000_000 ? formatCompactCurrency(value) : formatCurrency(value, 0)
+
+const homeStats = computed<HeroStat[]>(() => {
+  const accts = homeAccounts.value
+  const spend = accts.reduce((sum, a) => sum + a.spend, 0)
+  const fullBudget = accts.reduce((sum, a) => sum + a.fullBudget, 0)
+  const w = monthWindow.value
+  // Org scope uses the AWS forecast; narrower scopes extrapolate the daily rate
+  const projected = dashboardScope.value === 'org'
+    ? projectedSpend.value
+    : (w && w.observedDays > 0 ? spend / w.observedDays * w.totalDays : 0)
+  const overCount = accts.filter(a => a.budget > 0 && a.spend > a.budget).length
+  return [
+    { label: 'Month to date', value: heroMoney(spend), sub: monthToDateTrend.value !== null && dashboardScope.value === 'org' ? `${monthToDateTrend.value >= 0 ? '+' : ''}${monthToDateTrend.value.toFixed(1)}% vs last month to date` : `${w?.observedDays ?? 0} days of data` },
+    { label: 'Projected', value: projected > 0 ? heroMoney(projected) : '—', sub: dashboardScope.value === 'org' ? 'AWS forecast for the month' : 'At the current daily rate', tone: fullBudget > 0 && projected > fullBudget ? 'over' : undefined },
+    { label: 'Monthly budget', value: fullBudget > 0 ? heroMoney(fullBudget) : '—', sub: fullBudget > 0 && projected > 0 ? `${Math.round(projected / fullBudget * 100)}% at this pace` : 'No budgets set' },
+    { label: 'Accounts', value: String(accts.length), sub: `${overCount} over budget to date` }
+  ]
+})
+
+const homePace = computed<HeroPace | null>(() => {
+  const w = monthWindow.value
+  const accts = homeAccounts.value
+  const full = accts.reduce((sum, a) => sum + a.fullBudget, 0)
+  if (!w || full <= 0) return null
+  const spend = accts.reduce((sum, a) => sum + a.spend, 0)
+  const ratio = w.totalDays > 0 ? w.observedDays / w.totalDays : 0
+  return {
+    caption: `Day ${w.observedDays} of ${w.totalDays} this month`,
+    right: `${heroMoney(spend)} of ${heroMoney(full)}`,
+    aria: `${heroMoney(spend)} spent of a ${heroMoney(full)} monthly budget`,
+    periodLabel: 'month',
+    spendRatio: spend / full,
+    markerRatio: ratio,
+    over: spend > full * ratio
+  }
 })
 
 // AI Briefing context — only populated once overview data loads
