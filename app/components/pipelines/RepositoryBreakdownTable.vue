@@ -21,14 +21,14 @@
         :items="accordionItems"
         :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }"
       >
-        <template #leading="{ item, open }">
+        <template #leading="{ open }">
               <UIcon
                 name="i-heroicons-chevron-right"
                 class="w-5 h-5 transition-transform duration-200"
                 :class="[open && 'rotate-90']"
               />
             </template>
-        <template #default="{ item, open }">
+        <template #default="{ item }">
 
             <div class="flex items-center gap-3 w-full">
               <UIcon name="i-heroicons-folder" class="text-purple-400 flex-shrink-0 w-5 h-5" />
@@ -59,7 +59,7 @@
               </div>
             </div>
         </template>
-        <template #trailing="{ item, open }"><span /></template>
+        <template #trailing><span /></template>
 
         <template #content="{ item }">
           <div class="space-y-3 p-4 bg-gray-800/50 rounded-lg">

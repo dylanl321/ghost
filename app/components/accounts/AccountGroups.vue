@@ -379,7 +379,7 @@ watch([() => props.standardAccountId, () => props.govCloudAccountId], () => {
           v-model="selectedEnvironment"
           :items="environmentOptions"
           size="sm"
-          class="min-w-[150px]"
+          class="min-w-[150px] w-auto"
           :search-input="false"
         />
         <UButton

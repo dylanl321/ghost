@@ -498,7 +498,7 @@
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="font-semibold text-lg text-red-400">Error Details ({{ detailedErrors.length }})</h3>
-            <USelectMenu value-key="value"
+            <USelectMenu class="w-auto" value-key="value"
               v-model="errorFilter"
               :items="errorFilterOptions"
               size="sm"

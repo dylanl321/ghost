@@ -441,7 +441,7 @@ onMounted(async () => {
               :items="[{ label: 'All Roles', value: '' }, ...allRoles.map(role => ({ label: role, value: role }))]"
               placeholder="Filter by role"
               size="sm"
-              class="min-w-[180px]"
+              class="min-w-[180px] w-auto"
               :search-input="false"
             />
             <USelectMenu value-key="value"
@@ -449,7 +449,7 @@ onMounted(async () => {
               :items="[{ label: 'All Accounts', value: '' }, ...allAccounts.map(acc => ({ label: acc.name, value: acc.id }))]"
               placeholder="Filter by account"
               size="sm"
-              class="min-w-[200px]"
+              class="min-w-[200px] w-auto"
               :search-input="false"
             />
             <UCheckbox

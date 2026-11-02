@@ -82,7 +82,7 @@
                     size="xs"
                     autofocus
                     :placeholder="row.parsedValue"
-                    class="max-w-[160px]"
+                    class="max-w-[160px] w-auto"
                     @keydown.enter="confirmAliasEdit(row)"
                     @keydown.escape="cancelAliasEdit()"
                     @blur="confirmAliasEdit(row)"

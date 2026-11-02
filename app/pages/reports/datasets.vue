@@ -54,8 +54,8 @@
           <!-- Scrollable Accordion Sections -->
           <div class="flex-1 overflow-y-auto min-h-0">
             <UAccordion
-              v-model="openAccordionIndex"
-              :items="withIndexValues(accordionItems)"
+              v-model="openAccordionValue"
+              :items="accordionItems"
               :ui="{ root: 'flex flex-col', item: 'border-b border-gray-700' }"
             >
               <!-- Section 1: Select Accounts -->
@@ -1024,6 +1024,13 @@ const activeTab = ref(0) // 0: builder, 1: schedules, 2: history
 
 // Accordion state - controls which accordion is open (single mode)
 const openAccordionIndex = ref(0) // Start with "Select Accounts" open
+// UAccordion item values are strings ("0", "1", ...); -1 means all sections closed
+const openAccordionValue = computed({
+  get: () => (openAccordionIndex.value >= 0 ? String(openAccordionIndex.value) : undefined),
+  set: (value: string | string[] | undefined) => {
+    openAccordionIndex.value = typeof value === 'string' && value !== '' ? Number(value) : -1
+  },
+})
 
 // Query Builder State
 const selectedAccounts = ref<string[]>([])

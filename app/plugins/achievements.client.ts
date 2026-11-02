@@ -16,7 +16,8 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       const { loggedIn } = useOidcAuth()
       if (!loggedIn.value) return
 
-      const { initialize } = useAchievements()
+      // Hook callbacks run outside the app context; Nuxt UI 4's useToast() needs it for inject()
+      const { initialize } = nuxtApp.runWithContext(() => useAchievements())
       await initialize()
 
       // Emit session start for visit count and login streak badges

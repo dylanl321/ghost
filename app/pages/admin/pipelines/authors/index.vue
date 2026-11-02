@@ -13,6 +13,7 @@
 
       <!-- Time Range Selector -->
       <USelectMenu
+        class="w-auto"
         v-model="selectedTimeRange"
         :items="timeRangeOptions"
         value-key="value"

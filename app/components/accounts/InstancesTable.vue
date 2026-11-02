@@ -6,12 +6,14 @@
           <div class="text-lg font-semibold text-gray-900 dark:text-white">EC2 Instances</div>
           <div class="flex gap-2 items-center">
             <UInput
+              class="w-auto"
               v-model="searchQuery"
               placeholder="Search instances..."
               icon="i-heroicons-magnifying-glass"
               size="sm"
             />
             <USelect
+              class="w-auto"
               v-model="stateFilter"
               :items="stateOptions"
               size="sm"

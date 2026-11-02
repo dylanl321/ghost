@@ -103,7 +103,7 @@ export function useUserPreferences() {
    */
   function showAuthErrorToast(): void {
     try {
-      const toast = useToast()
+      const toast = useAppToast()
       const { requireAuth } = useAuthRedirect()
 
       toast.add({

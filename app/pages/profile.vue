@@ -165,10 +165,10 @@
         </template>
 
         <UAccordion :items="permissionAccordionItems" :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }">
-          <template #leading="{ item, open }">
+          <template #leading="{ item }">
                 <Icon :name="item.icon" class="w-5 h-5" />
               </template>
-          <template #default="{ item, open }">
+          <template #default="{ item }">
               <span class="flex-1 text-left">{{ item.label }}</span>
           </template>
           <template #trailing="{ item, open }">
@@ -253,10 +253,10 @@
           </template>
 
           <UAccordion :items="groupAccordionItems" default-value="0" :ui="{ root: 'space-y-2', trigger: 'rounded-lg px-3 hover:bg-gray-100 dark:hover:bg-gray-800' }">
-            <template #leading="{ item, open }">
+            <template #leading="{ item }">
                   <Icon :name="item.icon" class="w-5 h-5" />
                 </template>
-            <template #default="{ item, open }">
+            <template #default="{ item }">
                 <span class="flex-1 text-left">{{ item.label }}</span>
             </template>
             <template #trailing="{ item, open }">

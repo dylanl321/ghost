@@ -62,7 +62,7 @@ export function useCostTour() {
 
     // Wait for DOM elements if manual start
     if (isManualStart && !checkTourElements()) {
-      const toast = useToast()
+      const toast = useAppToast()
       toast.add({
         title: 'Please Wait',
         description: 'Waiting for page to finish loading...',
@@ -111,7 +111,7 @@ export function useCostTour() {
       })
     } catch (error: any) {
       logger.error('Failed to start tour:', error)
-      const toast = useToast()
+      const toast = useAppToast()
       toast.add({
         title: 'Tour Error',
         description: error.message || 'Failed to start the guided tour. Please try again.',

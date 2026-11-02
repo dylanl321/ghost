@@ -139,12 +139,14 @@
               <label class="block text-sm font-medium text-gray-300 mb-2">Budget Range</label>
               <div class="flex gap-2">
                 <UInput
+                  class="w-auto"
                   v-model.number="filters.minBudget"
                   placeholder="Min"
                   type="number"
                   size="sm"
                 />
                 <UInput
+                  class="w-auto"
                   v-model.number="filters.maxBudget"
                   placeholder="Max"
                   type="number"

@@ -10,7 +10,7 @@ const logger = createLogger('Clipboard')
  */
 export async function copyToClipboard(text: string, successMessage?: string): Promise<boolean> {
   // Resolve the toast before the first await so the Nuxt app context is still available
-  const toast = useToast()
+  const toast = useAppToast()
   try {
     await navigator.clipboard.writeText(text)
 
