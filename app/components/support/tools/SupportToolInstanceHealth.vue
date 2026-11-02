@@ -32,7 +32,7 @@
           </div>
         </div>
         <div class="ml-auto">
-          <UButton size="xs" variant="ghost" color="gray" @click="exportData">
+          <UButton size="xs" variant="ghost" color="neutral" @click="exportData">
             <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
             Export Report
           </UButton>
@@ -131,6 +131,6 @@ function exportData() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `instance-health-${instanceId.value}-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Health report exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Health report exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

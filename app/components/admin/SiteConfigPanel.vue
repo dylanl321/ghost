@@ -43,9 +43,12 @@
         icon="i-heroicons-magnifying-glass"
         class="flex-1"
       />
-      <USelect
+      <!-- USelectMenu: v4 USelect rejects an empty-string item value -->
+      <USelectMenu
         v-model="categoryFilter"
-        :options="categoryOptions"
+        value-key="value"
+        :search-input="false"
+        :items="categoryOptions"
         placeholder="All Categories"
         class="w-48"
       />
@@ -73,8 +76,8 @@
       color="red"
       variant="soft"
       :title="error"
-      :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
-      @close="error = null"
+      :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
+      @update:open="error = null"
     />
 
     <!-- Success Notification -->
@@ -84,8 +87,8 @@
       color="green"
       variant="soft"
       :title="successMessage"
-      :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'green', variant: 'link' }"
-      @close="successMessage = null"
+      :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'green', variant: 'link' }"
+      @update:open="successMessage = null"
     />
 
     <!-- Configuration Grid -->

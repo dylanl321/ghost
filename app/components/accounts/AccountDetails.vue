@@ -34,7 +34,7 @@
       </div>
     </template>
 
-    <UTabs v-model="selectedTab" :items="tabs">
+    <UTabs v-model="selectedTab" :items="withIndexValues(tabs)" :unmount-on-hide="false">
       <!-- General Tab -->
       <template #general>
         <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 pt-4">

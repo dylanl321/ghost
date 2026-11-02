@@ -132,7 +132,7 @@ function buildExportConfig(): DataExportConfig {
 
 async function onExport(format: 'csv' | 'xlsx') {
   if (exportRows.value.length === 0) {
-    toast.add({ title: 'No users to export', color: 'yellow', timeout: 3000 })
+    toast.add({ title: 'No users to export', color: 'yellow', duration: 3000 })
     return
   }
   await exportData(buildExportConfig(), format)
@@ -142,7 +142,7 @@ async function onExport(format: 'csv' | 'xlsx') {
 // ready to paste directly into the SSP user-access table (Excel/Word).
 async function onCopyToClipboard() {
   if (exportRows.value.length === 0) {
-    toast.add({ title: 'No users to copy', color: 'yellow', timeout: 3000 })
+    toast.add({ title: 'No users to copy', color: 'yellow', duration: 3000 })
     return
   }
   const header = ['Display Name', 'User Principal Name', 'Roles'].join('\t')
@@ -156,7 +156,7 @@ async function onCopyToClipboard() {
       title: 'Copied to clipboard',
       description: `${exportRows.value.length} users copied. Paste into the SSP user access list.`,
       color: 'green',
-      timeout: 3000
+      duration: 3000
     })
   } catch (err) {
     logger.error('Clipboard copy failed:', err)
@@ -164,7 +164,7 @@ async function onCopyToClipboard() {
       title: 'Copy failed',
       description: 'Clipboard access was blocked. Use the CSV or Excel export instead.',
       color: 'red',
-      timeout: 5000
+      duration: 5000
     })
   }
 }
@@ -174,17 +174,17 @@ const exportMenuItems = computed(() => [
     {
       label: 'Copy to clipboard',
       icon: 'i-heroicons-clipboard-document',
-      click: onCopyToClipboard
+      onSelect: onCopyToClipboard
     },
     {
       label: 'Download CSV',
       icon: 'i-heroicons-document-text',
-      click: () => onExport('csv')
+      onSelect: () => onExport('csv')
     },
     {
       label: 'Download Excel',
       icon: 'i-heroicons-table-cells',
-      click: () => onExport('xlsx')
+      onSelect: () => onExport('xlsx')
     }
   ]
 ])
@@ -251,9 +251,9 @@ onMounted(async () => {
           
           <!-- Right Column: Navigation Actions -->
           <div class="flex flex-wrap items-center justify-start lg:justify-end gap-3 min-w-0">
-            <UDropdown
+            <UDropdownMenu
               :items="exportMenuItems"
-              :popper="{ placement: 'bottom-end' }"
+              :content="{ side: 'bottom', align: 'end' }"
             >
               <UButton
                 icon="i-heroicons-arrow-down-tray"
@@ -272,7 +272,7 @@ onMounted(async () => {
                   <span class="flex-1 text-left">{{ item.label }}</span>
                 </div>
               </template>
-            </UDropdown>
+            </UDropdownMenu>
 
             <UButton 
               :to="`/account/${accountId}`"

@@ -7,7 +7,7 @@
       </div>
       <div class="flex items-center gap-2">
         <span class="text-xs text-gray-600 dark:text-gray-400">{{ showProforma ? 'Proforma' : 'Billable' }}</span>
-        <UToggle
+        <USwitch
           v-model="showProforma"
           @update:model-value="handleToggle"
         />

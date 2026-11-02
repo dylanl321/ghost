@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <div class="flex gap-4">
       <UInput v-model="query" placeholder="Enter instance ID, name, or IP" class="flex-1" @keyup.enter="searchInstance" />
-      <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+      <USelect v-model="environment" :items="environmentOptions" class="w-40" />
       <UButton color="primary" :loading="loading" :disabled="!query.trim()" @click="searchInstance">
         <Icon name="i-heroicons-magnifying-glass" class="w-4 h-4 mr-1" />
         Search
@@ -22,7 +22,7 @@
             {{ result.found ? 'Instance Found' : 'No Instance Found' }}
           </span>
         </div>
-        <UButton v-if="result.found" size="xs" variant="ghost" color="gray" @click="exportResult">
+        <UButton v-if="result.found" size="xs" variant="ghost" color="neutral" @click="exportResult">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4" />
         </UButton>
       </div>
@@ -101,7 +101,7 @@
             <Icon name="i-heroicons-shield-check" class="w-3.5 h-3.5 mr-1" />
             Security
           </UButton>
-          <UButton size="xs" color="gray" variant="soft" @click="openConsole">
+          <UButton size="xs" color="neutral" variant="soft" @click="openConsole">
             <Icon name="i-heroicons-arrow-top-right-on-square" class="w-3.5 h-3.5 mr-1" />
             AWS Console
           </UButton>
@@ -166,6 +166,6 @@ function exportResult() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `instance-lookup-${query.value}-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

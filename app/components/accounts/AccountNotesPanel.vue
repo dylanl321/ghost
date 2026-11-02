@@ -108,7 +108,7 @@
         <!-- Actions -->
         <div class="flex justify-end items-center pt-2 gap-2">
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="sm"
             :disabled="saving"
@@ -158,7 +158,7 @@
                 </UTooltip>
                 <UTooltip v-if="note.updatedAt" :text="`Last edited: ${formatFullDate(note.updatedAt)}`">
                   <UBadge
-                    color="gray"
+                    color="neutral"
                     variant="subtle"
                     size="xs"
                     class="cursor-help"

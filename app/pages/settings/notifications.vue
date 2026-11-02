@@ -32,32 +32,33 @@
             <UInput v-model="searchText" placeholder="Search notifications..." icon="i-heroicons-magnifying-glass" class="flex-1" />
             <USelectMenu
               v-model="categoryFilter"
-              :options="categoryFilterOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="categoryFilterOptions"
+              label-key="label"
+              value-key="value"
               placeholder="Category"
               class="w-40"
+              :search-input="false"
             />
           </div>
 
           <!-- History Table -->
-          <UTable :rows="filteredNotifications" :columns="historyColumns" :loading="isLoading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications yet' }">
-            <template #category-data="{ row }">
+          <UTable :data="filteredNotifications" :columns="toTableColumns(historyColumns)" :loading="isLoading" empty="No notifications yet">
+            <template #category-cell="{ row: { original: row } }">
               <UBadge :color="getCategoryColor(row.category)" variant="subtle" size="xs">
                 {{ getCategoryLabel(row.category) }}
               </UBadge>
             </template>
-            <template #severity-data="{ row }">
+            <template #severity-cell="{ row: { original: row } }">
               <UBadge :color="row.severity === 'critical' ? 'red' : row.severity === 'warning' ? 'yellow' : 'gray'" variant="subtle" size="xs">
                 {{ row.severity }}
               </UBadge>
             </template>
-            <template #status-data="{ row }">
+            <template #status-cell="{ row: { original: row } }">
               <UBadge :color="row.status === 'unread' ? 'blue' : 'gray'" variant="subtle" size="xs">
                 {{ row.status }}
               </UBadge>
             </template>
-            <template #createdAt-data="{ row }">
+            <template #createdAt-cell="{ row: { original: row } }">
               <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </UTable>

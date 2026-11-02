@@ -9,7 +9,7 @@
           <UButton
             v-if="isMobile"
             variant="ghost"
-            color="gray"
+            color="neutral"
             size="sm"
             icon="i-heroicons-bars-3"
             class="md:hidden"
@@ -20,7 +20,7 @@
           <UButton
             v-if="!isMobile && !(route?.path && navigationStore.isPageProtected(route.path))"
             variant="ghost"
-            color="gray"
+            color="neutral"
             size="sm"
             :icon="navigationStore.isCollapsed ? 'i-heroicons-bars-3' : 'i-heroicons-bars-3-bottom-left'"
             class="hidden md:flex transition-all duration-200 opacity-70 hover:opacity-100"
@@ -28,7 +28,7 @@
             @click="toggleSidebar"
           />
           
-          <UBreadcrumb :links="props.breadcrumbs" class="text-sm" />
+          <UBreadcrumb :items="props.breadcrumbs" class="text-sm" />
         </div>
 
         <!-- Right side -->
@@ -75,9 +75,9 @@
           <NotificationBell />
 
           <div class="relative">
-            <UDropdown
+            <UDropdownMenu
               :items="userMenuItems"
-              :popper="{ placement: 'bottom-end' }"
+              :content="{ side: 'bottom', align: 'end' }"
             >
               <button class="flex items-center gap-3 text-gray-900 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors">
                 <div class="hidden sm:flex flex-col items-end">
@@ -94,7 +94,7 @@
                   size="sm"
                 />
               </button>
-            </UDropdown>
+            </UDropdownMenu>
           </div>
         </div>
       </div>
@@ -121,7 +121,7 @@ type UserMenuItem = {
   href?: string
   target?: string
   description?: string
-  click?: () => void
+  onSelect?: () => void
 }
 
 interface Props {
@@ -264,7 +264,7 @@ const userMenuItems = computed<UserMenuItem[][]>(() => {
     {
       label: 'Sign Out',
       icon: 'i-heroicons-arrow-right-on-rectangle',
-      click: () => logout()
+      onSelect: () => logout()
     }
   ])
 

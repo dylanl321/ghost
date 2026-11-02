@@ -8,7 +8,7 @@
           <h1 class="text-xl font-bold text-gray-900 dark:text-white">Enclave Explorer</h1>
 
           <!-- LOB -->
-          <USelect v-model="lobFilter" :options="lobOptions" size="xs" class="w-28" />
+          <USelect v-model="lobFilter" :items="lobOptions" size="xs" class="w-28" />
 
           <!-- Status buttons -->
           <div class="flex gap-1">
@@ -47,15 +47,15 @@
             icon="i-heroicons-magnifying-glass"
             size="sm"
             class="w-64"
-            :ui="{ icon: { trailing: { pointer: '' } } }"
+            :ui="{ trailing: 'pointer-events-auto' }"
           >
             <template #trailing>
               <UButton
                 v-if="search"
                 icon="i-heroicons-x-mark"
-                color="gray"
+                color="neutral"
                 variant="link"
-                size="2xs"
+                size="xs"
                 @click="search = ''"
               />
             </template>
@@ -91,26 +91,27 @@
             </UBadge>
             <USelectMenu
               v-model="selectedColumns"
-              :options="availableColumns"
+              :items="availableColumns"
               multiple
-              value-attribute="key"
-              option-attribute="label"
+              value-key="key"
+              label-key="label"
               class="w-40"
+              :search-input="false"
             >
-              <template #label>
+              <template #default>
                 <UIcon name="i-heroicons-eye" class="w-4 h-4 mr-1" />
                 <span class="text-xs">{{ selectedColumns.length }} of {{ availableColumns.length }}</span>
               </template>
             </USelectMenu>
             <USelect
               v-model="itemsPerPage"
-              :options="itemsPerPageOptions"
+              :items="itemsPerPageOptions"
               size="xs"
               class="w-24"
             />
           </div>
           <template #fallback>
-            <UBadge color="gray" variant="subtle">Loading...</UBadge>
+            <UBadge color="neutral" variant="subtle">Loading...</UBadge>
           </template>
         </ClientOnly>
 
@@ -132,17 +133,17 @@
     <div class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-900">
       <ClientOnly>
         <div class="flex-1 overflow-auto px-4">
-          <UTable :rows="paginatedRows" :columns="columns" :loading="loading">
+          <UTable :data="paginatedRows" :columns="toTableColumns(columns)" :loading="loading">
 
           <!-- Request ID column -->
-          <template #requestId-data="{ row }">
+          <template #requestId-cell="{ row: { original: row } }">
             <span class="font-mono text-sm text-gray-600 dark:text-gray-400">
               {{ row.requestID ?? row.requestId ?? '—' }}
             </span>
           </template>
 
           <!-- Project Name column -->
-          <template #projectName-data="{ row }">
+          <template #projectName-cell="{ row: { original: row } }">
             <NuxtLink :to="`/account/${row.awsStandardAccountID}`" class="hover:underline">
               <div class="flex items-center gap-2 mb-2">
                 <span class="w-3 h-3 rounded-full"
@@ -154,7 +155,7 @@
           </template>
 
           <!-- Account IDs column -->
-          <template #accountIds-data="{ row }">
+          <template #accountIds-cell="{ row: { original: row } }">
             <div class="flex flex-col gap-1">
               <span>
                 <UBadge color="orange" variant="subtle">Comm</UBadge>
@@ -168,7 +169,7 @@
           </template>
 
           <!-- Platform info column -->
-          <template #platformInfo-data="{ row }">
+          <template #platformInfo-cell="{ row: { original: row } }">
             <div class="flex flex-col gap-1">
               <UTooltip :text="row.awsGovCloudAccountID ? 'GovCloud Paired' : 'Commercial Only'">
                 <p>{{ row.awsGovCloudAccountID ? "GovCloud" : "Commercial" }}</p>
@@ -187,7 +188,7 @@
           </template>
 
           <!-- Admins column -->
-          <template #admins-data="{ row }">
+          <template #admins-cell="{ row: { original: row } }">
             <div v-if="row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ')"
               class="flex items-center">
               <UIcon name="i-heroicons-user" class="mr-1" />
@@ -205,27 +206,27 @@
           </template>
 
           <!-- LOB column -->
-          <template #lineOfBusiness-data="{ row }">
+          <template #lineOfBusiness-cell="{ row: { original: row } }">
             <p>{{ row.linesOfBusiness || "IT" }}</p>
           </template>
 
           <!-- Cost Center column -->
-          <template #costCenter-data="{ row }">
+          <template #costCenter-cell="{ row: { original: row } }">
             <p>{{ row.costCenter || '—' }}</p>
           </template>
 
           <!-- Department column -->
-          <template #departmentNumber-data="{ row }">
+          <template #departmentNumber-cell="{ row: { original: row } }">
             <p>{{ row.departmentNumber || '—' }}</p>
           </template>
 
           <!-- Region column -->
-          <template #region-data="{ row }">
+          <template #region-cell="{ row: { original: row } }">
             <p>{{ row.region || '—' }}</p>
           </template>
 
           <!-- Platform Type column -->
-          <template #platformType-data="{ row }">
+          <template #platformType-cell="{ row: { original: row } }">
             <UBadge v-if="row.platformType" color="blue" variant="subtle" size="xs">
               {{ row.platformType }}
             </UBadge>
@@ -233,7 +234,7 @@
           </template>
 
           <!-- Project Type column -->
-          <template #projectType-data="{ row }">
+          <template #projectType-cell="{ row: { original: row } }">
             <UBadge v-if="row.projectType" color="purple" variant="subtle" size="xs">
               {{ row.projectType }}
             </UBadge>
@@ -241,29 +242,29 @@
           </template>
 
           <!-- Technical Contact column -->
-          <template #technicalContact-data="{ row }">
+          <template #technicalContact-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.technicalContact || '—' }}</p>
           </template>
 
           <!-- Business Contact column -->
-          <template #businessContact-data="{ row }">
+          <template #businessContact-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.businessContact || '—' }}</p>
           </template>
 
           <!-- Intended Use column -->
-          <template #intendedUse-data="{ row }">
+          <template #intendedUse-cell="{ row: { original: row } }">
             <p class="text-sm truncate max-w-xs" :title="row.intendedUse">
               {{ row.intendedUse || '—' }}
             </p>
           </template>
 
           <!-- Modified Date column -->
-          <template #modifiedDate-data="{ row }">
+          <template #modifiedDate-cell="{ row: { original: row } }">
             <p class="text-sm">{{ row.modifiedDate ? new Date(row.modifiedDate).toLocaleDateString() : '—' }}</p>
           </template>
 
           <!-- Actions column -->
-          <template #actions-data="{ row }">
+          <template #actions-cell="{ row: { original: row } }">
             <div class="flex items-center gap-1">
               <!-- Favorite button -->
               <UButton
@@ -276,9 +277,9 @@
               />
 
               <!-- More actions -->
-              <UDropdown :items="getActionItems(row)">
-                <UButton color="gray" variant="ghost" icon="i-heroicons-ellipsis-vertical" size="xs" />
-              </UDropdown>
+              <UDropdownMenu :items="getActionItems(row)">
+                <UButton color="neutral" variant="ghost" icon="i-heroicons-ellipsis-vertical" size="xs" />
+              </UDropdownMenu>
             </div>
           </template>
 
@@ -287,7 +288,7 @@
 
         <!-- Pagination - Sticky at bottom -->
         <div v-if="itemsPerPage < 999999" class="flex-shrink-0 flex justify-end p-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-          <UPagination v-model="page" :page-count="itemsPerPage" :total="filteredRows.length" />
+          <UPagination v-model:page="page" :items-per-page="itemsPerPage" :total="filteredRows.length" />
         </div>
         <template #fallback>
           <div class="flex justify-center items-center h-full">
@@ -301,116 +302,118 @@
     </div>
 
     <!-- Filter Slide-Over Panel -->
-    <USlideover v-model="showFilterPanel" side="right">
-      <div class="p-4 h-full flex flex-col">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Filters</h2>
-          <div class="flex items-center gap-2">
-            <UButton @click="resetFilters" variant="ghost" size="sm" icon="i-heroicons-arrow-path">
-              Reset
-            </UButton>
-            <UButton @click="showFilterPanel = false" variant="ghost" size="sm" icon="i-heroicons-x-mark" />
-          </div>
-        </div>
-
-        <!-- Filter Content -->
-        <div class="flex-1 overflow-y-auto space-y-6">
-          <!-- Search Section -->
-          <div>
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Search</h3>
-            <div class="space-y-2">
-              <USelect v-model="searchScope" :options="searchScopeOptions" size="sm" />
-              <UInput
-                v-model="search"
-                :placeholder="`Search ${searchScope}...`"
-                icon="i-heroicons-magnifying-glass"
-                size="sm"
-              />
+    <USlideover v-model:open="showFilterPanel" side="right">
+      <template #content>
+        <div class="p-4 h-full flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Filters</h2>
+            <div class="flex items-center gap-2">
+              <UButton @click="resetFilters" variant="ghost" size="sm" icon="i-heroicons-arrow-path">
+                Reset
+              </UButton>
+              <UButton @click="showFilterPanel = false" variant="ghost" size="sm" icon="i-heroicons-x-mark" />
             </div>
           </div>
 
-          <!-- Checkboxes Section -->
-          <div>
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Filters</h3>
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <label class="text-sm text-gray-600 dark:text-gray-400">SAWSE</label>
-                <UCheckbox v-model="sawseCheckbox" />
+          <!-- Filter Content -->
+          <div class="flex-1 overflow-y-auto space-y-6">
+            <!-- Search Section -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Search</h3>
+              <div class="space-y-2">
+                <USelect v-model="searchScope" :items="searchScopeOptions" size="sm" />
+                <UInput
+                  v-model="search"
+                  :placeholder="`Search ${searchScope}...`"
+                  icon="i-heroicons-magnifying-glass"
+                  size="sm"
+                />
               </div>
-              <div class="flex items-center justify-between">
-                <label class="text-sm text-gray-600 dark:text-gray-400">My Enclaves</label>
-                <UCheckbox v-model="myEnclavesCheckbox" />
-              </div>
-              <div class="flex items-center justify-between">
-                <label class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                  <UIcon name="i-heroicons-star-solid" class="w-3 h-3 text-yellow-500" />
-                  Favorites Only
-                </label>
-                <div class="flex items-center gap-2">
-                  <UCheckbox v-model="favoritesCheckbox" />
-                  <NuxtLink to="/support/docs?topic=favorites-guide" target="_blank">
-                    <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 hover:text-gray-300" />
-                  </NuxtLink>
+            </div>
+
+            <!-- Checkboxes Section -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Filters</h3>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm text-gray-600 dark:text-gray-400">SAWSE</label>
+                  <UCheckbox v-model="sawseCheckbox" />
+                </div>
+                <div class="flex items-center justify-between">
+                  <label class="text-sm text-gray-600 dark:text-gray-400">My Enclaves</label>
+                  <UCheckbox v-model="myEnclavesCheckbox" />
+                </div>
+                <div class="flex items-center justify-between">
+                  <label class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                    <UIcon name="i-heroicons-star-solid" class="w-3 h-3 text-yellow-500" />
+                    Favorites Only
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <UCheckbox v-model="favoritesCheckbox" />
+                    <NuxtLink to="/support/docs?topic=favorites-guide" target="_blank">
+                      <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 hover:text-gray-300" />
+                    </NuxtLink>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <!-- Advanced Filters Section -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Advanced Filters</h3>
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  icon="i-heroicons-plus"
+                  @click="showFilterModal = true"
+                >
+                  Add
+                </UButton>
+              </div>
+
+              <!-- Active Filter Chips -->
+              <div v-if="activeFilterCount > 0" class="space-y-2 mb-4">
+                <UBadge
+                  v-for="chip in activeFilters"
+                  :key="chip.field"
+                  color="primary"
+                  variant="subtle"
+                  class="mr-2 mb-2"
+                >
+                  <div class="flex items-center gap-1">
+                    <span class="text-xs">{{ getFilterChipText(chip.field, getFilterConfig(chip.field)) }}</span>
+                    <UButton
+                      icon="i-heroicons-x-mark"
+                      color="primary"
+                      variant="ghost"
+                      size="xs"
+                      @click="clearFilter(chip.field)"
+                    />
+                  </div>
+                </UBadge>
+              </div>
+
+              <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">
+                No advanced filters applied
+              </p>
+            </div>
           </div>
 
-          <!-- Advanced Filters Section -->
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Advanced Filters</h3>
-              <UButton
-                size="xs"
-                variant="ghost"
-                icon="i-heroicons-plus"
-                @click="showFilterModal = true"
-              >
-                Add
+          <!-- Footer: Active Count -->
+          <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-gray-600 dark:text-gray-400">
+                {{ totalActiveFilters }} filters active
+              </span>
+              <UButton size="sm" @click="showFilterPanel = false" color="primary">
+                Apply
               </UButton>
             </div>
-
-            <!-- Active Filter Chips -->
-            <div v-if="activeFilterCount > 0" class="space-y-2 mb-4">
-              <UBadge
-                v-for="chip in activeFilters"
-                :key="chip.field"
-                color="primary"
-                variant="subtle"
-                class="mr-2 mb-2"
-              >
-                <div class="flex items-center gap-1">
-                  <span class="text-xs">{{ getFilterChipText(chip.field, getFilterConfig(chip.field)) }}</span>
-                  <UButton
-                    icon="i-heroicons-x-mark"
-                    color="primary"
-                    variant="ghost"
-                    size="2xs"
-                    @click="clearFilter(chip.field)"
-                  />
-                </div>
-              </UBadge>
-            </div>
-
-            <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">
-              No advanced filters applied
-            </p>
           </div>
         </div>
-
-        <!-- Footer: Active Count -->
-        <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-gray-600 dark:text-gray-400">
-              {{ totalActiveFilters }} filters active
-            </span>
-            <UButton size="sm" @click="showFilterPanel = false" color="primary">
-              Apply
-            </UButton>
-          </div>
-        </div>
-      </div>
+      </template>
     </USlideover>
 
     <!-- Add Filter Modal (reuse existing) -->
@@ -422,116 +425,120 @@
       />
 
       <!-- Filter Edit Dialog (reuse existing) -->
-      <UModal v-model="showFilterEditDialog" v-if="editingFilter">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold">{{ editingFilter.label }}</h3>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" size="sm" @click="showFilterEditDialog = false" />
+      <UModal v-model:open="showFilterEditDialog" v-if="editingFilter" scrollable>
+        <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">{{ editingFilter.label }}</h3>
+              <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" size="sm" @click="showFilterEditDialog = false" />
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <!-- Multi-select -->
+            <div v-if="editingFilter.type === 'select-multi'">
+              <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
+                Select one or more {{ editingFilter.label.toLowerCase() }} values
+              </label>
+              <USelectMenu
+                :model-value="(filterState[editingFilter.field] as string[]) || []"
+                @update:model-value="setFilter(editingFilter.field, $event)"
+                :items="getFilterOptions(editingFilter.field)"
+                multiple
+                :placeholder="getFilterPlaceholder(editingFilter)"
+                :search-input="false"
+              />
+              <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                {{ getFilterHelperText(editingFilter) }}
+              </div>
+            </div>
+
+            <!-- Single select -->
+            <div v-else-if="editingFilter.type === 'select'">
+              <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
+                Select a {{ editingFilter.label.toLowerCase() }} value
+              </label>
+              <USelectMenu
+                :model-value="(filterState[editingFilter.field] as string[])?.[0] || null"
+                @update:model-value="setFilter(editingFilter.field, $event ? [$event] : [])"
+                :items="['', ...getFilterOptions(editingFilter.field)]"
+                :placeholder="getFilterPlaceholder(editingFilter)"
+                :search-input="false"
+              />
+              <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                {{ getFilterHelperText(editingFilter) }}
+              </div>
+            </div>
+
+            <!-- Boolean -->
+            <div v-else-if="editingFilter.type === 'boolean'">
+              <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
+                Filter by {{ editingFilter.label.toLowerCase() }}
+              </label>
+              <div class="flex gap-2">
+                <UButton
+                  variant="solid"
+                  :color="filterState[editingFilter.field] === null || filterState[editingFilter.field] === undefined ? 'emerald' : 'gray'"
+                  @click="setFilter(editingFilter.field, null)"
+                >
+                  Any
+                </UButton>
+                <UButton
+                  variant="solid"
+                  :color="filterState[editingFilter.field] === true ? 'emerald' : 'gray'"
+                  @click="setFilter(editingFilter.field, true)"
+                >
+                  Yes
+                </UButton>
+                <UButton
+                  variant="solid"
+                  :color="filterState[editingFilter.field] === false ? 'emerald' : 'gray'"
+                  @click="setFilter(editingFilter.field, false)"
+                >
+                  No
+                </UButton>
+              </div>
+            </div>
+
+            <!-- Text -->
+            <div v-else-if="editingFilter.type === 'text'">
+              <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
+                Filter by {{ editingFilter.label.toLowerCase() }}
+              </label>
+              <UInput
+                :model-value="(filterState[editingFilter.field] as string) || ''"
+                @update:model-value="setFilter(editingFilter.field, $event || '')"
+                :placeholder="getFilterPlaceholder(editingFilter)"
+              />
+              <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                {{ getFilterHelperText(editingFilter) }}
+              </div>
+            </div>
+
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+              {{ editingFilter.description }}
+            </div>
           </div>
+
+          <template #footer>
+            <div class="flex justify-between gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-arrow-left"
+                @click="goBackToFilterList"
+              >
+                Back to Filter List
+              </UButton>
+              <UButton color="emerald" variant="solid" @click="showFilterEditDialog = false">
+                Done
+              </UButton>
+            </div>
+          </template>
+        </UCard>
         </template>
-
-        <div class="space-y-4">
-          <!-- Multi-select -->
-          <div v-if="editingFilter.type === 'select-multi'">
-            <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
-              Select one or more {{ editingFilter.label.toLowerCase() }} values
-            </label>
-            <USelectMenu
-              :model-value="(filterState[editingFilter.field] as string[]) || []"
-              @update:model-value="setFilter(editingFilter.field, $event)"
-              :options="getFilterOptions(editingFilter.field)"
-              multiple
-              :placeholder="getFilterPlaceholder(editingFilter)"
-            />
-            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              {{ getFilterHelperText(editingFilter) }}
-            </div>
-          </div>
-
-          <!-- Single select -->
-          <div v-else-if="editingFilter.type === 'select'">
-            <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
-              Select a {{ editingFilter.label.toLowerCase() }} value
-            </label>
-            <USelectMenu
-              :model-value="(filterState[editingFilter.field] as string[])?.[0] || null"
-              @update:model-value="setFilter(editingFilter.field, $event ? [$event] : [])"
-              :options="['', ...getFilterOptions(editingFilter.field)]"
-              :placeholder="getFilterPlaceholder(editingFilter)"
-            />
-            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              {{ getFilterHelperText(editingFilter) }}
-            </div>
-          </div>
-
-          <!-- Boolean -->
-          <div v-else-if="editingFilter.type === 'boolean'">
-            <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
-              Filter by {{ editingFilter.label.toLowerCase() }}
-            </label>
-            <div class="flex gap-2">
-              <UButton
-                variant="solid"
-                :color="filterState[editingFilter.field] === null || filterState[editingFilter.field] === undefined ? 'emerald' : 'gray'"
-                @click="setFilter(editingFilter.field, null)"
-              >
-                Any
-              </UButton>
-              <UButton
-                variant="solid"
-                :color="filterState[editingFilter.field] === true ? 'emerald' : 'gray'"
-                @click="setFilter(editingFilter.field, true)"
-              >
-                Yes
-              </UButton>
-              <UButton
-                variant="solid"
-                :color="filterState[editingFilter.field] === false ? 'emerald' : 'gray'"
-                @click="setFilter(editingFilter.field, false)"
-              >
-                No
-              </UButton>
-            </div>
-          </div>
-
-          <!-- Text -->
-          <div v-else-if="editingFilter.type === 'text'">
-            <label class="text-sm text-gray-600 dark:text-gray-400 mb-2 block">
-              Filter by {{ editingFilter.label.toLowerCase() }}
-            </label>
-            <UInput
-              :model-value="(filterState[editingFilter.field] as string) || ''"
-              @update:model-value="setFilter(editingFilter.field, $event || '')"
-              :placeholder="getFilterPlaceholder(editingFilter)"
-            />
-            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              {{ getFilterHelperText(editingFilter) }}
-            </div>
-          </div>
-
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            {{ editingFilter.description }}
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-between gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-arrow-left"
-              @click="goBackToFilterList"
-            >
-              Back to Filter List
-            </UButton>
-            <UButton color="emerald" variant="solid" @click="showFilterEditDialog = false">
-              Done
-            </UButton>
-          </div>
-        </template>
-      </UCard>
-    </UModal>
+      </UModal>
     </ClientOnly>
   </div>
 </template>
@@ -714,7 +721,7 @@ const getActionItems = (account: AWSEnclaveData) => {
     utilityActions.push({
       label: 'View Record',
       icon: 'i-heroicons-arrow-top-right-on-square',
-      click: () => window.open(account.recordLink, '_blank'),
+      onSelect: () => window.open(account.recordLink, '_blank'),
       description: 'Open source record in new tab'
     })
   }

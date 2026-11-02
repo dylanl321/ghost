@@ -37,12 +37,13 @@
           <!-- Time Range Selector -->
           <USelectMenu
             v-model="selectedDays"
-            :options="timeRangeOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="timeRangeOptions"
+            value-key="value"
+            label-key="label"
             class="w-40"
+            :search-input="false"
           >
-            <template #label>
+            <template #default>
               <UIcon name="i-heroicons-calendar" class="mr-2" />
               {{ selectedDaysLabel }}
             </template>
@@ -70,8 +71,8 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
-      @close="error = null"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
+      @update:open="error = null"
     >
       <template #title>Failed to Load Pipeline Data</template>
       <template #description>{{ error }}</template>
@@ -225,8 +226,8 @@
             </div>
             <div v-if="showAllResources && resourceBreakdown.length > resourcePageSize" class="flex justify-end pt-2">
               <UPagination
-                v-model="resourcePage"
-                :page-count="resourcePageSize"
+                v-model:page="resourcePage"
+                :items-per-page="resourcePageSize"
                 :total="resourceBreakdown.length"
               />
             </div>
@@ -241,7 +242,7 @@
       <UCard>
         <template #header>
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             class="w-full flex justify-between items-center"
             @click="showResourceSearch = !showResourceSearch"

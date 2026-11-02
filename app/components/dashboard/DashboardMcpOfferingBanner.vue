@@ -16,15 +16,15 @@
         <p>Connect the Codex desktop app or CLI to search accounts, review costs and security, and work with your existing AWS access.</p>
       </div>
       <div class="mcp-offering-actions">
-        <UButton icon="i-heroicons-link" color="gray" variant="soft" size="xs" @click="openConfiguration">
+        <UButton icon="i-heroicons-link" color="neutral" variant="soft" size="xs" @click="openConfiguration">
           Configure GHOST
         </UButton>
-        <UButton icon="i-heroicons-lifebuoy" color="gray" variant="soft" size="xs" @click="openSupport">
+        <UButton icon="i-heroicons-lifebuoy" color="neutral" variant="soft" size="xs" @click="openSupport">
           Setup and troubleshooting
         </UButton>
       </div>
       <UTooltip text="Dismiss MCP introduction">
-        <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" square size="xs" aria-label="Dismiss MCP introduction" @click="dismiss" />
+        <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" square size="xs" aria-label="Dismiss MCP introduction" @click="dismiss" />
       </UTooltip>
     </section>
   </Transition>

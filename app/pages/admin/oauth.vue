@@ -219,9 +219,9 @@ const activeIndex = computed(() => OAUTH_ADMIN_VIEWS.indexOf(selectedView.value)
           <USelect
             id="oauth-overview-window"
             v-model="selectedWindow"
-            :options="OVERVIEW_WINDOW_OPTIONS"
-            option-attribute="label"
-            value-attribute="value"
+            :items="OVERVIEW_WINDOW_OPTIONS"
+            label-key="label"
+            value-key="value"
             size="sm"
             class="w-32"
             aria-label="Overview time window"

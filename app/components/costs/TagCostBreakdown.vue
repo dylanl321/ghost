@@ -28,7 +28,7 @@
           placeholder="Filter tag values..."
           class="sm:w-80"
         />
-        <USelect v-model="pageSize" :options="pageSizeOptions" size="sm" class="w-32" />
+        <USelect v-model="pageSize" :items="pageSizeOptions" size="sm" class="w-32" />
       </div>
       <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table class="w-full text-sm">
@@ -82,7 +82,7 @@
                     size="xs"
                     autofocus
                     :placeholder="row.parsedValue"
-                    class="max-w-[160px]"
+                    class="max-w-[160px] w-auto"
                     @keydown.enter="confirmAliasEdit(row)"
                     @keydown.escape="cancelAliasEdit()"
                     @blur="confirmAliasEdit(row)"
@@ -177,7 +177,7 @@
         </table>
       </div>
       <div v-if="displayRows.length > pageSize" class="mt-3 flex justify-end">
-        <UPagination v-model="currentPage" :total="displayRows.length" :page-count="pageSize" />
+        <UPagination v-model:page="currentPage" :total="displayRows.length" :items-per-page="pageSize" />
       </div>
 
       <!-- Selected tag value detail panel -->
@@ -282,7 +282,7 @@
             </UTooltip>
             <UButton
               icon="i-heroicons-x-mark"
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               @click="selectedValue = null"
@@ -421,7 +421,7 @@ async function copyValue(value: string) {
       description: value.length > 60 ? `${value.substring(0, 60)}...` : value,
       icon: 'i-heroicons-clipboard-document-check',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch {
     // Fallback for older browsers
@@ -431,7 +431,7 @@ async function copyValue(value: string) {
     el.select()
     document.execCommand('copy')
     document.body.removeChild(el)
-    toast.add({ title: 'Copied', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
+    toast.add({ title: 'Copied', icon: 'i-heroicons-clipboard-document-check', color: 'green', duration: 2000 })
   }
 }
 

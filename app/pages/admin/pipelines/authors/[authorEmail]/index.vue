@@ -48,10 +48,12 @@
 
         <!-- Time Range Selector -->
         <USelectMenu
+          class="w-auto"
           v-model="selectedTimeRange"
-          :options="timeRangeOptions"
-          value-attribute="value"
-          option-attribute="label"
+          :items="timeRangeOptions"
+          value-key="value"
+          label-key="label"
+          :search-input="false"
         />
       </div>
 

@@ -17,18 +17,18 @@
             </UTooltip>
           </div>
           <div class="flex gap-2">
-            <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
               Refresh
             </UButton>
-            <UDropdown :items="viewModeItems">
-              <UButton color="white" variant="ghost" icon="i-heroicons-eye">
+            <UDropdownMenu :items="viewModeItems">
+              <UButton color="neutral" variant="ghost" icon="i-heroicons-eye">
                 {{ viewMode === 'overview' ? 'Overview' : viewMode === 'detail' ? 'Detail' : 'Minimap' }}
               </UButton>
-            </UDropdown>
-            <UButton color="white" variant="ghost" icon="i-heroicons-viewfinder-circle" title="Fit to Screen" @click="fitChartToContainer" />
-            <UButton color="white" variant="ghost" icon="i-heroicons-arrows-pointing-in" @click="resetZoom" />
-            <UButton color="white" variant="ghost" icon="i-heroicons-plus" @click="zoomIn" />
-            <UButton color="white" variant="ghost" icon="i-heroicons-minus" @click="zoomOut" />
+            </UDropdownMenu>
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-viewfinder-circle" title="Fit to Screen" @click="fitChartToContainer" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-arrows-pointing-in" @click="resetZoom" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-plus" @click="zoomIn" />
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-minus" @click="zoomOut" />
           </div>
         </div>
 
@@ -67,13 +67,13 @@
           
           <!-- View Controls -->
           <div class="flex gap-2">
-            <UToggle v-model="useProforma" :disabled="isLoading">
-              <template #default="{ checked }">
-                <span class="text-sm" :class="checked ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'">
-                  {{ checked ? 'Proforma' : 'Billable' }}
+            <USwitch v-model="useProforma" :disabled="isLoading">
+              <template #label>
+                <span class="text-sm" :class="useProforma ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'">
+                  {{ useProforma ? 'Proforma' : 'Billable' }}
                 </span>
               </template>
-            </UToggle>
+            </USwitch>
             <UTooltip text="Learn about Billable vs Pro-forma data">
               <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-400 hover:text-gray-300">
                 <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
@@ -89,7 +89,7 @@
               Expand All
             </UButton>
             <UButton
-              color="gray"
+              color="neutral"
               variant="soft"
               size="sm"
               :disabled="isLoading"
@@ -102,7 +102,7 @@
 
         <!-- Advanced Filters (Collapsible) -->
         <div>
-          <UButton variant="ghost" color="gray" size="sm" @click="showAdvancedFilters = !showAdvancedFilters">
+          <UButton variant="ghost" color="neutral" size="sm" @click="showAdvancedFilters = !showAdvancedFilters">
             <Icon :name="showAdvancedFilters ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4 mr-2" />
             Advanced Filters
           </UButton>
@@ -113,10 +113,11 @@
               <label class="block text-sm font-medium text-gray-300 mb-2">Lines of Business</label>
               <USelectMenu
                 v-model="filters.lobFilter"
-                :options="availableLobs"
+                :items="availableLobs"
                 multiple
                 placeholder="Select LOBs..."
                 size="sm"
+                :search-input="false"
               />
             </div>
             
@@ -125,10 +126,11 @@
               <label class="block text-sm font-medium text-gray-300 mb-2">Departments</label>
               <USelectMenu
                 v-model="filters.departmentFilter"
-                :options="availableDepartments"
+                :items="availableDepartments"
                 multiple
                 placeholder="Select Departments..."
                 size="sm"
+                :search-input="false"
               />
             </div>
             
@@ -137,12 +139,14 @@
               <label class="block text-sm font-medium text-gray-300 mb-2">Budget Range</label>
               <div class="flex gap-2">
                 <UInput
+                  class="w-auto"
                   v-model.number="filters.minBudget"
                   placeholder="Min"
                   type="number"
                   size="sm"
                 />
                 <UInput
+                  class="w-auto"
                   v-model.number="filters.maxBudget"
                   placeholder="Max"
                   type="number"
@@ -174,7 +178,7 @@
           <span class="text-gray-300">{{ loadingMessage }}</span>
           <span class="text-gray-400">{{ Math.round(loadingProgress) }}%</span>
         </div>
-        <UProgress :value="loadingProgress" color="yellow" />
+        <UProgress :model-value="loadingProgress" color="yellow" />
       </div>
     </UCard>
 
@@ -186,7 +190,7 @@
           <span class="font-semibold">Error Loading Data</span>
         </div>
         <p class="text-gray-400">{{ error }}</p>
-        <UButton color="white" variant="soft" size="sm" class="mt-4" @click="refreshData">
+        <UButton color="neutral" variant="soft" size="sm" class="mt-4" @click="refreshData">
           Try Again
         </UButton>
       </div>
@@ -206,7 +210,7 @@
             <!-- Chart Overlay Controls -->
             <div class="absolute top-4 right-4 flex flex-col gap-2 z-20">
               <UButton
-                color="white"
+                color="neutral"
                 variant="soft"
                 size="xs"
                 :icon="isChartFullscreen ? 'i-heroicons-arrows-pointing-in' : 'i-heroicons-arrows-pointing-out'"
@@ -255,7 +259,7 @@
             <div class="flex justify-between items-center">
               <span class="font-semibold text-white">{{ selectedNode.name }}</span>
               <UButton
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
                 icon="i-heroicons-x-mark"
@@ -384,7 +388,7 @@
                 <span>{{ getUtilizationPercent(selectedNode) }}%</span>
               </div>
               <UProgress
-                :value="getUtilizationPercent(selectedNode)"
+                :model-value="getUtilizationPercent(selectedNode)"
                 :color="getUtilizationColor(selectedNode)"
                 size="sm"
               />
@@ -484,7 +488,7 @@
               </UButton>
               <UButton
                 v-if="getNodePath(selectedNode.id).length > 1"
-                color="gray"
+                color="neutral"
                 variant="soft"
                 size="xs"
                 icon="i-heroicons-arrow-up"
@@ -531,7 +535,7 @@
                 <span>{{ overallUtilization }}%</span>
               </div>
               <UProgress
-                :value="overallUtilization"
+                :model-value="overallUtilization"
                 :color="overallUtilization > 100 ? 'red' : overallUtilization > 90 ? 'yellow' : 'green'"
                 size="sm"
               />
@@ -545,7 +549,7 @@
             <div class="flex justify-between items-center">
               <span class="font-semibold text-white">Filters Active</span>
               <UButton
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
                 @click="clearAllFilters"
@@ -582,7 +586,7 @@
       <div class="p-12 text-center">
         <Icon name="i-heroicons-chart-bar" class="w-12 h-12 text-gray-600 mx-auto mb-4" />
         <p class="text-gray-400">No data available. Click refresh to load.</p>
-        <UButton color="white" variant="soft" size="sm" class="mt-4" @click="refreshData">
+        <UButton color="neutral" variant="soft" size="sm" class="mt-4" @click="refreshData">
           Load Data
         </UButton>
       </div>
@@ -657,9 +661,9 @@ const chartContainerRef = ref<HTMLElement>()
 // View mode dropdown items
 const viewModeItems = [
   [
-    { label: 'Overview', click: () => viewMode.value = 'overview' },
-    { label: 'Detail View', click: () => viewMode.value = 'detail' },
-    { label: 'Minimap', click: () => viewMode.value = 'minimap' }
+    { label: 'Overview', onSelect: () => viewMode.value = 'overview' },
+    { label: 'Detail View', onSelect: () => viewMode.value = 'detail' },
+    { label: 'Minimap', onSelect: () => viewMode.value = 'minimap' }
   ]
 ]
 

@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="text-base font-semibold text-gray-900 dark:text-white">Findings by Region</div>
-        <UBadge color="gray" variant="soft" size="sm">{{ regionCount }} regions</UBadge>
+        <UBadge color="neutral" variant="soft" size="sm">{{ regionCount }} regions</UBadge>
       </div>
     </template>
     <div v-if="regionCount === 0" class="flex items-center justify-center h-48 text-gray-400 dark:text-gray-500">

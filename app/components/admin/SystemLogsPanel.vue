@@ -10,7 +10,7 @@
       <div class="flex items-center gap-2">
         <UButton
           icon="i-heroicons-arrow-path"
-          color="gray"
+          color="neutral"
           variant="soft"
           :loading="loading"
           @click="fetchLogs"
@@ -102,25 +102,27 @@
           class="flex-1"
         />
 
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedUsers"
-          :options="userOptions"
+          :items="userOptions"
           placeholder="Filter by user"
           multiple
           class="w-full sm:w-48"
+          :search-input="false"
         />
 
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedTypes"
-          :options="typeOptions"
+          :items="typeOptions"
           placeholder="Event type"
           multiple
           class="w-full sm:w-40"
+          :search-input="false"
         />
 
         <USelect
           v-model="timeRange"
-          :options="timeRangeOptions"
+          :items="timeRangeOptions"
           class="w-full sm:w-36"
           @change="fetchLogs"
         />
@@ -154,7 +156,7 @@
           v-if="selectedUsers.length > 0 || selectedTypes.length > 0"
           variant="link"
           size="xs"
-          color="gray"
+          color="neutral"
           @click="clearFilters"
         >
           Clear all
@@ -272,14 +274,14 @@
 
             <!-- Quick Actions -->
             <div class="flex-shrink-0">
-              <UDropdown :items="getLogActions(log)" :popper="{ placement: 'bottom-end' }">
+              <UDropdownMenu :items="getLogActions(log)" :content="{ side: 'bottom', align: 'end' }">
                 <UButton
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   icon="i-heroicons-ellipsis-vertical"
                   size="xs"
                 />
-              </UDropdown>
+              </UDropdownMenu>
             </div>
           </div>
         </div>
@@ -287,7 +289,7 @@
 
       <!-- Load More -->
       <div v-if="filteredLogs.length >= 50" class="mt-4 text-center">
-        <UButton variant="soft" color="gray" size="sm">
+        <UButton variant="soft" color="neutral" size="sm">
           Load more events
         </UButton>
       </div>
@@ -350,7 +352,7 @@
                 {{ page.path }}
               </NuxtLink>
             </div>
-            <UBadge color="gray" variant="soft" size="xs">{{ page.count }}</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ page.count }}</UBadge>
           </div>
         </div>
       </UCard>
@@ -731,7 +733,7 @@ function getLogActions(log: EnrichedLog) {
     actions.push([{
       label: `Filter by ${log.parsed.user}`,
       icon: 'i-heroicons-funnel',
-      click: () => {
+      onSelect: () => {
         if (!selectedUsers.value.includes(log.parsed.user!)) {
           selectedUsers.value.push(log.parsed.user!)
         }
@@ -743,14 +745,14 @@ function getLogActions(log: EnrichedLog) {
     actions.push([{
       label: 'Go to page',
       icon: 'i-heroicons-arrow-top-right-on-square',
-      click: () => navigateTo(log.parsed.path!)
+      onSelect: () => navigateTo(log.parsed.path!)
     }])
   }
 
   actions.push([{
     label: 'Copy raw message',
     icon: 'i-heroicons-clipboard-document',
-    click: () => navigator.clipboard.writeText(log.message)
+    onSelect: () => navigator.clipboard.writeText(log.message)
   }])
 
   return actions

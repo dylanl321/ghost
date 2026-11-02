@@ -7,7 +7,7 @@
         <p class="text-sm text-gray-500 dark:text-gray-400">The org-wide default layout applied when users reset their dashboard</p>
       </div>
       <div class="flex items-center gap-2">
-        <UButton icon="i-heroicons-arrow-path" size="sm" variant="ghost" color="gray" :loading="loading" @click="fetchDefault">
+        <UButton icon="i-heroicons-arrow-path" size="sm" variant="ghost" color="neutral" :loading="loading" @click="fetchDefault">
           Refresh
         </UButton>
         <UButton
@@ -60,7 +60,7 @@
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-squares-2x2" class="w-5 h-5 text-gray-500" />
             <h3 class="font-semibold text-gray-900 dark:text-white">Sections</h3>
-            <UBadge color="gray" variant="soft" size="xs">{{ layoutData!.sections.length }}</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ layoutData!.sections.length }}</UBadge>
           </div>
         </template>
         <div class="divide-y divide-gray-100 dark:divide-gray-800">

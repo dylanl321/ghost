@@ -51,7 +51,7 @@
           <UButton
             v-if="canCollapse"
             variant="ghost"
-            color="gray"
+            color="neutral"
             size="xs"
             :icon="
               navigationStore.isCollapsed
@@ -236,7 +236,7 @@
         }"
       >
         <!-- Documentation Link -->
-        <UTooltip text="Documentation" :shortcuts="[]">
+        <UTooltip text="Documentation" :kbds="[]">
           <NuxtLink
             to="/support/docs"
             prefetch
@@ -250,7 +250,7 @@
         </UTooltip>
 
         <!-- Support Link -->
-        <UTooltip text="Support" :shortcuts="[]">
+        <UTooltip text="Support" :kbds="[]">
           <NuxtLink
             to="/support"
             prefetch
@@ -264,7 +264,7 @@
         </UTooltip>
 
         <!-- About Link -->
-        <UTooltip text="About" :shortcuts="[]">
+        <UTooltip text="About" :kbds="[]">
           <NuxtLink
             to="/about"
             prefetch

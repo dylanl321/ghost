@@ -13,17 +13,17 @@
       </template>
 
       <div class="flex flex-wrap gap-6 items-center">
-        <UFormGroup label="Type" class="min-w-[200px]">
+        <UFormField label="Type" class="min-w-[200px]">
           <USelect
             v-model="selectedType"
-            :options="feedbackTypeOptions"
+            :items="feedbackTypeOptions"
             placeholder="Select type"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Search" class="min-w-[250px]">
+        <UFormField label="Search" class="min-w-[250px]">
           <UInput v-model="search" placeholder="Search descriptions..." />
-        </UFormGroup>
+        </UFormField>
 
         <UCheckbox
           v-model="filterUnresolved"
@@ -40,44 +40,44 @@
             <div class="text-lg font-semibold">Results</div>
             <UBadge color="emerald" variant="subtle">{{ filteredItems.length }} results</UBadge>
           </div>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" :loading="loading" title="Refresh data" @click="refreshFeedback">Refresh</UButton>
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-path" :loading="loading" title="Refresh data" @click="refreshFeedback">Refresh</UButton>
         </div>
       </template>
 
       <UTable
-        :rows="paginatedItems"
-        :columns="columns"
+        :data="paginatedItems"
+        :columns="toTableColumns(columns)"
         :loading="loading"
         class="min-w-full"
       >
-        <template #description-data="{ row }">
+        <template #description-cell="{ row: { original: row } }">
           <p class="whitespace-pre-wrap">{{ row.description }}</p>
         </template>
 
-        <template #source-data="{ row }">
+        <template #source-cell="{ row: { original: row } }">
           <UBadge :color="row.source === 'mcp-connections' ? 'amber' : 'gray'" variant="soft" size="xs">
             {{ feedbackSourceLabel(row.source) }}
           </UBadge>
         </template>
 
-        <template #resolved-data="{ row }">
+        <template #resolved-cell="{ row: { original: row } }">
           <UBadge :color="row.resolved ? 'green' : 'gray'">
             {{ row.resolved ? 'Yes' : 'No' }}
           </UBadge>
         </template>
 
         <!-- Actions column -->
-        <template #actions-data="{ row }">
-          <UDropdown :items="getActionItems(row)">
-            <UButton color="gray" variant="ghost" icon="i-heroicons-ellipsis-vertical" />
-          </UDropdown>
+        <template #actions-cell="{ row: { original: row } }">
+          <UDropdownMenu :items="getActionItems(row)">
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-ellipsis-vertical" />
+          </UDropdownMenu>
         </template>
       </UTable>
 
       <div class="flex justify-end items-center mt-4">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredItems.length"
         />
       </div>
@@ -128,8 +128,8 @@ function feedbackSourceLabel(source?: string) {
 const getActionItems = (row: any) => [
   [
     row.resolved
-      ? { label: 'Reopen Issue', icon: 'i-heroicons-arrow-path', click: () => toggleResolved(row, false) }
-      : { label: 'Mark as Resolved', icon: 'i-heroicons-check-circle', click: () => toggleResolved(row, true) }
+      ? { label: 'Reopen Issue', icon: 'i-heroicons-arrow-path', onSelect: () => toggleResolved(row, false) }
+      : { label: 'Mark as Resolved', icon: 'i-heroicons-check-circle', onSelect: () => toggleResolved(row, true) }
   ]
 ]
 

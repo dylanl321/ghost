@@ -11,7 +11,7 @@
         </div>
       </div>
       <NuxtLink to="/profile?tab=achievements">
-        <UButton size="xs" variant="ghost" color="gray" trailing-icon="i-heroicons-arrow-right-20-solid">
+        <UButton size="xs" variant="ghost" color="neutral" trailing-icon="i-heroicons-arrow-right-20-solid">
           View All
         </UButton>
       </NuxtLink>
@@ -19,7 +19,7 @@
 
     <!-- Overall progress bar -->
     <div class="mb-4">
-      <UProgress :value="overallPercent" color="yellow" size="xs" />
+      <UProgress :model-value="overallPercent" color="yellow" size="xs" />
     </div>
 
     <!-- Recently earned -->

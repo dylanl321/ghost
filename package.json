@@ -93,13 +93,14 @@
     "@aws-sdk/s3-request-presigner": "^3.1104.0",
     "@aws-sdk/util-dynamodb": "^3.996.7",
     "@iconify-json/fa6-solid": "^1.2.4",
+    "@iconify-json/heroicons": "^1.2.3",
     "@modelcontextprotocol/server": "^2.4.0",
     "@nuxt/eslint": "^1.17.0",
-    "@nuxt/ui": "^2.22.1",
+    "@nuxt/ui": "^4.12.0",
     "@pinia/nuxt": "^1.0.3",
     "@types/d3": "^7.4.3",
     "@types/sortablejs": "^1.15.9",
-    "@vueuse/integrations": "^13.9.0",
+    "@vueuse/integrations": "^14.4.0",
     "consola": "^3.4.2",
     "croner": "^9.1.0",
     "cross-env": "^10.1.0",
@@ -128,6 +129,7 @@
     "pinia-plugin-persistedstate": "^4.7.1",
     "sortablejs": "^1.15.7",
     "swagger-ui-dist": "5.32.14",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.9",
     "typescript": "^5.9.2",
     "uuid": "^14.0.3",
@@ -169,9 +171,6 @@
     },
     "exceljs": {
       "uuid": "11.1.1"
-    },
-    "@nuxt/ui": {
-      "zod": "$zod"
     }
   },
   "imports": {

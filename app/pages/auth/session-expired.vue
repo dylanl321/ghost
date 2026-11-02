@@ -119,7 +119,7 @@ onUnmounted(() => {
         </p>
 
         <!-- Progress indicator during countdown -->
-        <UProgress :value="null" color="amber" class="mb-4" />
+        <UProgress :model-value="null" color="amber" class="mb-4" />
 
         <p class="text-xs text-slate-500">
           You'll return to your previous page after signing in.

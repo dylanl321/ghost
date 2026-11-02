@@ -1,5 +1,5 @@
 <template>
-  <UCard :ui="{ body: { padding: 'p-6' } }">
+  <UCard :ui="{ body: 'p-6 sm:p-6' }">
     <!-- Header -->
     <div class="flex items-start justify-between mb-4">
       <div class="flex-1">
@@ -15,14 +15,14 @@
       </div>
 
       <!-- Actions Dropdown -->
-      <UDropdown :items="actions" :popper="{ placement: 'bottom-end' }">
+      <UDropdownMenu :items="actions" :content="{ side: 'bottom', align: 'end' }">
         <UButton
           icon="i-heroicons-ellipsis-vertical"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="sm"
         />
-      </UDropdown>
+      </UDropdownMenu>
     </div>
 
     <!-- Schedule & Recipients -->
@@ -107,20 +107,20 @@ const actions = computed(() => {
     [{
       label: 'Edit',
       icon: 'i-heroicons-pencil',
-      click: () => emit('edit', props.report)
+      onSelect: () => emit('edit', props.report)
     }],
     [{
       label: props.report.status === 'active' ? 'Pause' : 'Resume',
       icon: props.report.status === 'active' ? 'i-heroicons-pause' : 'i-heroicons-play',
-      click: () => emit('togglePause', props.report)
+      onSelect: () => emit('togglePause', props.report)
     }, {
       label: 'Send Test',
       icon: 'i-heroicons-paper-airplane',
-      click: () => emit('test', props.report)
+      onSelect: () => emit('test', props.report)
     }, {
       label: 'View History',
       icon: 'i-heroicons-clock',
-      click: () => emit('viewHistory', props.report)
+      onSelect: () => emit('viewHistory', props.report)
     }]
   ]
 
@@ -129,7 +129,7 @@ const actions = computed(() => {
     items[1].push({
       label: 'Run Now',
       icon: 'i-heroicons-bolt',
-      click: () => emit('runNow', props.report)
+      onSelect: () => emit('runNow', props.report)
     })
   }
 
@@ -137,7 +137,7 @@ const actions = computed(() => {
   items.push([{
     label: 'Delete',
     icon: 'i-heroicons-trash',
-    click: () => emit('delete', props.report)
+    onSelect: () => emit('delete', props.report)
   }])
 
   return items

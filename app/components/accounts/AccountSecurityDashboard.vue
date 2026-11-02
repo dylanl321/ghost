@@ -117,7 +117,7 @@
 
       <!-- Row 3: Analysis tabs -->
       <UCard>
-        <UTabs v-model="activeAnalysisTab" :items="analysisTabs">
+        <UTabs v-model="activeAnalysisTab" :items="withIndexValues(analysisTabs)" :unmount-on-hide="false">
           <template #top-findings>
             <div class="pt-4">
               <div v-if="data.topFindings.length > 0">

@@ -15,9 +15,9 @@
     <!-- Manual Mode -->
     <div v-if="mode === 'manual'" class="space-y-4">
       <div class="flex gap-4 flex-wrap">
-        <USelect v-model="resourceType" :options="resourceTypeOptions" placeholder="Select resource type" class="w-64" />
+        <USelect v-model="resourceType" :items="resourceTypeOptions" placeholder="Select resource type" class="w-64" />
         <UInput v-model="query" placeholder="Search by name or ID" class="flex-1 min-w-[200px]" @keyup.enter="searchResources" />
-        <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+        <USelect v-model="environment" :items="environmentOptions" class="w-40" />
         <UButton color="primary" :loading="loading" @click="searchResources">
           <Icon name="i-heroicons-magnifying-glass" class="w-4 h-4 mr-1" />
           Search
@@ -33,7 +33,7 @@
     <div v-else class="space-y-4">
       <UTextarea v-model="aiQuery" placeholder="Describe what you're looking for (e.g., 'Find all S3 buckets without encryption' or 'Show EC2 instances tagged as production')" :rows="2" />
       <div class="flex gap-4">
-        <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+        <USelect v-model="environment" :items="environmentOptions" class="w-40" />
         <UButton color="primary" :loading="aiLoading" :disabled="!aiQuery.trim()" @click="generateResourceQuery">
           <Icon name="i-heroicons-sparkles" class="w-4 h-4 mr-1" />
           Generate Query
@@ -59,7 +59,7 @@
     <div v-if="results.length > 0" class="space-y-2">
       <div class="flex items-center justify-between">
         <span class="text-sm text-gray-600 dark:text-gray-400">Found {{ results.length }} resources</span>
-        <UButton size="xs" variant="ghost" color="gray" @click="exportResults">
+        <UButton size="xs" variant="ghost" color="neutral" @click="exportResults">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export CSV
         </UButton>
@@ -96,16 +96,18 @@
     </div>
 
     <!-- Query Results Modal -->
-    <UModal v-model="showQueryResultsModal" :ui="{ width: 'max-w-6xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Query Results</h3>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showQueryResultsModal = false" />
-          </div>
-        </template>
-        <QueryResultsViewer v-if="queryResults" :records="queryResults.records" :attribute-schema="queryResults.attributeSchema" :total-count="queryResults.totalCount" :query-type="queryResults.queryType" :execution-time="queryResults.executionTime" @close="showQueryResultsModal = false" />
-      </UCard>
+    <UModal v-model:open="showQueryResultsModal" :ui="{ content: 'max-w-6xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Query Results</h3>
+              <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="showQueryResultsModal = false" />
+            </div>
+          </template>
+          <QueryResultsViewer v-if="queryResults" :records="queryResults.records" :attribute-schema="queryResults.attributeSchema" :total-count="queryResults.totalCount" :query-type="queryResults.queryType" :execution-time="queryResults.executionTime" @close="showQueryResultsModal = false" />
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>
@@ -195,6 +197,6 @@ function exportResults() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `resource-search-${Date.now()}.csv`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Results exported as CSV', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Results exported as CSV', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

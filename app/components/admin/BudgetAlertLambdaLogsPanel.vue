@@ -9,10 +9,10 @@
             <p class="text-sm text-gray-600 dark:text-gray-400">CloudWatch logs from {{ logConfig?.logGroup || 'budget-alert-system-prod' }}</p>
           </div>
           <div class="flex items-center gap-3">
-            <USelect v-model="timeRange" :options="timeRangeOptions" class="w-40" />
-            <USelect v-model="logLevel" :options="logLevelOptions" class="w-32" />
+            <USelect v-model="timeRange" :items="timeRangeOptions" class="w-40" />
+            <USelect v-model="logLevel" :items="logLevelOptions" class="w-32" />
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               icon="i-heroicons-arrow-path"
               :loading="loading"
@@ -71,7 +71,7 @@
       <div v-else-if="error" class="flex flex-col items-center justify-center py-12 text-center">
         <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-red-500 mb-4" />
         <p class="text-gray-600 dark:text-gray-400 mb-4">{{ error }}</p>
-        <UButton color="gray" @click="fetchLogs">Try Again</UButton>
+        <UButton color="neutral" @click="fetchLogs">Try Again</UButton>
       </div>
 
       <!-- Empty State -->
@@ -123,7 +123,7 @@
             <!-- Expand Button -->
             <UButton
               v-if="log.message.length > 200"
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               icon="i-heroicons-arrows-pointing-out"
@@ -136,52 +136,54 @@
       <!-- Pagination -->
       <div v-if="filteredLogs.length > 0" class="flex justify-end items-center mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredLogs.length"
         />
       </div>
     </UCard>
 
     <!-- Log Detail Modal -->
-    <USlideover v-model="showLogModal" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex flex-col h-full">
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 class="text-lg font-semibold">Log Details</h3>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="showLogModal = false"
-          />
-        </div>
-        <div v-if="selectedLog" class="flex-1 overflow-auto p-4">
-          <div class="space-y-4">
-            <div>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Timestamp</p>
-            <p class="font-mono text-gray-900 dark:text-white">{{ selectedLog.timestampFormatted }}</p>
-            </div>
-            <div>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Level</p>
-              <UBadge :color="getLogLevelBadgeColor(selectedLog.level)" variant="subtle">
-                {{ selectedLog.level }}
-              </UBadge>
-            </div>
-            <div>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Log Stream</p>
-            <p class="font-mono text-xs break-all text-gray-900 dark:text-white">{{ selectedLog.logStreamName }}</p>
-            </div>
-            <div>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Message</p>
-            <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">{{ selectedLog.message }}</pre>
-            </div>
-            <div v-if="selectedLog.isJSON && selectedLog.parsedJSON">
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Parsed JSON</p>
-            <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto">{{ JSON.stringify(selectedLog.parsedJSON, null, 2) }}</pre>
+    <USlideover v-model:open="showLogModal" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex flex-col h-full">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-semibold">Log Details</h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="showLogModal = false"
+            />
+          </div>
+          <div v-if="selectedLog" class="flex-1 overflow-auto p-4">
+            <div class="space-y-4">
+              <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Timestamp</p>
+              <p class="font-mono text-gray-900 dark:text-white">{{ selectedLog.timestampFormatted }}</p>
+              </div>
+              <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Level</p>
+                <UBadge :color="getLogLevelBadgeColor(selectedLog.level)" variant="subtle">
+                  {{ selectedLog.level }}
+                </UBadge>
+              </div>
+              <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Log Stream</p>
+              <p class="font-mono text-xs break-all text-gray-900 dark:text-white">{{ selectedLog.logStreamName }}</p>
+              </div>
+              <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Message</p>
+              <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">{{ selectedLog.message }}</pre>
+              </div>
+              <div v-if="selectedLog.isJSON && selectedLog.parsedJSON">
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Parsed JSON</p>
+              <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto">{{ JSON.stringify(selectedLog.parsedJSON, null, 2) }}</pre>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </div>
 </template>

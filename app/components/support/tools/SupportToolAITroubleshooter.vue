@@ -30,7 +30,7 @@
           v-for="prompt in quickPrompts"
           :key="prompt.label"
           size="xs"
-          color="gray"
+          color="neutral"
           variant="ghost"
           @click="problem = prompt.text"
         >
@@ -62,7 +62,7 @@
             </span>
           </div>
         </div>
-        <UButton size="xs" variant="ghost" color="gray" @click="exportResult">
+        <UButton size="xs" variant="ghost" color="neutral" @click="exportResult">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export
         </UButton>
@@ -213,6 +213,6 @@ function exportResult() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `troubleshoot-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Report exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Report exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

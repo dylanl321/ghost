@@ -63,7 +63,7 @@ export function useFavoriteAccounts() {
           description: `${accountName} added to favorites`,
           icon: 'i-heroicons-star-solid',
           color: 'yellow',
-          timeout: 3000
+          duration: 3000
         })
         logUserAction('account.favorite', accountId)
         useEventBus().emit('account.favorited', { accountId })
@@ -78,7 +78,7 @@ export function useFavoriteAccounts() {
         description: 'Please try again',
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
       return false
     }
@@ -105,7 +105,7 @@ export function useFavoriteAccounts() {
           description: `${accountName} removed from favorites`,
           icon: 'i-heroicons-star',
           color: 'gray',
-          timeout: 3000
+          duration: 3000
         })
         logUserAction('account.unfavorite', accountId)
       }
@@ -119,7 +119,7 @@ export function useFavoriteAccounts() {
         description: 'Please try again',
         icon: 'i-heroicons-exclamation-triangle',
         color: 'red',
-        timeout: 3000
+        duration: 3000
       })
       return false
     }

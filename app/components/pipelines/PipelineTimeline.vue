@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">Recent Pipeline Runs</div>
-        <UBadge color="gray" variant="soft" size="sm">
+        <UBadge color="neutral" variant="soft" size="sm">
           {{ pipelineRuns.length }} {{ pipelineRuns.length === 1 ? 'Run' : 'Runs' }}
         </UBadge>
       </div>
@@ -15,12 +15,12 @@
     </div>
     <div v-else>
       <UTable
-        :rows="paginatedRuns"
-        :columns="columns"
+        :data="paginatedRuns"
+        :columns="toTableColumns(columns)"
         :loading="loading"
       >
         <!-- Status column with colored badge -->
-        <template #status-data="{ row }">
+        <template #status-cell="{ row: { original: row } }">
           <UBadge
             :color="getStatusColor(row.status)"
             variant="soft"
@@ -31,12 +31,12 @@
         </template>
 
         <!-- Duration column with formatted time -->
-        <template #duration_total_seconds-data="{ row }">
+        <template #duration_total_seconds-cell="{ row: { original: row } }">
           <span class="text-gray-300">{{ formatDuration(row.duration_total_seconds) }}</span>
         </template>
 
         <!-- Timestamp column with formatted date -->
-        <template #timestamp_start-data="{ row }">
+        <template #timestamp_start-cell="{ row: { original: row } }">
           <div class="text-sm">
             <div class="text-white">{{ formatDateOnly(row.timestamp_start) }}</div>
             <div class="text-gray-400 text-xs">{{ formatTime(row.timestamp_start) }}</div>
@@ -44,7 +44,7 @@
         </template>
 
         <!-- Job name with link to GitLab -->
-        <template #job_name-data="{ row }">
+        <template #job_name-cell="{ row: { original: row } }">
           <div class="flex items-center gap-2">
             <span class="text-white">{{ row.job_name }}</span>
             <a
@@ -60,7 +60,7 @@
         </template>
 
         <!-- Repository column (clickable link to admin repo page) -->
-        <template #repository-data="{ row }">
+        <template #repository-cell="{ row: { original: row } }">
           <ClientOnly>
             <NuxtLink
               v-if="isAdmin && row.job_url"
@@ -78,7 +78,7 @@
         </template>
 
         <!-- Pipeline ID (clickable link to admin detail page) -->
-        <template #pipeline_id-data="{ row }">
+        <template #pipeline_id-cell="{ row: { original: row } }">
           <ClientOnly>
             <NuxtLink
               v-if="isAdmin"
@@ -94,7 +94,7 @@
         </template>
 
         <!-- Account count -->
-        <template #account_count-data="{ row }">
+        <template #account_count-cell="{ row: { original: row } }">
           <UTooltip
             v-if="row.account_count === 0"
             text="This pipeline run targeted all accounts"
@@ -103,13 +103,13 @@
               All
             </UBadge>
           </UTooltip>
-          <UBadge v-else color="gray" variant="subtle" size="sm">
+          <UBadge v-else color="neutral" variant="subtle" size="sm">
             {{ row.account_count }}
           </UBadge>
         </template>
 
         <!-- Author column with badge -->
-        <template #commit_author-data="{ row }">
+        <template #commit_author-cell="{ row: { original: row } }">
           <PipelinesAuthorBadge
             v-if="row.commit_author"
             :author-field="row.commit_author"
@@ -120,7 +120,7 @@
         </template>
 
         <!-- Terraform version -->
-        <template #terraform_version-data="{ row }">
+        <template #terraform_version-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-400">
             {{ row.terraform_version || 'N/A' }}
           </span>
@@ -134,8 +134,8 @@
         </div>
         <UPagination
           v-if="pipelineRuns.length > pageSize"
-          v-model="page"
-          :page-count="pageSize"
+          v-model:page="page"
+          :items-per-page="pageSize"
           :total="pipelineRuns.length"
         />
       </div>

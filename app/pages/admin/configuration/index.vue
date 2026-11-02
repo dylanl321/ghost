@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <div class="mb-6">
-      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" @click="navigateTo('/admin')">
+      <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" @click="navigateTo('/admin')">
         Back to Dashboard
       </UButton>
       <div class="flex items-center gap-3 mb-2">
@@ -12,7 +12,7 @@
       </div>
       <p class="text-gray-600 dark:text-gray-400">Manage site-wide configuration and dashboard defaults</p>
     </div>
-    <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
     <UAlert
       color="blue"
       variant="soft"

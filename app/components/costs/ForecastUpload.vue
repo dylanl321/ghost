@@ -185,69 +185,71 @@
         </div>
 
         <!-- Monthly Details Modal -->
-        <UModal v-model="showDetailsModal" :ui="{ width: 'sm:max-w-4xl' }">
-          <UCard>
-            <template #header>
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">Monthly Forecast Details</h3>
-                <UButton
-                  color="gray"
-                  variant="ghost"
-                  icon="i-heroicons-x-mark"
-                  @click="showDetailsModal = false"
-                />
-              </div>
-            </template>
-            
-            <div v-if="selectedItem">
-              <div class="mb-4 p-4 bg-gray-800 rounded-lg">
-                <h4 class="font-semibold text-white mb-2">{{ selectedItem['Account Name'] }}</h4>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span class="text-gray-400">Enclave ID:</span>
-                    <span class="text-white ml-2">{{ selectedItem['Enclave ID'] }}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-400">Project Type:</span>
-                    <span class="text-white ml-2">{{ selectedItem['Project Type'] }}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-400">LOB:</span>
-                    <span class="text-white ml-2">{{ selectedItem['LOB'] }}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-400">Total Forecast:</span>
-                    <span class="text-green-400 ml-2 font-semibold">
-                      {{ formatCurrency(Number(selectedItem.monthlyForecasts ? Object.values(selectedItem.monthlyForecasts).reduce((a: any, b: any) => Number(a || 0) + Number(b || 0), 0) : 0)) }}
-                    </span>
+        <UModal v-model:open="showDetailsModal" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+          <template #content>
+            <UCard>
+              <template #header>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-lg font-semibold">Monthly Forecast Details</h3>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    icon="i-heroicons-x-mark"
+                    @click="showDetailsModal = false"
+                  />
+                </div>
+              </template>
+              
+              <div v-if="selectedItem">
+                <div class="mb-4 p-4 bg-gray-800 rounded-lg">
+                  <h4 class="font-semibold text-white mb-2">{{ selectedItem['Account Name'] }}</h4>
+                  <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span class="text-gray-400">Enclave ID:</span>
+                      <span class="text-white ml-2">{{ selectedItem['Enclave ID'] }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-400">Project Type:</span>
+                      <span class="text-white ml-2">{{ selectedItem['Project Type'] }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-400">LOB:</span>
+                      <span class="text-white ml-2">{{ selectedItem['LOB'] }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-400">Total Forecast:</span>
+                      <span class="text-green-400 ml-2 font-semibold">
+                        {{ formatCurrency(Number(selectedItem.monthlyForecasts ? Object.values(selectedItem.monthlyForecasts).reduce((a: any, b: any) => Number(a || 0) + Number(b || 0), 0) : 0)) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                
+                <div v-if="selectedItem.monthlyForecasts" class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-gray-700">
+                        <th class="text-left py-2 px-3 text-gray-300">Month</th>
+                        <th class="text-right py-2 px-3 text-gray-300">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="(amount, month) in selectedItem.monthlyForecasts"
+                        :key="month"
+                        class="border-b border-gray-800 hover:bg-gray-800/50"
+                      >
+                        <td class="py-2 px-3 text-gray-200">{{ month }}</td>
+                        <td class="py-2 px-3 text-right text-green-400 font-semibold">
+                          {{ formatCurrency(amount) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              
-              <div v-if="selectedItem.monthlyForecasts" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="border-b border-gray-700">
-                      <th class="text-left py-2 px-3 text-gray-300">Month</th>
-                      <th class="text-right py-2 px-3 text-gray-300">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(amount, month) in selectedItem.monthlyForecasts"
-                      :key="month"
-                      class="border-b border-gray-800 hover:bg-gray-800/50"
-                    >
-                      <td class="py-2 px-3 text-gray-200">{{ month }}</td>
-                      <td class="py-2 px-3 text-right text-green-400 font-semibold">
-                        {{ formatCurrency(amount) }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </UCard>
+            </UCard>
+          </template>
         </UModal>
       </div>
 
@@ -264,7 +266,7 @@
         </UButton>
         <UButton
           variant="outline"
-          color="gray"
+          color="neutral"
           @click="downloadSample"
         >
           <UIcon name="i-heroicons-document-arrow-down" class="w-4 h-4 mr-2" />

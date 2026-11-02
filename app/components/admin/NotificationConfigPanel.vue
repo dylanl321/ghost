@@ -15,7 +15,7 @@
             <p class="font-medium text-gray-900 dark:text-white">Notifications Enabled</p>
             <p class="text-sm text-gray-500">Master switch for the notification system</p>
           </div>
-          <UToggle v-model="config.notificationsEnabled" @change="saveConfig" />
+          <USwitch v-model="config.notificationsEnabled" @change="saveConfig" />
         </div>
 
         <div class="flex items-center justify-between">
@@ -23,7 +23,7 @@
             <p class="font-medium text-gray-900 dark:text-white">Email Digest Enabled</p>
             <p class="text-sm text-gray-500">Send grouped email digests to users</p>
           </div>
-          <UToggle v-model="config.digestEnabled" @change="saveConfig" />
+          <USwitch v-model="config.digestEnabled" @change="saveConfig" />
         </div>
       </div>
     </UCard>
@@ -40,12 +40,12 @@
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Frequency</label>
-          <USelectMenu v-model="config.defaultDigestFrequency" :options="frequencyOptions" @change="saveConfig" />
+          <USelectMenu value-key="value" v-model="config.defaultDigestFrequency" :items="frequencyOptions" @change="saveConfig" :search-input="false" />
         </div>
 
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Delivery Hour</label>
-          <USelectMenu v-model="config.defaultDigestHour" :options="hourOptions" @change="saveConfig" />
+          <USelectMenu value-key="value" v-model="config.defaultDigestHour" :items="hourOptions" @change="saveConfig" :search-input="false" />
         </div>
       </div>
     </UCard>
@@ -65,7 +65,7 @@
             <p class="font-medium text-gray-900 dark:text-white">Enable Dry-Run</p>
             <p class="text-sm text-gray-500">Redirect all notifications to a single admin email instead of individual users</p>
           </div>
-          <UToggle v-model="config.dryRunEnabled" @change="saveDryRunConfig" />
+          <USwitch v-model="config.dryRunEnabled" @change="saveDryRunConfig" />
         </div>
 
         <div v-if="config.dryRunEnabled" class="space-y-4">
@@ -112,7 +112,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
-          <USelectMenu v-model="testForm.severity" :options="severityOptions" />
+          <USelectMenu value-key="value" v-model="testForm.severity" :items="severityOptions" :search-input="false" />
         </div>
         <UButton icon="i-heroicons-paper-airplane" @click="sendTest" :loading="sendingTest">
           Send Test
@@ -137,17 +137,17 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Months Back</label>
-            <USelectMenu v-model="backfillForm.months" :options="backfillMonthOptions" />
+            <USelectMenu value-key="value" v-model="backfillForm.months" :items="backfillMonthOptions" :search-input="false" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Limit Per Month</label>
-            <USelectMenu v-model="backfillForm.limitPerMonth" :options="backfillLimitOptions" />
+            <USelectMenu value-key="value" v-model="backfillForm.limitPerMonth" :items="backfillLimitOptions" :search-input="false" />
           </div>
         </div>
 
         <div class="flex gap-3">
           <UButton
-            color="gray"
+            color="neutral"
             variant="solid"
             icon="i-heroicons-eye"
             @click="runBackfill(true)"

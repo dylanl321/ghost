@@ -3,17 +3,16 @@
     <!-- Roles Filter -->
     <div class="space-y-2">
       <label class="text-xs font-medium text-gray-400">AWS Roles</label>
-      <USelectMenu
+      <USelectMenu value-key="value"
         v-model="selectedRoles"
-        :options="roleOptions"
+        :items="roleOptions"
         :loading="optionsLoading"
         multiple
-        searchable
         placeholder="All roles..."
         size="sm"
         class="w-full"
       >
-        <template #label>
+        <template #default>
           <span v-if="optionsLoading" class="text-gray-500">Loading roles...</span>
           <span v-else-if="selectedRoles.length === 0" class="text-gray-500">All roles</span>
           <span v-else class="text-gray-300">{{ selectedRoles.length }} selected</span>
@@ -45,9 +44,10 @@
         <label class="text-xs text-gray-500">Signed in within</label>
         <USelectMenu
           v-model="selectedLookbackDays"
-          :options="lookbackOptions"
+          :items="lookbackOptions"
           size="sm"
           class="w-full"
+          :search-input="false"
         />
       </div>
     </div>
@@ -55,17 +55,16 @@
     <!-- Departments Filter -->
     <div class="space-y-2">
       <label class="text-xs font-medium text-gray-400">Departments</label>
-      <USelectMenu
+      <USelectMenu value-key="value"
         v-model="selectedDepartments"
-        :options="departmentOptions"
+        :items="departmentOptions"
         :loading="optionsLoading"
         multiple
-        searchable
         placeholder="All departments..."
         size="sm"
         class="w-full"
       >
-        <template #label>
+        <template #default>
           <span v-if="optionsLoading" class="text-gray-500">Loading departments...</span>
           <span v-else-if="selectedDepartments.length === 0" class="text-gray-500">All departments</span>
           <span v-else class="text-gray-300">{{ selectedDepartments.length }} selected</span>
@@ -79,7 +78,7 @@
       <div class="flex flex-wrap gap-2">
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-shield-check"
           @click="setAdminUsers"
@@ -88,7 +87,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-clock"
           @click="setInactiveUsers"
@@ -97,7 +96,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           icon="i-heroicons-arrow-path"
           @click="clearFilters"

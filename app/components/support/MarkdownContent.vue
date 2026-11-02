@@ -111,6 +111,8 @@ watch(
 </script>
 
 <style scoped>
+@reference "~/assets/css/main.css";
+
 .markdown-content {
   @apply text-gray-800 dark:text-gray-200;
 }

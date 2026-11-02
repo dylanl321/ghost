@@ -24,9 +24,9 @@
         >
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-sm text-gray-900 dark:text-gray-200 truncate">{{ tag.key }}</span>
-            <UBadge v-if="tag.isCustom" size="xs" variant="soft" color="gray" label="custom" />
+            <UBadge v-if="tag.isCustom" size="xs" variant="soft" color="neutral" label="custom" />
           </div>
-          <UToggle
+          <USwitch
             :model-value="draft.importantTags.includes(tag.key)"
             @update:model-value="$emit('toggleImportantTag', tag.key, $event)"
           />
@@ -47,7 +47,7 @@
         />
         <UButton
           size="sm"
-          color="gray"
+          color="neutral"
           variant="soft"
           :disabled="!customTagInput.trim()"
           @click="addCustomTag"
@@ -117,13 +117,14 @@
       </p>
       <USelectMenu
         :model-value="draft.defaultGroupByTag"
-        :options="defaultGroupOptions"
-        value-attribute="value"
-        option-attribute="label"
+        :items="defaultGroupOptions"
+        value-key="value"
+        label-key="label"
         placeholder="None — I'll pick each time"
         size="sm"
         class="w-full sm:w-64"
         @update:model-value="$emit('updateDefaultGroup', $event)"
+        :search-input="false"
       />
     </div>
 

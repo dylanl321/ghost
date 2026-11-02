@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <div class="mb-6">
-      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin')" class="mb-4">
+      <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin')" class="mb-4">
         Back to Dashboard
       </UButton>
       <div class="flex items-center gap-3 mb-2">
@@ -19,7 +19,7 @@
       <p class="text-gray-600 dark:text-gray-400">Monitor notification delivery, manage broadcasts, and configure the system</p>
     </div>
 
-    <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="mb-6" :unmount-on-hide="false" />
 
     <div class="mt-6">
       <NotificationDashboardPanel v-if="activeTab === 0" />

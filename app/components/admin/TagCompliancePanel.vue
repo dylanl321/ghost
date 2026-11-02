@@ -12,26 +12,28 @@
         <div class="flex items-center gap-2 flex-wrap">
           <USelectMenu
             v-model="selectedPeriod"
-            :options="periodOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="periodOptions"
+            value-key="value"
+            label-key="label"
             size="sm"
             class="w-40"
+            :search-input="false"
           />
           <USelectMenu
             :model-value="selectedTag ?? undefined"
           @update:model-value="onTagSelect($event ?? null)"
-            :options="tagSelectOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="tagSelectOptions"
+            value-key="value"
+            label-key="label"
             placeholder="Select tag..."
             size="sm"
             class="w-48"
             :loading="isLoadingTags"
+            :search-input="false"
           />
           <UTooltip text="Refresh">
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               icon="i-heroicons-arrow-path"
               size="sm"

@@ -375,11 +375,12 @@ watch([() => props.standardAccountId, () => props.govCloudAccountId], () => {
         />
       </div>
       <div class="flex items-center gap-2">
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedEnvironment"
-          :options="environmentOptions"
+          :items="environmentOptions"
           size="sm"
-          class="min-w-[150px]"
+          class="min-w-[150px] w-auto"
+          :search-input="false"
         />
         <UButton
           v-if="searchQuery || selectedEnvironment !== 'all'"
@@ -433,7 +434,7 @@ watch([() => props.standardAccountId, () => props.govCloudAccountId], () => {
         <!-- Role Header - Clean and simple -->
         <div class="flex items-center gap-3 pb-2 border-b border-gray-700">
           <h4 class="text-lg font-medium text-white capitalize">{{ role }}</h4>
-          <UBadge color="gray" variant="soft" size="xs">
+          <UBadge color="neutral" variant="soft" size="xs">
             {{ roleGroups.length }} environment{{ roleGroups.length === 1 ? '' : 's' }}
           </UBadge>
         </div>

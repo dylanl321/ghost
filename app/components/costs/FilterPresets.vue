@@ -1,10 +1,10 @@
 <template>
-  <UDropdown
+  <UDropdownMenu
     :items="dropdownItems"
-    :popper="{ placement: 'bottom-end' }"
+    :content="{ side: 'bottom', align: 'end' }"
   >
     <UButton
-      color="gray"
+      color="neutral"
       variant="ghost"
       icon="i-heroicons-bookmark"
       trailing-icon="i-heroicons-chevron-down"
@@ -12,60 +12,64 @@
     >
       {{ activePresetName || 'Presets' }}
     </UButton>
-  </UDropdown>
+  </UDropdownMenu>
 
   <!-- Save / Rename Preset Modal -->
-  <UModal v-model="showSaveModal" :ui="{ width: 'sm:max-w-sm' }">
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ editingPresetId ? 'Rename Preset' : 'Save Preset' }}
-          </h3>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showSaveModal = false" />
-        </div>
-      </template>
+  <UModal v-model:open="showSaveModal" :ui="{ content: 'sm:max-w-sm' }" scrollable>
+    <template #content>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ editingPresetId ? 'Rename Preset' : 'Save Preset' }}
+            </h3>
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showSaveModal = false" />
+          </div>
+        </template>
 
-      <div class="space-y-3">
-        <UFormGroup label="Preset Name">
-          <UInput
-            v-model="presetName"
-            placeholder="e.g., Production Accounts - Monthly"
-            autofocus
-            @keyup.enter="confirmSave"
-          />
-        </UFormGroup>
-      </div>
-
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <UButton color="gray" variant="ghost" @click="showSaveModal = false">Cancel</UButton>
-          <UButton color="blue" :disabled="!presetName.trim()" @click="confirmSave">
-            {{ editingPresetId ? 'Rename' : 'Save' }}
-          </UButton>
+        <div class="space-y-3">
+          <UFormField label="Preset Name">
+            <UInput
+              v-model="presetName"
+              placeholder="e.g., Production Accounts - Monthly"
+              autofocus
+              @keyup.enter="confirmSave"
+            />
+          </UFormField>
         </div>
-      </template>
-    </UCard>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="neutral" variant="ghost" @click="showSaveModal = false">Cancel</UButton>
+            <UButton color="blue" :disabled="!presetName.trim()" @click="confirmSave">
+              {{ editingPresetId ? 'Rename' : 'Save' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 
   <!-- Delete Confirmation Modal -->
-  <UModal v-model="showDeleteModal" :ui="{ width: 'sm:max-w-sm' }">
-    <UCard>
-      <template #header>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Delete Preset</h3>
-      </template>
+  <UModal v-model:open="showDeleteModal" :ui="{ content: 'sm:max-w-sm' }" scrollable>
+    <template #content>
+      <UCard>
+        <template #header>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Delete Preset</h3>
+        </template>
 
-      <p class="text-sm text-gray-700 dark:text-gray-300">
-        Are you sure you want to delete <strong>{{ deletingPresetName }}</strong>?
-      </p>
+        <p class="text-sm text-gray-700 dark:text-gray-300">
+          Are you sure you want to delete <strong>{{ deletingPresetName }}</strong>?
+        </p>
 
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <UButton color="gray" variant="ghost" @click="showDeleteModal = false">Cancel</UButton>
-          <UButton color="red" @click="confirmDelete">Delete</UButton>
-        </div>
-      </template>
-    </UCard>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="neutral" variant="ghost" @click="showDeleteModal = false">Cancel</UButton>
+            <UButton color="red" @click="confirmDelete">Delete</UButton>
+          </div>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 
@@ -139,7 +143,7 @@ const dropdownItems = computed(() => {
       presetItems.push({
         label: preset.name,
         icon: 'i-heroicons-bookmark-solid',
-        click: () => loadPreset(preset)
+        onSelect: () => loadPreset(preset)
       })
     }
     items.push(presetItems)
@@ -150,7 +154,7 @@ const dropdownItems = computed(() => {
       mgmtItems.push({
         label: `Rename "${preset.name}"`,
         icon: 'i-heroicons-pencil-square',
-        click: () => {
+        onSelect: () => {
           editingPresetId.value = preset.id
           presetName.value = preset.name
           showSaveModal.value = true
@@ -159,7 +163,7 @@ const dropdownItems = computed(() => {
       mgmtItems.push({
         label: `Delete "${preset.name}"`,
         icon: 'i-heroicons-trash',
-        click: () => {
+        onSelect: () => {
           deletingPresetId.value = preset.id
           deletingPresetName.value = preset.name
           showDeleteModal.value = true
@@ -174,7 +178,7 @@ const dropdownItems = computed(() => {
     {
       label: 'Save Current View as Preset',
       icon: 'i-heroicons-plus-circle',
-      click: () => {
+      onSelect: () => {
         editingPresetId.value = null
         presetName.value = ''
         showSaveModal.value = true

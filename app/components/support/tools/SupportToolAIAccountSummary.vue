@@ -53,7 +53,7 @@
           <p class="text-sm text-gray-600 dark:text-gray-400">{{ result.executiveSummary }}</p>
           <div class="text-xs text-gray-400 mt-1">Generated {{ formatTime(result.generatedAt) }}</div>
         </div>
-        <UButton size="xs" variant="ghost" color="gray" @click="exportResult">
+        <UButton size="xs" variant="ghost" color="neutral" @click="exportResult">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export
         </UButton>
@@ -106,7 +106,7 @@
             v-if="data.keyFindings?.length > 3"
             size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             @click="showAllFindings[key as string] = !showAllFindings[key as string]"
           >
             {{ showAllFindings[key as string] ? 'Show less' : `+${data.keyFindings.length - 3} more` }}
@@ -251,6 +251,6 @@ function exportResult() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `account-summary-${result.value.accountId}-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Summary exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Summary exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

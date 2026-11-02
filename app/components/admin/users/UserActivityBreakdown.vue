@@ -110,7 +110,7 @@
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Activity Sessions</h3>
-            <UBadge color="gray" variant="soft" size="xs">{{ workflows.length }} sessions</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">{{ workflows.length }} sessions</UBadge>
           </div>
         </template>
         <div class="space-y-3">
@@ -175,7 +175,7 @@
           <UButton
             v-if="workflows.length > 5"
             size="sm"
-            color="gray"
+            color="neutral"
             variant="ghost"
             block
             @click="showAllSessions = !showAllSessions"
@@ -190,7 +190,7 @@
         <template #header>
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Server-Side Metrics</h3>
-            <UBadge color="gray" variant="soft" size="xs">from CloudWatch</UBadge>
+            <UBadge color="neutral" variant="soft" size="xs">from CloudWatch</UBadge>
           </div>
         </template>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -216,7 +216,7 @@
               class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs"
             >
               <span class="text-gray-700 dark:text-gray-300">{{ page.path }}</span>
-              <UBadge color="gray" variant="soft" size="xs">{{ page.count }}</UBadge>
+              <UBadge color="neutral" variant="soft" size="xs">{{ page.count }}</UBadge>
             </div>
           </div>
         </div>

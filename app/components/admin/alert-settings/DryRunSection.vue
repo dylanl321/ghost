@@ -7,7 +7,7 @@
           <div class="w-3 h-3 rounded-full" :class="dryRun.enabled ? 'bg-yellow-500' : 'bg-gray-400'"></div>
           <span class="font-medium">{{ dryRun.enabled ? 'Dry Run Mode Active' : 'Dry Run Mode Disabled' }}</span>
         </div>
-        <UToggle
+        <USwitch
           :model-value="dryRun.enabled"
           :loading="savingField === 'enabled'"
           @update:model-value="updateField('enabled', $event)"
@@ -26,17 +26,17 @@
             {{ email }}
             <UButton
               icon="i-heroicons-x-mark"
-              size="2xs"
+              size="xs"
               color="yellow"
               variant="ghost"
-              :padded="false"
+              :ui="{ base: 'p-0' }"
               @click="removeEmail(email)"
             />
           </span>
           <UButton
             icon="i-heroicons-plus"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="soft"
             @click="showAddEmailModal = true"
           >
@@ -54,7 +54,7 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="flex items-center justify-between">
             <span class="text-sm">Debug Info</span>
-            <UToggle
+            <USwitch
               :model-value="dryRun.include_debug_info !== false"
               size="sm"
               :loading="savingField === 'include_debug_info'"
@@ -63,7 +63,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm">Recipient Debug</span>
-            <UToggle
+            <USwitch
               :model-value="dryRun.include_recipient_debug !== false"
               size="sm"
               :loading="savingField === 'include_recipient_debug'"
@@ -72,7 +72,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm">Evaluation Debug</span>
-            <UToggle
+            <USwitch
               :model-value="dryRun.include_evaluation_debug !== false"
               size="sm"
               :loading="savingField === 'include_evaluation_debug'"
@@ -81,7 +81,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm">Config Debug</span>
-            <UToggle
+            <USwitch
               :model-value="dryRun.include_config_debug !== false"
               size="sm"
               :loading="savingField === 'include_config_debug'"
@@ -97,40 +97,42 @@
     </div>
 
     <!-- Add Email Modal -->
-    <UModal v-model="showAddEmailModal">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium">Add Test Email</h3>
-            <UButton
-              icon="i-heroicons-x-mark"
-              color="gray"
-              variant="ghost"
-              @click="showAddEmailModal = false"
+    <UModal v-model:open="showAddEmailModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium">Add Test Email</h3>
+              <UButton
+                icon="i-heroicons-x-mark"
+                color="neutral"
+                variant="ghost"
+                @click="showAddEmailModal = false"
+              />
+            </div>
+          </template>
+
+          <UFormField label="Email Address" :error="emailError">
+            <UInput
+              v-model="newEmail"
+              type="email"
+              placeholder="test@example.com"
+              @keyup.enter="addEmail"
             />
-          </div>
-        </template>
+          </UFormField>
 
-        <UFormGroup label="Email Address" :error="emailError">
-          <UInput
-            v-model="newEmail"
-            type="email"
-            placeholder="test@example.com"
-            @keyup.enter="addEmail"
-          />
-        </UFormGroup>
-
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton color="gray" variant="ghost" @click="showAddEmailModal = false">
-              Cancel
-            </UButton>
-            <UButton @click="addEmail" :loading="savingField === 'email'">
-              Add Email
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="showAddEmailModal = false">
+                Cancel
+              </UButton>
+              <UButton @click="addEmail" :loading="savingField === 'email'">
+                Add Email
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>
@@ -160,7 +162,7 @@ async function updateField(field: string, value: any) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({
@@ -202,7 +204,7 @@ async function addEmail() {
       title: 'Email Added',
       description: `${newEmail.value} added to test recipients`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     newEmail.value = ''
     showAddEmailModal.value = false
@@ -228,7 +230,7 @@ async function removeEmail(emailToRemove: string) {
       title: 'Email Removed',
       description: `${emailToRemove} removed from test recipients`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
   } catch (e: any) {
     toast.add({

@@ -1,295 +1,297 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-4xl' }">
-    <UCard class="sm:min-w-[800px]">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-semibold text-white">Policy Troubleshooter</h2>
-            <p class="text-sm text-gray-400">Test if actions are allowed in this account</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <UButton
-              v-if="!loading && !error"
-              icon="i-heroicons-arrow-path"
-              size="xs"
-              variant="ghost"
-              @click="loadAnalysis"
-            />
-            <UButton icon="i-heroicons-x-mark" variant="ghost" @click="isOpen = false" />
-          </div>
-        </div>
-      </template>
-
-      <!-- Loading -->
-      <div v-if="loading" class="py-12 text-center">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-400 mx-auto mb-3" />
-        <p class="text-gray-400">Analyzing policies...</p>
-      </div>
-
-      <!-- Error -->
-      <div v-else-if="error" class="py-12 text-center">
-        <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <p class="text-red-400">{{ error }}</p>
-        <UButton class="mt-4" @click="loadAnalysis">Try Again</UButton>
-      </div>
-
-      <!-- Main Content -->
-      <div v-else-if="analysisData" class="space-y-6">
-        <!-- Search Box -->
-        <div>
-          <UInput
-            v-model="searchQuery"
-            size="xl"
-            placeholder="Test an action: ec2:RunInstances, s3:PutObject, iam:CreateUser..."
-            icon="i-heroicons-magnifying-glass"
-            @keyup.enter="testAction"
-          >
-            <template #trailing>
-              <UButton
-                size="sm"
-                :disabled="!searchQuery"
-                @click="testAction"
-              >
-                Test
-              </UButton>
-            </template>
-          </UInput>
-          <p class="text-xs text-gray-500 mt-1">Supports wildcards: s3:*, iam:Create*</p>
-        </div>
-
-        <!-- Quick Actions -->
-        <div>
-          <div class="text-sm font-medium text-gray-400 mb-2">Quick Tests:</div>
-          <div class="flex flex-wrap gap-2">
-            <UButton
-              v-for="action in quickActions"
-              :key="action.action"
-              size="sm"
-              variant="outline"
-              @click="quickTest(action.action)"
-            >
-              <UIcon :name="action.icon" class="w-4 h-4 mr-1" />
-              {{ action.label }}
-            </UButton>
-          </div>
-        </div>
-
-        <!-- Test Results -->
-        <div v-if="testResults.length > 0" class="space-y-3">
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+    <template #content>
+      <UCard class="sm:min-w-[800px]">
+        <template #header>
           <div class="flex items-center justify-between">
-            <div class="text-sm font-medium text-gray-400">Results:</div>
-            <UButton size="xs" variant="ghost" @click="testResults = []">Clear</UButton>
-          </div>
-
-          <div
-            v-for="result in testResults"
-            :key="result.action"
-            class="rounded-lg border p-4"
-            :class="{
-              'bg-green-900/10 border-green-700/30': result.result === 'allowed',
-              'bg-red-900/10 border-red-700/30': result.result === 'denied',
-              'bg-blue-900/10 border-blue-700/30': result.result === 'conditional'
-            }"
-          >
-            <div class="flex items-start justify-between gap-4">
-              <div class="flex-1">
-                <!-- Action & Status -->
-                <div class="flex items-center gap-2 mb-2">
-                  <UIcon
-                    :name="result.result === 'allowed' ? 'i-heroicons-check-circle' :
-                           result.result === 'denied' ? 'i-heroicons-x-circle' :
-                           'i-heroicons-shield-check'"
-                    :class="{
-                      'text-green-400': result.result === 'allowed',
-                      'text-red-400': result.result === 'denied',
-                      'text-blue-400': result.result === 'conditional'
-                    }"
-                    class="w-6 h-6"
-                  />
-                  <code class="text-base font-medium text-white">{{ result.action }}</code>
-                </div>
-
-                <!-- Explanation -->
-                <div class="pl-8 mb-3">
-                  <div
-                    v-if="result.result === 'conditional'"
-                    class="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3"
-                  >
-                    <div class="text-xs font-medium text-blue-300 mb-2 flex items-center gap-1">
-                      <UIcon name="i-heroicons-shield-check" class="w-4 h-4" />
-                      Security Requirements
-                    </div>
-                    <div class="space-y-1">
-                      <div
-                        v-for="(requirement, idx) in result.explanation.replace('Allowed when: ', '').split(' AND ')"
-                        :key="idx"
-                        class="flex items-start gap-2 text-sm text-blue-100"
-                      >
-                        <UIcon name="i-heroicons-check" class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                        <span>{{ requirement.trim() }}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    v-else
-                    class="text-sm"
-                    :class="{
-                      'text-green-200': result.result === 'allowed',
-                      'text-red-200': result.result === 'denied'
-                    }"
-                  >
-                    {{ result.explanation }}
-                  </div>
-                </div>
-
-                <!-- Policies -->
-                <div v-if="result.policies.length > 0" class="pl-8">
-                  <div class="text-xs text-gray-400 mb-1">
-                    {{ result.result === 'denied' ? 'Blocked by:' : 'Required by:' }}
-                  </div>
-                  <div class="flex flex-wrap gap-1">
-                    <UBadge
-                      v-for="policy in result.policies"
-                      :key="policy"
-                      :color="result.result === 'denied' ? 'red' : 'blue'"
-                      variant="soft"
-                      size="xs"
-                    >
-                      {{ policy }}
-                    </UBadge>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Result Badge -->
-              <UBadge
-                :color="result.result === 'allowed' ? 'green' : result.result === 'denied' ? 'red' : 'blue'"
-                variant="solid"
-              >
-                {{ result.result.toUpperCase() }}
-              </UBadge>
+            <div>
+              <h2 class="text-xl font-semibold text-white">Policy Troubleshooter</h2>
+              <p class="text-sm text-gray-400">Test if actions are allowed in this account</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <UButton
+                v-if="!loading && !error"
+                icon="i-heroicons-arrow-path"
+                size="xs"
+                variant="ghost"
+                @click="loadAnalysis"
+              />
+              <UButton icon="i-heroicons-x-mark" variant="ghost" @click="isOpen = false" />
             </div>
           </div>
+        </template>
+
+        <!-- Loading -->
+        <div v-if="loading" class="py-12 text-center">
+          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-400 mx-auto mb-3" />
+          <p class="text-gray-400">Analyzing policies...</p>
         </div>
 
-        <!-- Active Policies -->
-        <div v-if="filteredPolicies.length > 0" class="border-t border-gray-700 pt-4">
-          <div class="text-sm font-medium text-gray-400 mb-3">
-            Active Security Policies ({{ filteredPolicies.length }})
+        <!-- Error -->
+        <div v-else-if="error" class="py-12 text-center">
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-red-400 mx-auto mb-3" />
+          <p class="text-red-400">{{ error }}</p>
+          <UButton class="mt-4" @click="loadAnalysis">Try Again</UButton>
+        </div>
+
+        <!-- Main Content -->
+        <div v-else-if="analysisData" class="space-y-6">
+          <!-- Search Box -->
+          <div>
+            <UInput
+              v-model="searchQuery"
+              size="xl"
+              placeholder="Test an action: ec2:RunInstances, s3:PutObject, iam:CreateUser..."
+              icon="i-heroicons-magnifying-glass"
+              @keyup.enter="testAction"
+            >
+              <template #trailing>
+                <UButton
+                  size="sm"
+                  :disabled="!searchQuery"
+                  @click="testAction"
+                >
+                  Test
+                </UButton>
+              </template>
+            </UInput>
+            <p class="text-xs text-gray-500 mt-1">Supports wildcards: s3:*, iam:Create*</p>
           </div>
 
-          <div class="space-y-2">
+          <!-- Quick Actions -->
+          <div>
+            <div class="text-sm font-medium text-gray-400 mb-2">Quick Tests:</div>
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                v-for="action in quickActions"
+                :key="action.action"
+                size="sm"
+                variant="outline"
+                @click="quickTest(action.action)"
+              >
+                <UIcon :name="action.icon" class="w-4 h-4 mr-1" />
+                {{ action.label }}
+              </UButton>
+            </div>
+          </div>
+
+          <!-- Test Results -->
+          <div v-if="testResults.length > 0" class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-medium text-gray-400">Results:</div>
+              <UButton size="xs" variant="ghost" @click="testResults = []">Clear</UButton>
+            </div>
+
             <div
-              v-for="policy in filteredPolicies"
-              :key="policy.id"
-              class="bg-gray-800/30 rounded-lg overflow-hidden"
+              v-for="result in testResults"
+              :key="result.action"
+              class="rounded-lg border p-4"
+              :class="{
+                'bg-green-900/10 border-green-700/30': result.result === 'allowed',
+                'bg-red-900/10 border-red-700/30': result.result === 'denied',
+                'bg-blue-900/10 border-blue-700/30': result.result === 'conditional'
+              }"
             >
-              <div class="p-3">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium text-white mb-1">{{ policy.name }}</div>
-                    <div class="text-xs text-gray-400 mb-2">
-                      {{ policy.source === 'direct' ? '📌 Direct' : '⬇️ Inherited' }} from {{ policy.attachedAt }}
-                      • {{ policy.statementCount }} statements
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1">
+                  <!-- Action & Status -->
+                  <div class="flex items-center gap-2 mb-2">
+                    <UIcon
+                      :name="result.result === 'allowed' ? 'i-heroicons-check-circle' :
+                             result.result === 'denied' ? 'i-heroicons-x-circle' :
+                             'i-heroicons-shield-check'"
+                      :class="{
+                        'text-green-400': result.result === 'allowed',
+                        'text-red-400': result.result === 'denied',
+                        'text-blue-400': result.result === 'conditional'
+                      }"
+                      class="w-6 h-6"
+                    />
+                    <code class="text-base font-medium text-white">{{ result.action }}</code>
+                  </div>
+
+                  <!-- Explanation -->
+                  <div class="pl-8 mb-3">
+                    <div
+                      v-if="result.result === 'conditional'"
+                      class="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3"
+                    >
+                      <div class="text-xs font-medium text-blue-300 mb-2 flex items-center gap-1">
+                        <UIcon name="i-heroicons-shield-check" class="w-4 h-4" />
+                        Security Requirements
+                      </div>
+                      <div class="space-y-1">
+                        <div
+                          v-for="(requirement, idx) in result.explanation.replace('Allowed when: ', '').split(' AND ')"
+                          :key="idx"
+                          class="flex items-start gap-2 text-sm text-blue-100"
+                        >
+                          <UIcon name="i-heroicons-check" class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                          <span>{{ requirement.trim() }}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div v-if="policy.description" class="text-xs text-gray-500 mb-2">
-                      {{ policy.description }}
+                    <div
+                      v-else
+                      class="text-sm"
+                      :class="{
+                        'text-green-200': result.result === 'allowed',
+                        'text-red-200': result.result === 'denied'
+                      }"
+                    >
+                      {{ result.explanation }}
                     </div>
                   </div>
-                  <UButton
-                    size="xs"
-                    variant="ghost"
-                    :icon="expandedPolicies.has(policy.id) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-                    @click="togglePolicy(policy.id)"
-                  />
-                </div>
-              </div>
 
-              <!-- Expanded Policy Details -->
-              <div v-if="expandedPolicies.has(policy.id)" class="border-t border-gray-700 bg-gray-900/50">
-                <div class="p-3 space-y-3">
-                  <!-- Plain Language Statements -->
-                  <div v-if="policy.enhancedStatements && policy.enhancedStatements.length > 0">
-                    <div class="text-xs font-medium text-gray-400 mb-2">Policy Statements:</div>
-                    <div class="space-y-2">
-                      <div
-                        v-for="(stmt, idx) in policy.enhancedStatements"
-                        :key="idx"
-                        class="text-xs rounded p-2"
-                        :class="stmt.effect === 'Deny' ? 'bg-red-900/10 border border-red-700/20' : 'bg-green-900/10 border border-green-700/20'"
+                  <!-- Policies -->
+                  <div v-if="result.policies.length > 0" class="pl-8">
+                    <div class="text-xs text-gray-400 mb-1">
+                      {{ result.result === 'denied' ? 'Blocked by:' : 'Required by:' }}
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      <UBadge
+                        v-for="policy in result.policies"
+                        :key="policy"
+                        :color="result.result === 'denied' ? 'red' : 'blue'"
+                        variant="soft"
+                        size="xs"
                       >
-                        <div class="flex items-center gap-2 mb-1">
-                          <UBadge
-                            :color="stmt.effect === 'Deny' ? 'red' : 'green'"
-                            variant="solid"
-                            size="xs"
-                          >
-                            {{ stmt.effect }}
-                          </UBadge>
-                          <span v-if="stmt.sid" class="text-gray-500">{{ stmt.sid }}</span>
-                        </div>
-                        <div class="text-gray-300">{{ stmt.plainLanguage }}</div>
-                        <div v-if="stmt.conditionsPlainEnglish && stmt.conditionsPlainEnglish.length > 0" class="mt-2 space-y-1">
-                          <div
-                            v-for="(condition, cIdx) in stmt.conditionsPlainEnglish"
-                            :key="cIdx"
-                            class="flex items-start gap-1 text-xs text-blue-300"
-                          >
-                            <UIcon name="i-heroicons-arrow-right" class="w-3 h-3 mt-0.5 flex-shrink-0" />
-                            <span>{{ condition }}</span>
+                        {{ policy }}
+                      </UBadge>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Result Badge -->
+                <UBadge
+                  :color="result.result === 'allowed' ? 'green' : result.result === 'denied' ? 'red' : 'blue'"
+                  variant="solid"
+                >
+                  {{ result.result.toUpperCase() }}
+                </UBadge>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Policies -->
+          <div v-if="filteredPolicies.length > 0" class="border-t border-gray-700 pt-4">
+            <div class="text-sm font-medium text-gray-400 mb-3">
+              Active Security Policies ({{ filteredPolicies.length }})
+            </div>
+
+            <div class="space-y-2">
+              <div
+                v-for="policy in filteredPolicies"
+                :key="policy.id"
+                class="bg-gray-800/30 rounded-lg overflow-hidden"
+              >
+                <div class="p-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                      <div class="font-medium text-white mb-1">{{ policy.name }}</div>
+                      <div class="text-xs text-gray-400 mb-2">
+                        {{ policy.source === 'direct' ? '📌 Direct' : '⬇️ Inherited' }} from {{ policy.attachedAt }}
+                        • {{ policy.statementCount }} statements
+                      </div>
+                      <div v-if="policy.description" class="text-xs text-gray-500 mb-2">
+                        {{ policy.description }}
+                      </div>
+                    </div>
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      :icon="expandedPolicies.has(policy.id) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+                      @click="togglePolicy(policy.id)"
+                    />
+                  </div>
+                </div>
+
+                <!-- Expanded Policy Details -->
+                <div v-if="expandedPolicies.has(policy.id)" class="border-t border-gray-700 bg-gray-900/50">
+                  <div class="p-3 space-y-3">
+                    <!-- Plain Language Statements -->
+                    <div v-if="policy.enhancedStatements && policy.enhancedStatements.length > 0">
+                      <div class="text-xs font-medium text-gray-400 mb-2">Policy Statements:</div>
+                      <div class="space-y-2">
+                        <div
+                          v-for="(stmt, idx) in policy.enhancedStatements"
+                          :key="idx"
+                          class="text-xs rounded p-2"
+                          :class="stmt.effect === 'Deny' ? 'bg-red-900/10 border border-red-700/20' : 'bg-green-900/10 border border-green-700/20'"
+                        >
+                          <div class="flex items-center gap-2 mb-1">
+                            <UBadge
+                              :color="stmt.effect === 'Deny' ? 'red' : 'green'"
+                              variant="solid"
+                              size="xs"
+                            >
+                              {{ stmt.effect }}
+                            </UBadge>
+                            <span v-if="stmt.sid" class="text-gray-500">{{ stmt.sid }}</span>
+                          </div>
+                          <div class="text-gray-300">{{ stmt.plainLanguage }}</div>
+                          <div v-if="stmt.conditionsPlainEnglish && stmt.conditionsPlainEnglish.length > 0" class="mt-2 space-y-1">
+                            <div
+                              v-for="(condition, cIdx) in stmt.conditionsPlainEnglish"
+                              :key="cIdx"
+                              class="flex items-start gap-1 text-xs text-blue-300"
+                            >
+                              <UIcon name="i-heroicons-arrow-right" class="w-3 h-3 mt-0.5 flex-shrink-0" />
+                              <span>{{ condition }}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <!-- Raw JSON Toggle -->
-                  <div class="pt-2 border-t border-gray-700">
-                    <button
-                      @click="toggleRawPolicy(policy.id)"
-                      class="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1"
-                    >
-                      <UIcon
-                        :name="showRawPolicies.has(policy.id) ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
-                        class="w-4 h-4"
-                      />
-                      {{ showRawPolicies.has(policy.id) ? 'Hide' : 'Show' }} Raw JSON
-                    </button>
-                  </div>
-
-                  <!-- Raw JSON -->
-                  <div v-if="showRawPolicies.has(policy.id)" class="relative">
-                    <button
-                      @click="copyPolicyJson(policy)"
-                      class="absolute top-2 right-2 z-10"
-                    >
-                      <UButton
-                        size="xs"
-                        icon="i-heroicons-clipboard-document"
-                        variant="soft"
-                        color="gray"
+                    <!-- Raw JSON Toggle -->
+                    <div class="pt-2 border-t border-gray-700">
+                      <button
+                        @click="toggleRawPolicy(policy.id)"
+                        class="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1"
                       >
-                        Copy
-                      </UButton>
-                    </button>
-                    <pre class="bg-gray-950 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">{{ formatPolicyJson(policy) }}</pre>
+                        <UIcon
+                          :name="showRawPolicies.has(policy.id) ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                          class="w-4 h-4"
+                        />
+                        {{ showRawPolicies.has(policy.id) ? 'Hide' : 'Show' }} Raw JSON
+                      </button>
+                    </div>
+
+                    <!-- Raw JSON -->
+                    <div v-if="showRawPolicies.has(policy.id)" class="relative">
+                      <button
+                        @click="copyPolicyJson(policy)"
+                        class="absolute top-2 right-2 z-10"
+                      >
+                        <UButton
+                          size="xs"
+                          icon="i-heroicons-clipboard-document"
+                          variant="soft"
+                          color="neutral"
+                        >
+                          Copy
+                        </UButton>
+                      </button>
+                      <pre class="bg-gray-950 rounded p-3 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">{{ formatPolicyJson(policy) }}</pre>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <template #footer>
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-gray-500">
-            {{ analysisData ? `${analysisData.analysis.summary.totalDenials} unconditional blocks, ${analysisData.analysis.summary.totalConditionalDenials} security requirements` : '' }}
+        <template #footer>
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500">
+              {{ analysisData ? `${analysisData.analysis.summary.totalDenials} unconditional blocks, ${analysisData.analysis.summary.totalConditionalDenials} security requirements` : '' }}
+            </div>
+            <UButton color="neutral" variant="ghost" @click="isOpen = false">Close</UButton>
           </div>
-          <UButton color="gray" variant="ghost" @click="isOpen = false">Close</UButton>
-        </div>
-      </template>
-    </UCard>
+        </template>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

@@ -15,7 +15,7 @@
         </div>
         <div class="flex items-center gap-3">
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-path"
             :loading="loading"
@@ -115,7 +115,7 @@
       </div>
 
       <!-- Configuration Sections Accordion -->
-      <UAccordion :items="accordionItems" multiple>
+      <UAccordion :items="accordionItems" type="multiple" :default-value="['0']">
         <!-- Settings Section -->
         <template #settings>
           <SettingsSection :settings="settings" />
@@ -220,8 +220,7 @@ const accordionItems = [
   {
     label: 'System Settings',
     icon: 'i-heroicons-cog-6-tooth',
-    slot: 'settings',
-    defaultOpen: true
+    slot: 'settings'
   },
   {
     label: 'Alert Levels',

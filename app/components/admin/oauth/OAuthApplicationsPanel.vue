@@ -236,10 +236,10 @@ const detailData = computed(() => props.detail.data)
           @keyup.enter="applySearch"
         />
         <UTooltip text="Apply filter">
-          <UButton icon="i-heroicons-funnel" color="gray" variant="soft" square @click="applySearch" />
+          <UButton icon="i-heroicons-funnel" color="neutral" variant="soft" square @click="applySearch" />
         </UTooltip>
         <UTooltip v-if="clientIdFilter" text="Clear filter">
-          <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" square @click="clearSearch" />
+          <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" square @click="clearSearch" />
         </UTooltip>
         <UButton icon="i-heroicons-plus" color="indigo" size="sm" @click="createOpen = true">
           Create application
@@ -268,7 +268,7 @@ const detailData = computed(() => props.detail.data)
       </div>
       <UButton
         icon="i-heroicons-arrow-path"
-        color="gray"
+        color="neutral"
         variant="soft"
         size="sm"
         :loading="reconcileLoading"
@@ -307,24 +307,24 @@ const detailData = computed(() => props.detail.data)
       :hide-retry="list.unavailable"
       @retry="emit('retry')"
     >
-      <UTable :rows="applications" :columns="columns">
-        <template #name-data="{ row }">
+      <UTable :data="applications" :columns="toTableColumns(columns)">
+        <template #name-cell="{ row: { original: row } }">
           <div>
             <p class="font-medium text-gray-900 dark:text-white">{{ row.name || 'Unnamed client' }}</p>
             <code class="text-xs text-gray-500 dark:text-gray-400">{{ row.clientId }}</code>
           </div>
         </template>
-        <template #owner-data="{ row }">{{ ownerLabel(row) }}</template>
-        <template #lifecycle-data="{ row }">
+        <template #owner-cell="{ row: { original: row } }">{{ ownerLabel(row) }}</template>
+        <template #lifecycle-cell="{ row: { original: row } }">
           <UBadge :color="lifecycleMeta(row.lifecycle).color" variant="subtle" size="xs">
             {{ lifecycleMeta(row.lifecycle).label }}
           </UBadge>
         </template>
-        <template #observedUse-data="{ row }">
+        <template #observedUse-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-600 dark:text-gray-400">{{ observedUseLabel(row.observedUse) }}</span>
         </template>
-        <template #actions-data="{ row }">
-          <UButton size="xs" color="gray" variant="soft" @click="openDetail(row)">Inspect</UButton>
+        <template #actions-cell="{ row: { original: row } }">
+          <UButton size="xs" color="neutral" variant="soft" @click="openDetail(row)">Inspect</UButton>
         </template>
       </UTable>
 
@@ -335,7 +335,7 @@ const detailData = computed(() => props.detail.data)
         <UButton
           v-if="list.hasMore && list.nextCursor"
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           :loading="list.loading"
           @click="emit('loadMore', list.nextCursor)"
@@ -345,94 +345,96 @@ const detailData = computed(() => props.detail.data)
       </div>
     </OAuthViewState>
 
-    <USlideover v-model="drawerOpen" side="right" :ui="{ width: 'max-w-2xl' }">
-      <div class="flex h-full flex-col">
-        <header class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-          <div>
-            <h3 class="font-semibold text-gray-950 dark:text-white">Application detail</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Reconciled with authoritative provider state.</p>
-          </div>
-          <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" square aria-label="Close" @click="drawerOpen = false" />
-        </header>
-
-        <div class="min-h-0 flex-1 overflow-y-auto p-5">
-          <OAuthViewState
-            :loading="detail.loading"
-            :empty="false"
-            :unavailable="detail.unavailable"
-            :conflict="detail.conflict"
-            :error="detail.error"
-            label="application detail"
-            :hide-retry="detail.unavailable"
-          >
-            <div v-if="detailData" class="space-y-4">
-              <div>
-                <p class="text-base font-semibold text-gray-900 dark:text-white">{{ detailData.name || 'Unnamed client' }}</p>
-                <code class="text-xs text-gray-500 dark:text-gray-400">{{ detailData.clientId }}</code>
-              </div>
-
-              <div class="flex flex-wrap gap-2">
-                <UBadge :color="lifecycleMeta(detailData.lifecycle).color" variant="subtle" size="xs">
-                  {{ lifecycleMeta(detailData.lifecycle).label }}
-                </UBadge>
-                <UBadge color="gray" variant="subtle" size="xs">{{ detailData.type }}</UBadge>
-                <UBadge color="gray" variant="subtle" size="xs">{{ detailData.origin }}</UBadge>
-              </div>
-
-              <dl class="space-y-2 text-sm">
-                <div class="flex justify-between gap-4">
-                  <dt class="text-gray-500 dark:text-gray-400">Owner</dt>
-                  <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.owner || 'Unassigned' }}</dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                  <dt class="text-gray-500 dark:text-gray-400">Team</dt>
-                  <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.team || '—' }}</dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                  <dt class="text-gray-500 dark:text-gray-400">Purpose</dt>
-                  <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.purpose || '—' }}</dd>
-                </div>
-                <div class="flex justify-between gap-4">
-                  <dt class="text-gray-500 dark:text-gray-400">Created</dt>
-                  <dd class="text-right text-gray-800 dark:text-gray-200">{{ formatTimestamp(detailData.createdAt) }}</dd>
-                </div>
-              </dl>
-
-              <div>
-                <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Redirect URIs</h4>
-                <ul class="mt-1 space-y-1">
-                  <li v-for="uri in detailData.redirectPolicy.redirectUris" :key="uri" class="break-all text-xs text-gray-700 dark:text-gray-300">
-                    {{ uri }}
-                  </li>
-                  <li v-if="!detailData.redirectPolicy.redirectUris.length" class="text-xs text-gray-500">None registered</li>
-                </ul>
-                <p v-if="detailData.redirectPolicy.allowsLoopback" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Native loopback redirects permitted.
-                </p>
-              </div>
-
-              <div class="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Permitted resources</h4>
-                  <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">{{ detailData.permittedResources.join(', ') || 'None' }}</p>
-                </div>
-                <div>
-                  <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Permitted scopes</h4>
-                  <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">{{ detailData.permittedScopes.join(', ') || 'None' }}</p>
-                </div>
-              </div>
-
-              <p class="text-xs text-gray-500 dark:text-gray-400">{{ observedUseLabel(detailData.observedUse) }}</p>
-
-              <OAuthCoverageBadge
-                :coverage="detailData.metadata.coverage"
-                :freshness="detailData.metadata.freshness"
-                :observed-at="detailData.metadata.collectedAt"
-              />
+    <USlideover v-model:open="drawerOpen" side="right" :ui="{ content: 'max-w-2xl' }">
+      <template #content>
+        <div class="flex h-full flex-col">
+          <header class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+            <div>
+              <h3 class="font-semibold text-gray-950 dark:text-white">Application detail</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Reconciled with authoritative provider state.</p>
             </div>
-          </OAuthViewState>
+            <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" square aria-label="Close" @click="drawerOpen = false" />
+          </header>
+
+          <div class="min-h-0 flex-1 overflow-y-auto p-5">
+            <OAuthViewState
+              :loading="detail.loading"
+              :empty="false"
+              :unavailable="detail.unavailable"
+              :conflict="detail.conflict"
+              :error="detail.error"
+              label="application detail"
+              :hide-retry="detail.unavailable"
+            >
+              <div v-if="detailData" class="space-y-4">
+                <div>
+                  <p class="text-base font-semibold text-gray-900 dark:text-white">{{ detailData.name || 'Unnamed client' }}</p>
+                  <code class="text-xs text-gray-500 dark:text-gray-400">{{ detailData.clientId }}</code>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                  <UBadge :color="lifecycleMeta(detailData.lifecycle).color" variant="subtle" size="xs">
+                    {{ lifecycleMeta(detailData.lifecycle).label }}
+                  </UBadge>
+                  <UBadge color="neutral" variant="subtle" size="xs">{{ detailData.type }}</UBadge>
+                  <UBadge color="neutral" variant="subtle" size="xs">{{ detailData.origin }}</UBadge>
+                </div>
+
+                <dl class="space-y-2 text-sm">
+                  <div class="flex justify-between gap-4">
+                    <dt class="text-gray-500 dark:text-gray-400">Owner</dt>
+                    <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.owner || 'Unassigned' }}</dd>
+                  </div>
+                  <div class="flex justify-between gap-4">
+                    <dt class="text-gray-500 dark:text-gray-400">Team</dt>
+                    <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.team || '—' }}</dd>
+                  </div>
+                  <div class="flex justify-between gap-4">
+                    <dt class="text-gray-500 dark:text-gray-400">Purpose</dt>
+                    <dd class="text-right text-gray-800 dark:text-gray-200">{{ detailData.ownership.purpose || '—' }}</dd>
+                  </div>
+                  <div class="flex justify-between gap-4">
+                    <dt class="text-gray-500 dark:text-gray-400">Created</dt>
+                    <dd class="text-right text-gray-800 dark:text-gray-200">{{ formatTimestamp(detailData.createdAt) }}</dd>
+                  </div>
+                </dl>
+
+                <div>
+                  <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Redirect URIs</h4>
+                  <ul class="mt-1 space-y-1">
+                    <li v-for="uri in detailData.redirectPolicy.redirectUris" :key="uri" class="break-all text-xs text-gray-700 dark:text-gray-300">
+                      {{ uri }}
+                    </li>
+                    <li v-if="!detailData.redirectPolicy.redirectUris.length" class="text-xs text-gray-500">None registered</li>
+                  </ul>
+                  <p v-if="detailData.redirectPolicy.allowsLoopback" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Native loopback redirects permitted.
+                  </p>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Permitted resources</h4>
+                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">{{ detailData.permittedResources.join(', ') || 'None' }}</p>
+                  </div>
+                  <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Permitted scopes</h4>
+                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">{{ detailData.permittedScopes.join(', ') || 'None' }}</p>
+                  </div>
+                </div>
+
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ observedUseLabel(detailData.observedUse) }}</p>
+
+                <OAuthCoverageBadge
+                  :coverage="detailData.metadata.coverage"
+                  :freshness="detailData.metadata.freshness"
+                  :observed-at="detailData.metadata.collectedAt"
+                />
+              </div>
+            </OAuthViewState>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </section>
 </template>

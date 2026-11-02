@@ -123,7 +123,7 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
               All Scheduled Reports
             </h3>
-            <UBadge v-if="!loading" color="gray" variant="soft">
+            <UBadge v-if="!loading" color="neutral" variant="soft">
               {{ filteredReports.length }} total
             </UBadge>
           </div>
@@ -160,7 +160,7 @@
             </UButton>
             <UButton
               icon="i-heroicons-arrow-path"
-              color="gray"
+              color="neutral"
               variant="soft"
               size="sm"
               @click="refreshData"
@@ -219,12 +219,12 @@
       <!-- Reports Table -->
       <div v-else-if="filteredReports.length > 0" class="overflow-x-auto">
         <UTable
-          :rows="filteredReports"
-          :columns="columns"
+          :data="filteredReports"
+          :columns="toTableColumns(columns)"
           :loading="loading"
         >
           <!-- Report Name -->
-          <template #reportName-data="{ row }">
+          <template #reportName-cell="{ row: { original: row } }">
             <div>
               <div class="font-medium text-gray-900 dark:text-white">{{ row.reportName }}</div>
               <div v-if="row.description" class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
@@ -234,7 +234,7 @@
           </template>
 
           <!-- Owner -->
-          <template #createdBy-data="{ row }">
+          <template #createdBy-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.createdBy }}</span>
@@ -242,12 +242,12 @@
           </template>
 
           <!-- Frequency -->
-          <template #frequency-data="{ row }">
+          <template #frequency-cell="{ row: { original: row } }">
             <ScheduleDisplay :schedule="row.schedule" text-class="text-sm text-gray-700 dark:text-gray-300" />
           </template>
 
           <!-- Next Run -->
-          <template #nextRunTime-data="{ row }">
+          <template #nextRunTime-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div class="text-gray-900 dark:text-white">{{ formatDateInTimezone(row.nextRunTime, row.schedule.timezone) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -257,12 +257,12 @@
           </template>
 
           <!-- Status -->
-          <template #status-data="{ row }">
+          <template #status-cell="{ row: { original: row } }">
             <ReportStatusBadge :status="row.status" show-icon />
           </template>
 
           <!-- Last Run -->
-          <template #lastRunStatus-data="{ row }">
+          <template #lastRunStatus-cell="{ row: { original: row } }">
             <div v-if="row.lastRunTime" class="text-sm">
               <UBadge
                 :color="row.lastRunStatus === 'success' ? 'green' : 'red'"
@@ -279,15 +279,15 @@
           </template>
 
           <!-- Actions -->
-          <template #actions-data="{ row }">
-            <UDropdown :items="getRowActions(row)" :popper="{ placement: 'bottom-end' }">
+          <template #actions-cell="{ row: { original: row } }">
+            <UDropdownMenu :items="getRowActions(row)" :content="{ side: 'bottom', align: 'end' }">
               <UButton
                 icon="i-heroicons-ellipsis-vertical"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
               />
-            </UDropdown>
+            </UDropdownMenu>
           </template>
         </UTable>
       </div>
@@ -306,70 +306,74 @@
     </UCard>
 
     <!-- Run Now Confirmation Modal -->
-    <UModal v-model="showRunNowModal" :ui="{ width: 'sm:max-w-md' }">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Force Execute Report
-          </h3>
-        </template>
+    <UModal v-model:open="showRunNowModal" :ui="{ content: 'sm:max-w-md' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Force Execute Report
+            </h3>
+          </template>
 
-        <div class="space-y-4">
-          <p class="text-gray-700 dark:text-gray-300">
-            Are you sure you want to force execute <strong>{{ reportToRun?.reportName }}</strong>?
-          </p>
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            This will execute the report immediately and send emails to all configured recipients.
-          </p>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showRunNowModal = false"
-            >
-              Cancel
-            </UButton>
-            <UButton
-              color="blue"
-              :loading="executing"
-              @click="confirmRunNow"
-            >
-              Execute Now
-            </UButton>
+          <div class="space-y-4">
+            <p class="text-gray-700 dark:text-gray-300">
+              Are you sure you want to force execute <strong>{{ reportToRun?.reportName }}</strong>?
+            </p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              This will execute the report immediately and send emails to all configured recipients.
+            </p>
           </div>
-        </template>
-      </UCard>
+
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showRunNowModal = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                color="blue"
+                :loading="executing"
+                @click="confirmRunNow"
+              >
+                Execute Now
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Execution History Modal -->
-    <UModal v-model="showHistoryModal" :ui="{ width: 'sm:max-w-4xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ selectedReport?.reportName }} - Execution History
-            </h3>
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              size="sm"
-              @click="showHistoryModal = false"
-            />
-          </div>
-        </template>
+    <UModal v-model:open="showHistoryModal" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ selectedReport?.reportName }} - Execution History
+              </h3>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-x-mark-20-solid"
+                size="sm"
+                @click="showHistoryModal = false"
+              />
+            </div>
+          </template>
 
-        <ExecutionHistoryTable
-          :executions="executions"
-          :loading="historyLoading"
-          :error="historyError"
-          @refresh="loadHistory"
-          @view-email="handleViewEmail"
-        />
-      </UCard>
+          <ExecutionHistoryTable
+            :executions="executions"
+            :loading="historyLoading"
+            :error="historyError"
+            @refresh="loadHistory"
+            @view-email="handleViewEmail"
+          />
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Email Delivery Modal -->
@@ -379,154 +383,156 @@
     />
 
     <!-- Report Detail Modal -->
-    <UModal v-model="showDetailModal" :ui="{ width: 'sm:max-w-2xl' }">
-      <UCard v-if="selectedReport">
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                {{ selectedReport.reportName }}
-              </h3>
-              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Report Details
-              </p>
+    <UModal v-model:open="showDetailModal" :ui="{ content: 'sm:max-w-2xl' }" scrollable>
+      <template #content>
+        <UCard v-if="selectedReport">
+          <template #header>
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                  {{ selectedReport.reportName }}
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Report Details
+                </p>
+              </div>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-x-mark-20-solid"
+                size="sm"
+                @click="showDetailModal = false"
+              />
             </div>
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              size="sm"
-              @click="showDetailModal = false"
-            />
-          </div>
-        </template>
+          </template>
 
-        <div class="space-y-6">
-          <!-- Status and Schedule -->
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-              <div class="mt-1">
-                <ReportStatusBadge :status="selectedReport.status" show-icon />
-              </div>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Schedule</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white">
-                <ScheduleDisplay :schedule="selectedReport.schedule" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Timing Info -->
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Next Run</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white">
-                {{ formatDateInTimezone(selectedReport.nextRunTime, selectedReport.schedule.timezone) }}
-              </div>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Last Run</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white">
-                {{ selectedReport.lastRunTime ? formatShortDateTime(selectedReport.lastRunTime) : 'Never' }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Recipients -->
-          <div>
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Recipients</label>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <UBadge
-                v-for="recipient in selectedReport.recipients"
-                :key="recipient"
-                color="blue"
-                variant="soft"
-              >
-                {{ recipient }}
-              </UBadge>
-            </div>
-          </div>
-
-          <!-- Report Config -->
-          <div>
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Report Configuration</label>
-            <div class="mt-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 space-y-2 text-sm">
-              <div class="flex justify-between">
-                <span class="text-gray-600 dark:text-gray-400">Timeframe:</span>
-                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.timeframe }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-600 dark:text-gray-400">Format:</span>
-                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.format.toUpperCase() }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-600 dark:text-gray-400">Data Mode:</span>
-                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.dataMode }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-600 dark:text-gray-400">Accounts:</span>
-                <span class="text-gray-900 dark:text-white">
-                  {{ selectedReport.reportConfig.accounts?.length || 'All' }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Stats -->
-          <div>
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Statistics</label>
-            <div class="mt-2 grid grid-cols-3 gap-4">
-              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <div class="text-xs text-gray-600 dark:text-gray-400">Total Runs</div>
-                <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedReport.runCount }}</div>
-              </div>
-              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <div class="text-xs text-gray-600 dark:text-gray-400">Created</div>
-                <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ new Date(selectedReport.createdAt).toLocaleDateString() }}
+          <div class="space-y-6">
+            <!-- Status and Schedule -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                <div class="mt-1">
+                  <ReportStatusBadge :status="selectedReport.status" show-icon />
                 </div>
               </div>
-              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <div class="text-xs text-gray-600 dark:text-gray-400">Owner</div>
-                <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {{ selectedReport.createdBy.split('@')[0] }}
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Schedule</label>
+                <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                  <ScheduleDisplay :schedule="selectedReport.schedule" />
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <template #footer>
-          <div class="flex justify-between">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showDetailModal = false"
-            >
-              Close
-            </UButton>
-            <div class="flex gap-2">
-              <UButton
-                color="blue"
-                variant="soft"
-                icon="i-heroicons-clock"
-                @click="handleViewHistory(selectedReport); showDetailModal = false"
-              >
-                View History
-              </UButton>
-              <UButton
-                color="blue"
-                icon="i-heroicons-bolt"
-                @click="handleRunNow(selectedReport); showDetailModal = false"
-              >
-                Execute Now
-              </UButton>
+            <!-- Timing Info -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Next Run</label>
+                <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                  {{ formatDateInTimezone(selectedReport.nextRunTime, selectedReport.schedule.timezone) }}
+                </div>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Last Run</label>
+                <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                  {{ selectedReport.lastRunTime ? formatShortDateTime(selectedReport.lastRunTime) : 'Never' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Recipients -->
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Recipients</label>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <UBadge
+                  v-for="recipient in selectedReport.recipients"
+                  :key="recipient"
+                  color="blue"
+                  variant="soft"
+                >
+                  {{ recipient }}
+                </UBadge>
+              </div>
+            </div>
+
+            <!-- Report Config -->
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Report Configuration</label>
+              <div class="mt-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-gray-600 dark:text-gray-400">Timeframe:</span>
+                  <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.timeframe }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-600 dark:text-gray-400">Format:</span>
+                  <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.format.toUpperCase() }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-600 dark:text-gray-400">Data Mode:</span>
+                  <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.dataMode }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-600 dark:text-gray-400">Accounts:</span>
+                  <span class="text-gray-900 dark:text-white">
+                    {{ selectedReport.reportConfig.accounts?.length || 'All' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Statistics</label>
+              <div class="mt-2 grid grid-cols-3 gap-4">
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Total Runs</div>
+                  <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedReport.runCount }}</div>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Created</div>
+                  <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ new Date(selectedReport.createdAt).toLocaleDateString() }}
+                  </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Owner</div>
+                  <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {{ selectedReport.createdBy.split('@')[0] }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </template>
-      </UCard>
+
+          <template #footer>
+            <div class="flex justify-between">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showDetailModal = false"
+              >
+                Close
+              </UButton>
+              <div class="flex gap-2">
+                <UButton
+                  color="blue"
+                  variant="soft"
+                  icon="i-heroicons-clock"
+                  @click="handleViewHistory(selectedReport); showDetailModal = false"
+                >
+                  View History
+                </UButton>
+                <UButton
+                  color="blue"
+                  icon="i-heroicons-bolt"
+                  @click="handleRunNow(selectedReport); showDetailModal = false"
+                >
+                  Execute Now
+                </UButton>
+              </div>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>
@@ -661,20 +667,20 @@ function getRowActions(report: ScheduledReport) {
     [{
       label: 'View Details',
       icon: 'i-heroicons-eye',
-      click: () => handleViewDetails(report)
+      onSelect: () => handleViewDetails(report)
     }],
     [{
       label: 'Execute Now',
       icon: 'i-heroicons-bolt',
-      click: () => handleRunNow(report)
+      onSelect: () => handleRunNow(report)
     }, {
       label: 'View History',
       icon: 'i-heroicons-clock',
-      click: () => handleViewHistory(report)
+      onSelect: () => handleViewHistory(report)
     }, {
       label: report.status === 'paused' ? 'Resume' : 'Pause',
       icon: report.status === 'paused' ? 'i-heroicons-play' : 'i-heroicons-pause',
-      click: () => handleTogglePause(report)
+      onSelect: () => handleTogglePause(report)
     }]
   ]
 }
@@ -780,7 +786,7 @@ async function fixStuckReports() {
         title: 'Success',
         description: toastMessage,
         color: 'green',
-        timeout: 5000
+        duration: 5000
       })
 
       if (errors.length > 0) {
@@ -885,7 +891,7 @@ async function resumeAllPaused() {
       title: 'Reports Resumed',
       description: `Successfully resumed ${results.succeeded} report(s)${results.failed > 0 ? `, ${results.failed} failed` : ''}`,
       color: results.failed > 0 ? 'orange' : 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 

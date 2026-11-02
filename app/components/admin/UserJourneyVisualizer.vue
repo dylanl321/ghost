@@ -9,13 +9,13 @@
       <div class="flex items-center gap-2">
         <USelect
           v-model="timeRange"
-          :options="timeRangeOptions"
+          :items="timeRangeOptions"
           class="w-36"
           @change="fetchData"
         />
         <UButton
           icon="i-heroicons-arrow-path"
-          color="gray"
+          color="neutral"
           variant="soft"
           :loading="loading"
           @click="fetchData"
@@ -24,8 +24,8 @@
     </div>
 
     <!-- View Tabs -->
-    <UTabs v-model="activeTab" :items="tabs" class="w-full">
-      <template #item="{ item }">
+    <UTabs v-model="activeTab" :items="withIndexValues(tabs)" class="w-full" :unmount-on-hide="false">
+      <template #content="{ item }">
         <UCard class="mt-4">
           <!-- Flow Diagram View -->
           <div v-if="item.key === 'flow'" class="min-h-[500px]">

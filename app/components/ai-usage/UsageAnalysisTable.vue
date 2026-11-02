@@ -6,7 +6,7 @@
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ filteredRows.length }} {{ activeView.label.toLowerCase() }} row{{ filteredRows.length === 1 ? '' : 's' }}</p>
       </div>
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <UTabs v-model="activeIndex" :items="tabs" />
+        <UTabs v-model="activeIndex" :items="withIndexValues(tabs)" :unmount-on-hide="false" />
         <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Search current tab" size="sm" class="sm:w-64" />
       </div>
     </header>
@@ -33,7 +33,7 @@
               <td class="px-3 py-3 align-top">
                 <UTooltip :text="expanded === row.key ? 'Hide details' : 'Show details'">
                   <UButton
-                    color="gray"
+                    color="neutral"
                     variant="ghost"
                     :icon="expanded === row.key ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                     size="xs"

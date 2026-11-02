@@ -65,7 +65,7 @@
             <div class="flex items-center gap-2">
               <UButton
                 :to="`/account/${account.accountId}`"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="sm"
                 icon="i-heroicons-arrow-right"
@@ -161,7 +161,7 @@
               />
               <UButton
                 :to="`/account/${account.accountId}`"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="sm"
                 icon="i-heroicons-arrow-right"
@@ -171,7 +171,7 @@
 
           <div class="pt-4 border-t border-gray-200 dark:border-slate-700 mt-4">
             <UButton
-              color="gray"
+              color="neutral"
               variant="soft"
               @click="clearRecentAccounts"
             >
@@ -205,8 +205,9 @@
             </label>
             <USelectMenu
               v-model="maxRecentAccounts"
-              :options="[5, 10, 15, 20, 25]"
+              :items="[5, 10, 15, 20, 25]"
               @change="saveAccountSettings"
+              :search-input="false"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               How many recent accounts to remember
@@ -220,7 +221,7 @@
                 Display favorite accounts in the navigation sidebar
               </p>
             </div>
-            <UToggle v-model="showFavoritesInSidebar" @change="saveAccountSettings" />
+            <USwitch v-model="showFavoritesInSidebar" @change="saveAccountSettings" />
           </div>
 
           <div class="flex items-center justify-between">
@@ -230,7 +231,7 @@
                 Display recent accounts in the navigation sidebar
               </p>
             </div>
-            <UToggle v-model="showRecentInSidebar" @change="saveAccountSettings" />
+            <USwitch v-model="showRecentInSidebar" @change="saveAccountSettings" />
           </div>
         </div>
       </UCard>

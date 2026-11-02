@@ -13,7 +13,7 @@
           <UIcon name="i-heroicons-arrow-path" class="animate-spin mr-1 w-4 h-4" />
           Filling in missing metrics...
         </UBadge>
-        <UBadge v-else-if="status?.hasResults" color="gray" variant="soft" size="sm">
+        <UBadge v-else-if="status?.hasResults" color="neutral" variant="soft" size="sm">
           Updated {{ formatTimeAgo(status.latestAnalysis?.completedAt, { empty: 'unknown' }) }}
         </UBadge>
       </div>
@@ -191,7 +191,7 @@
           <!-- Savings Banner -->
           <UCard
             v-if="data.summary.totalPotentialMonthlySavings > 0"
-            :ui="{ body: { padding: 'p-0 sm:p-0' } }"
+            :ui="{ body: 'p-0 sm:p-0' }"
           >
             <div class="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 rounded-lg">
               <div class="flex items-center gap-3 mb-3">
@@ -250,13 +250,13 @@
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div class="text-base font-semibold text-gray-900 dark:text-white">
               Instance Details
-              <UBadge color="gray" variant="soft" size="sm" class="ml-2">
+              <UBadge color="neutral" variant="soft" size="sm" class="ml-2">
                 {{ filteredInstances.length }} instance{{ filteredInstances.length !== 1 ? 's' : '' }}
               </UBadge>
               <NuxtLink to="/support/docs#cost-optimization-guide" class="ml-2">
                 <UButton
                   icon="i-heroicons-question-mark-circle"
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   size="xs"
                   title="Learn about classifications"
@@ -270,14 +270,14 @@
                 placeholder="Search by ID or name..."
                 size="sm"
                 class="w-48"
-                :ui="{ icon: { trailing: { pointer: '' } } }"
+                :ui="{ trailing: 'pointer-events-auto' }"
               >
                 <template v-if="searchQuery" #trailing>
                   <UButton
                     icon="i-heroicons-x-mark"
-                    color="gray"
+                    color="neutral"
                     variant="link"
-                    size="2xs"
+                    size="xs"
                     @click="searchQuery = ''"
                   />
                 </template>
@@ -296,7 +296,7 @@
               <UButton
                 v-if="!showAll && nonFlaggedCount > 0 && !activeFilter"
                 size="xs"
-                color="gray"
+                color="neutral"
                 variant="soft"
                 @click="showAll = true"
               >
@@ -305,7 +305,7 @@
               <UButton
                 v-if="showAll && !activeFilter"
                 size="xs"
-                color="gray"
+                color="neutral"
                 variant="soft"
                 @click="showAll = false"
               >
@@ -379,7 +379,7 @@
                     </td>
                     <!-- Type -->
                     <td class="px-3 py-3 whitespace-nowrap">
-                      <UBadge color="gray" variant="soft" size="sm">{{ inst.instanceType }}</UBadge>
+                      <UBadge color="neutral" variant="soft" size="sm">{{ inst.instanceType }}</UBadge>
                     </td>
                     <!-- Hours Running (7d) -->
                     <td class="px-3 py-3 whitespace-nowrap">
@@ -413,7 +413,7 @@
                     <td class="px-3 py-3 whitespace-nowrap">
                       <UButton
                         size="xs"
-                        color="gray"
+                        color="neutral"
                         variant="ghost"
                         :icon="expandedIds.has(inst.instanceId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                         @click="toggleExpand(inst.instanceId)"
@@ -658,8 +658,8 @@
               Showing {{ paginationStart + 1 }}-{{ Math.min(paginationStart + pageSize, filteredInstances.length) }} of {{ filteredInstances.length }}
             </div>
             <UPagination
-              v-model="currentPage"
-              :page-count="pageSize"
+              v-model:page="currentPage"
+              :items-per-page="pageSize"
               :total="filteredInstances.length"
             />
           </div>

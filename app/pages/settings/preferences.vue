@@ -77,15 +77,14 @@
             <div class="flex gap-3">
               <USelectMenu
                 v-model="selectedTimezone"
-                :options="timezoneOptions"
-                option-attribute="label"
-                value-attribute="value"
-                searchable
-                searchable-placeholder="Search timezones..."
+                :items="timezoneOptions"
+                label-key="label"
+                value-key="value"
                 class="flex-1"
                 size="lg"
+                :search-input="{ placeholder: 'Search timezones...' }"
               >
-                <template #option="{ option }">
+                <template #item-label="{ item: option }">
                   <div class="flex items-center justify-between w-full">
                     <span>{{ option.label }}</span>
                     <span class="text-gray-400 text-sm">{{ option.offset }}</span>
@@ -130,10 +129,11 @@
             </label>
             <USelectMenu
               v-model="dateFormat"
-              :options="dateFormatOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="dateFormatOptions"
+              label-key="label"
+              value-key="value"
               size="lg"
+              :search-input="false"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Preview: {{ dateFormatPreview }}
@@ -146,12 +146,12 @@
               Time Format
             </label>
             <div class="flex gap-4">
-              <URadio
+              <RadioOption
                 v-model="timeFormat"
                 value="12h"
                 label="12-hour (3:30 PM)"
               />
-              <URadio
+              <RadioOption
                 v-model="timeFormat"
                 value="24h"
                 label="24-hour (15:30)"

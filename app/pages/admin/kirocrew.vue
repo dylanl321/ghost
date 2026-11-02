@@ -140,7 +140,7 @@ onMounted(loadHealth)
 
 <template>
   <div class="container mx-auto max-w-6xl px-6 py-8">
-    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" to="/admin">
+    <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" to="/admin">
       Back to Dashboard
     </UButton>
     <div class="mb-6">
@@ -166,32 +166,32 @@ onMounted(loadHealth)
       <div class="space-y-4">
         <UCard v-for="(record, index) in records" :key="`${record.name}-${index}`">
           <div class="grid gap-4 md:grid-cols-4">
-            <UFormGroup label="Name">
+            <UFormField label="Name">
               <UInput v-model="record.name" placeholder="kirocrew.organization" />
-            </UFormGroup>
-            <UFormGroup label="Type">
-              <USelect v-model="record.type" :options="['setting', 'file', 'secret']" />
-            </UFormGroup>
-            <UFormGroup v-if="record.type !== 'setting'" label="Media type">
+            </UFormField>
+            <UFormField label="Type">
+              <USelect v-model="record.type" :items="['setting', 'file', 'secret']" />
+            </UFormField>
+            <UFormField v-if="record.type !== 'setting'" label="Media type">
               <USelect
                 v-model="record.mediaType"
-                :options="['text/plain', 'application/json', 'application/yaml']"
+                :items="['text/plain', 'application/json', 'application/yaml']"
               />
-            </UFormGroup>
+            </UFormField>
             <div class="flex items-end justify-end">
               <UButton color="red" variant="ghost" icon="i-heroicons-trash" @click="removeRecord(index)">
                 Delete
               </UButton>
             </div>
           </div>
-          <UFormGroup class="mt-4" :label="record.type === 'secret' ? 'Secret value' : 'Value'">
+          <UFormField class="mt-4" :label="record.type === 'secret' ? 'Secret value' : 'Value'">
             <UTextarea
               v-model="record.value"
               :placeholder="record.type === 'secret' && record.configured ? 'Leave blank to preserve the current value' : ''"
               :rows="record.type === 'setting' ? 8 : 4"
               @input="record.type === 'secret' && changedSecret(record)"
             />
-          </UFormGroup>
+          </UFormField>
         </UCard>
       </div>
       <div class="mt-6 flex justify-between">

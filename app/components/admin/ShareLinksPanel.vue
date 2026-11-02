@@ -19,13 +19,13 @@
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
               All Share Links
             </h3>
-            <UBadge v-if="!shortlinksLoading" color="gray" variant="soft">
+            <UBadge v-if="!shortlinksLoading" color="neutral" variant="soft">
               {{ shortlinksTotal }} total
             </UBadge>
           </div>
           <UButton
             icon="i-heroicons-arrow-path"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
             @click="refreshShortlinks"
@@ -55,11 +55,11 @@
       <!-- Shortlinks Table -->
       <div v-else-if="shortlinks.length > 0" class="overflow-x-auto">
         <UTable
-          :rows="shortlinks"
-          :columns="shortlinksColumns"
+          :data="shortlinks"
+          :columns="toTableColumns(shortlinksColumns)"
           :loading="shortlinksLoading"
         >
-          <template #shortUrl-data="{ row }">
+          <template #shortUrl-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2 min-w-[200px]">
               <code class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded font-mono">
                 {{ row.shortUrl }}
@@ -67,14 +67,14 @@
               <UButton
                 icon="i-heroicons-clipboard-document"
                 size="xs"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 @click="copyToClipboard(row.shortUrl)"
               />
             </div>
           </template>
 
-          <template #pagePath-data="{ row }">
+          <template #pagePath-cell="{ row: { original: row } }">
             <div class="max-w-sm">
               <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
                 {{ row.pagePath }}
@@ -85,21 +85,21 @@
             </div>
           </template>
 
-          <template #visitCount-data="{ row }">
+          <template #visitCount-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <Icon name="i-heroicons-eye" class="w-4 h-4 text-gray-400" />
               <span class="font-semibold text-gray-900 dark:text-white">{{ row.visitCount }}</span>
             </div>
           </template>
 
-          <template #createdBy-data="{ row }">
+          <template #createdBy-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.createdBy || 'Unknown' }}</span>
             </div>
           </template>
 
-          <template #createdAt-data="{ row }">
+          <template #createdAt-cell="{ row: { original: row } }">
             <div class="text-sm">
               <div class="text-gray-900 dark:text-white">{{ formatDateOnly(row.createdAt) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -108,7 +108,7 @@
             </div>
           </template>
 
-          <template #lastVisited-data="{ row }">
+          <template #lastVisited-cell="{ row: { original: row } }">
             <div class="text-sm">
               <span v-if="row.lastVisited" class="text-gray-700 dark:text-gray-300">
                 {{ formatTimeAgo(row.lastVisited) }}
@@ -117,7 +117,7 @@
             </div>
           </template>
 
-          <template #actions-data="{ row }">
+          <template #actions-cell="{ row: { original: row } }">
             <UButton
               icon="i-heroicons-arrow-top-right-on-square"
               size="xs"

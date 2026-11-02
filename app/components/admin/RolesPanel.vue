@@ -56,7 +56,7 @@
                   :key="permission"
                   size="xs"
                   variant="outline"
-                  color="gray"
+                  color="neutral"
                 >
                   {{ permission }}
                 </UBadge>

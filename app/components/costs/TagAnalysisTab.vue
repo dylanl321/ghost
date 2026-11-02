@@ -14,7 +14,7 @@
 
         <div class="flex flex-wrap items-center gap-2">
           <UButton
-            color="gray"
+            color="neutral"
             variant="soft"
             icon="i-heroicons-arrow-path"
             size="sm"
@@ -25,7 +25,7 @@
           </UButton>
           <UButton
             icon="i-heroicons-arrow-down-tray"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
             :loading="isExporting"
@@ -36,7 +36,7 @@
           </UButton>
           <UButton
             icon="i-heroicons-adjustments-horizontal"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="sm"
             @click="openSettings"
@@ -51,23 +51,24 @@
           <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Tag key</label>
           <USelectMenu
             :model-value="selectedTag ?? undefined"
-            :options="tagSelectOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="tagSelectOptions"
+            value-key="value"
+            label-key="label"
             placeholder="Select a tag..."
             size="sm"
             class="w-full"
             :loading="isLoadingTags"
             @update:model-value="selectedTag = $event ?? null"
+            :search-input="false"
           />
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <UBadge color="gray" variant="soft" size="sm">
+          <UBadge color="neutral" variant="soft" size="sm">
             <UIcon name="i-heroicons-building-office" class="mr-1 h-3.5 w-3.5" />
             {{ scopeLabel }}
           </UBadge>
-          <UBadge color="gray" variant="soft" size="sm">
+          <UBadge color="neutral" variant="soft" size="sm">
             <UIcon name="i-heroicons-calendar-days" class="mr-1 h-3.5 w-3.5" />
             {{ timeframeLabel }}
           </UBadge>
@@ -75,7 +76,7 @@
             <UIcon name="i-heroicons-banknotes" class="mr-1 h-3.5 w-3.5" />
             {{ modeLabel }}
           </UBadge>
-          <UButtonGroup v-if="isCreatedBy" size="xs">
+          <UFieldGroup v-if="isCreatedBy" size="xs">
             <UButton
               :color="createdByView === 'people' ? 'blue' : 'gray'"
               :variant="createdByView === 'people' ? 'solid' : 'outline'"
@@ -90,8 +91,8 @@
             >
               All creators
             </UButton>
-          </UButtonGroup>
-          <UBadge v-else color="gray" variant="soft" size="sm">
+          </UFieldGroup>
+          <UBadge v-else color="neutral" variant="soft" size="sm">
             <UIcon name="i-heroicons-list-bullet" class="mr-1 h-3.5 w-3.5" />
             All tag values
           </UBadge>
@@ -217,23 +218,25 @@
       @saved="handleSettingsSaved"
     />
 
-    <UModal v-model="showScopeSettings" :ui="{ width: 'sm:max-w-md' }">
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-adjustments-horizontal" class="h-5 w-5 text-gray-500" />
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h3>
-          </div>
-        </template>
-        <p class="text-sm text-gray-600 dark:text-gray-300">
-          Favorites, default tags, notes, and aliases are account-specific. Select exactly one account in the account selector to view or edit its settings.
-        </p>
-        <template #footer>
-          <div class="flex justify-end">
-            <UButton color="gray" variant="soft" @click="showScopeSettings = false">Close</UButton>
-          </div>
-        </template>
-      </UCard>
+    <UModal v-model:open="showScopeSettings" :ui="{ content: 'sm:max-w-md' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-adjustments-horizontal" class="h-5 w-5 text-gray-500" />
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h3>
+            </div>
+          </template>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            Favorites, default tags, notes, and aliases are account-specific. Select exactly one account in the account selector to view or edit its settings.
+          </p>
+          <template #footer>
+            <div class="flex justify-end">
+              <UButton color="neutral" variant="soft" @click="showScopeSettings = false">Close</UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

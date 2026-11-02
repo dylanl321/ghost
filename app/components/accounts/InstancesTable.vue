@@ -6,14 +6,16 @@
           <div class="text-lg font-semibold text-gray-900 dark:text-white">EC2 Instances</div>
           <div class="flex gap-2 items-center">
             <UInput
+              class="w-auto"
               v-model="searchQuery"
               placeholder="Search instances..."
               icon="i-heroicons-magnifying-glass"
               size="sm"
             />
             <USelect
+              class="w-auto"
               v-model="stateFilter"
-              :options="stateOptions"
+              :items="stateOptions"
               size="sm"
               placeholder="All States"
             />
@@ -46,9 +48,9 @@
       No instances found
     </div>
     <div v-else class="overflow-x-auto overflow-y-auto relative" style="max-height: 600px;">
-      <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
+      <UTable :data="filteredInstances" :columns="toTableColumns(columns)" :ui="{ root: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
-      <template #instanceName-data="{ row }">
+      <template #instanceName-cell="{ row: { original: row } }">
         <NuxtLink v-if="row.resourceId" :to="`/account/${accountId}/instance/${row.resourceId}`" class="flex items-center gap-2 hover:text-primary-500 transition-colors">
           <UIcon
             :name="row.instanceState === 'running' ? 'i-heroicons-play-circle' : 'i-heroicons-stop-circle'"
@@ -68,12 +70,12 @@
       </template>
 
       <!-- Instance Type -->
-      <template #instanceType-data="{ row }">
-        <UBadge color="gray" variant="soft">{{ row.instanceType }}</UBadge>
+      <template #instanceType-cell="{ row: { original: row } }">
+        <UBadge color="neutral" variant="soft">{{ row.instanceType }}</UBadge>
       </template>
 
       <!-- State -->
-      <template #instanceState-data="{ row }">
+      <template #instanceState-cell="{ row: { original: row } }">
         <UBadge
           :color="getStateColor(row.instanceState)"
           variant="soft"
@@ -83,7 +85,7 @@
       </template>
 
       <!-- Utilization -->
-      <template #utilization-data="{ row }">
+      <template #utilization-cell="{ row: { original: row } }">
         <template v-if="getUtilizationEntry(row.resourceId)">
           <UTooltip :text="getUtilizationTooltip(row.resourceId)">
             <UBadge
@@ -99,7 +101,7 @@
       </template>
 
       <!-- IP Addresses -->
-      <template #ipAddresses-data="{ row }">
+      <template #ipAddresses-cell="{ row: { original: row } }">
         <div class="text-sm space-y-1">
           <div v-if="row.networkInfo?.privateIpAddress" class="text-gray-700 dark:text-gray-300">
             <span class="text-gray-500">Private:</span> {{ row.networkInfo.privateIpAddress }}
@@ -114,7 +116,7 @@
       </template>
 
       <!-- Last State Change -->
-      <template #configurationItemCaptureTime-data="{ row }">
+      <template #configurationItemCaptureTime-cell="{ row: { original: row } }">
         <div v-if="row.configurationItemCaptureTime" class="text-sm">
           {{ formatDateOnly(row.configurationItemCaptureTime) }}
         </div>
@@ -122,7 +124,7 @@
       </template>
 
       <!-- Pricing -->
-      <template #pricing-data="{ row }">
+      <template #pricing-cell="{ row: { original: row } }">
         <div v-if="row.pricingInfo" class="text-sm">
           <div class="font-medium text-green-400">
             ${{ row.pricingInfo.monthlyEstimate?.toFixed(2) }}
@@ -135,7 +137,7 @@
       </template>
 
       <!-- Schedule -->
-      <template #schedule-data="{ row }">
+      <template #schedule-cell="{ row: { original: row } }">
         <div v-if="row.schedulingInfo?.hasSchedule" class="space-y-1 w-[180px] min-w-[180px] max-w-[180px]">
           <UTooltip v-if="row.schedulingInfo.scheduleName" :text="row.schedulingInfo.scheduleName">
             <div class="text-sm truncate">{{ row.schedulingInfo.scheduleName }}</div>
@@ -150,7 +152,7 @@
       </template>
 
       <!-- Tags -->
-      <template #tags-data="{ row }">
+      <template #tags-cell="{ row: { original: row } }">
         <div class="flex flex-wrap gap-1">
           <UBadge
             v-if="row.metadata?.tags?.SWFactory === 'true'"
@@ -170,7 +172,7 @@
           </UBadge>
           <UBadge
             v-if="row.metadata?.environment"
-            color="gray"
+            color="neutral"
             variant="soft"
             size="xs"
           >
@@ -178,7 +180,7 @@
           </UBadge>
           <UBadge
             v-if="otherTagsCount(row) > 0"
-            color="gray"
+            color="neutral"
             variant="outline"
             size="xs"
             class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -190,36 +192,38 @@
       </template>
 
       <!-- Region -->
-      <template #region-data="{ row }">
+      <template #region-cell="{ row: { original: row } }">
         <div class="text-sm text-gray-600 dark:text-gray-400">{{ row.region }}</div>
       </template>
     </UTable>
     </div>
 
     <!-- Tags Modal -->
-    <UModal v-model="tagsModalOpen">
-      <UCard>
-        <template #header>
-          <div class="flex justify-between items-center">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
-            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="tagsModalOpen = false" />
-          </div>
-        </template>
+    <UModal v-model:open="tagsModalOpen" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex justify-between items-center">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
+              <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" @click="tagsModalOpen = false" />
+            </div>
+          </template>
 
-        <div v-if="selectedInstance?.metadata?.tags" class="space-y-2">
-          <div
-            v-for="[key, value] in Object.entries(selectedInstance.metadata.tags)"
-            :key="key"
-            class="flex justify-between items-start p-2 bg-gray-100 dark:bg-gray-800/50 rounded"
-          >
-            <div class="font-medium text-sm break-all">{{ key }}</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 ml-4 break-all">{{ value }}</div>
+          <div v-if="selectedInstance?.metadata?.tags" class="space-y-2">
+            <div
+              v-for="[key, value] in Object.entries(selectedInstance.metadata.tags)"
+              :key="key"
+              class="flex justify-between items-start p-2 bg-gray-100 dark:bg-gray-800/50 rounded"
+            >
+              <div class="font-medium text-sm break-all">{{ key }}</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 ml-4 break-all">{{ value }}</div>
+            </div>
           </div>
-        </div>
-        <div v-else class="text-center text-gray-600 dark:text-gray-400 py-4">
-          No tags found
-        </div>
-      </UCard>
+          <div v-else class="text-center text-gray-600 dark:text-gray-400 py-4">
+            No tags found
+          </div>
+        </UCard>
+      </template>
     </UModal>
   </UCard>
 </template>

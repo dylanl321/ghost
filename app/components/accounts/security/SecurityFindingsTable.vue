@@ -1,19 +1,19 @@
 <template>
   <div class="space-y-3">
     <UTable
-      :rows="paginatedRows"
-      :columns="columns"
-      :ui="{ wrapper: 'overflow-x-auto' }"
+      :data="paginatedRows"
+      :columns="toTableColumns(columns)"
+      :ui="{ root: 'overflow-x-auto' }"
     >
       <!-- Severity badge -->
-      <template #severity-data="{ row }">
+      <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="soft" size="xs" class="font-semibold">
           {{ row.severity }}
         </UBadge>
       </template>
 
       <!-- Title with expandable detail -->
-      <template #title-data="{ row }">
+      <template #title-cell="{ row: { original: row } }">
         <div>
           <button
             class="text-left text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -40,22 +40,22 @@
       </template>
 
       <!-- Product -->
-      <template #productName-data="{ row }">
+      <template #productName-cell="{ row: { original: row } }">
         <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.productName }}</span>
       </template>
 
       <!-- Resource type -->
-      <template #resourceType-data="{ row }">
+      <template #resourceType-cell="{ row: { original: row } }">
         <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ row.resourceType }}</span>
       </template>
 
       <!-- Region -->
-      <template #region-data="{ row }">
+      <template #region-cell="{ row: { original: row } }">
         <span class="text-xs text-gray-500 dark:text-gray-400">{{ row.region }}</span>
       </template>
 
       <!-- Updated at -->
-      <template #updatedAt-data="{ row }">
+      <template #updatedAt-cell="{ row: { original: row } }">
         <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateOnly(row.updatedAt) }}</span>
       </template>
     </UTable>
@@ -66,8 +66,8 @@
         Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ props.findings.length }}
       </span>
       <UPagination
-        v-model="currentPage"
-        :page-count="PAGE_SIZE"
+        v-model:page="currentPage"
+        :items-per-page="PAGE_SIZE"
         :total="props.findings.length"
         size="xs"
       />

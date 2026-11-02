@@ -4,12 +4,12 @@
       Filter Options
     </div>
 
-    <UFormGroup label="Resource ID"><UInput v-model="filters.resourceId" placeholder="Instance, bucket, or ARN prefix" /></UFormGroup>
-    <UFormGroup label="Control IDs" help="Comma-separated"><UInput v-model="controlIdsText" placeholder="EC2.1,S3.8" /></UFormGroup>
-    <UFormGroup label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-west-2" /></UFormGroup>
+    <UFormField label="Resource ID"><UInput v-model="filters.resourceId" placeholder="Instance, bucket, or ARN prefix" /></UFormField>
+    <UFormField label="Control IDs" help="Comma-separated"><UInput v-model="controlIdsText" placeholder="EC2.1,S3.8" /></UFormField>
+    <UFormField label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-west-2" /></UFormField>
 
     <!-- Severity Levels -->
-    <UFormGroup label="Severity Levels" help="Select which severity findings to include">
+    <UFormField label="Severity Levels" help="Select which severity findings to include">
       <div class="flex flex-wrap gap-2">
         <UBadge
           v-for="severity in severities"
@@ -22,10 +22,10 @@
           {{ severity.label }}
         </UBadge>
       </div>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Workflow Status -->
-    <UFormGroup label="Workflow Status" help="Filter by finding status">
+    <UFormField label="Workflow Status" help="Filter by finding status">
       <div class="flex flex-wrap gap-2">
         <UBadge
           v-for="status in workflowStatuses"
@@ -38,19 +38,18 @@
           {{ status.label }}
         </UBadge>
       </div>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Products -->
-    <UFormGroup label="Products" help="Filter by security product">
+    <UFormField label="Products" help="Filter by security product">
       <USelectMenu
         v-model="selectedProducts"
-        :options="productOptions"
+        :items="productOptions"
         multiple
-        searchable
         placeholder="Select products..."
-        value-attribute="value"
+        value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedProducts || selectedProducts.length === 0">
             All products
           </span>
@@ -59,19 +58,18 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Compliance Standards -->
-    <UFormGroup label="Compliance Standards" help="Filter by compliance framework">
+    <UFormField label="Compliance Standards" help="Filter by compliance framework">
       <USelectMenu
         v-model="selectedComplianceStandards"
-        :options="complianceOptions"
+        :items="complianceOptions"
         multiple
-        searchable
         placeholder="Select standards..."
-        value-attribute="value"
+        value-key="value"
       >
-        <template #label>
+        <template #default>
           <span v-if="!selectedComplianceStandards || selectedComplianceStandards.length === 0">
             All standards
           </span>
@@ -80,20 +78,21 @@
           </span>
         </template>
       </USelectMenu>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Lookback Period -->
-    <UFormGroup label="Lookback Period" help="How far back to search for findings">
+    <UFormField label="Lookback Period" help="How far back to search for findings">
       <USelectMenu
         v-model="filters.lookbackDays"
-        :options="lookbackOptions"
+        :items="lookbackOptions"
         placeholder="Select period..."
-        value-attribute="value"
+        value-key="value"
+        :search-input="false"
       />
-    </UFormGroup>
+    </UFormField>
 
     <!-- Active Only -->
-    <UFormGroup>
+    <UFormField>
       <div class="flex items-center gap-2">
         <UCheckbox
           :model-value="filters.activeOnly !== false"
@@ -101,7 +100,7 @@
           label="Only show active findings (exclude archived)"
         />
       </div>
-    </UFormGroup>
+    </UFormField>
 
     <!-- Quick Filters -->
     <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -133,7 +132,7 @@
         </UButton>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="clearFilters"
         >

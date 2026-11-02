@@ -9,14 +9,15 @@
           icon="i-heroicons-magnifying-glass"
           class="w-full sm:w-48 md:w-64"
         />
-        <USelectMenu
+        <USelectMenu value-key="value"
           v-model="selectedColumns"
-          :options="columnOptions"
+          :items="columnOptions"
           multiple
           placeholder="Select columns"
           class="w-48"
+          :search-input="false"
         >
-          <template #label>
+          <template #default>
             {{ selectedColumns.length }} columns
           </template>
         </USelectMenu>
@@ -35,7 +36,7 @@
         </UTooltip>
         <UButton
           icon="i-heroicons-document-arrow-down"
-          color="gray"
+          color="neutral"
           variant="outline"
           @click="exportToPDFHandler"
         >
@@ -43,7 +44,7 @@
         </UButton>
         <UButton
           icon="i-heroicons-arrow-down-tray"
-          color="gray"
+          color="neutral"
           variant="outline"
           @click="exportToCSV"
         >
@@ -51,7 +52,7 @@
         </UButton>
         <UButton
           icon="i-heroicons-arrow-path"
-          color="gray"
+          color="neutral"
           variant="ghost"
           aria-label="Refresh data"
           @click="refreshData"
@@ -131,7 +132,7 @@
                   <span :class="{ 'line-through text-gray-400 dark:text-gray-500': row.accountStatus === 'Decommissioned' }">
                     {{ getNestedValue(row, col.key) || '-' }}
                   </span>
-                  <UBadge v-if="row.accountStatus === 'Decommissioned'" color="gray" variant="subtle" size="xs">
+                  <UBadge v-if="row.accountStatus === 'Decommissioned'" color="neutral" variant="subtle" size="xs">
                     Decommissioned
                   </UBadge>
                 </span>
@@ -179,7 +180,7 @@
       <div class="flex items-center gap-2">
         <UButton
           icon="i-heroicons-chevron-left"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="sm"
           :disabled="currentPage === 1"
@@ -201,7 +202,7 @@
         
         <UButton
           icon="i-heroicons-chevron-right"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="sm"
           :disabled="currentPage === totalPages"
@@ -210,8 +211,9 @@
         
         <USelectMenu
           v-model="pageSize"
-          :options="[10, 25, 50, 100]"
+          :items="[10, 25, 50, 100]"
           class="ml-4 w-20"
+          :search-input="false"
         />
       </div>
     </div>
@@ -769,7 +771,7 @@ const generateDetailedReport = () => {
       title: 'Report Generated',
       description: `Detailed report for ${selectedAccountsData.length} accounts has been downloaded`,
       color: 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 }
@@ -853,7 +855,7 @@ const exportToPDFHandler = async () => {
         title: 'No Data',
         description: 'No data available to export',
         color: 'yellow',
-        timeout: 3000
+        duration: 3000
       })
     }
     return
@@ -966,7 +968,7 @@ const exportToPDFHandler = async () => {
       title: 'PDF Exported',
       description: `Cost report has been exported for ${dataToExport.length} accounts`,
       color: 'green',
-      timeout: 5000
+      duration: 5000
     })
   }
 }

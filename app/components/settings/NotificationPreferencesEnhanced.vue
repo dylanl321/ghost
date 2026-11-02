@@ -48,7 +48,7 @@
             <div class="font-medium text-gray-900 dark:text-white">Critical/High Severity Findings</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Alert on critical and high severity security findings</p>
           </div>
-          <UToggle v-model="prefs.criticalSecurityFindings" />
+          <USwitch v-model="prefs.criticalSecurityFindings" />
         </div>
 
         <div class="flex items-center justify-between">
@@ -56,7 +56,7 @@
             <div class="font-medium text-gray-900 dark:text-white">New Compliance Violations</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Notify when new compliance violations are detected</p>
           </div>
-          <UToggle v-model="prefs.complianceViolations" />
+          <USwitch v-model="prefs.complianceViolations" />
         </div>
 
         <div class="flex items-center justify-between">
@@ -64,7 +64,7 @@
             <div class="font-medium text-gray-900 dark:text-white">Security Score Changes</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Alert when your security score changes significantly</p>
           </div>
-          <UToggle v-model="prefs.securityScoreChanges" />
+          <USwitch v-model="prefs.securityScoreChanges" />
         </div>
       </div>
     </UCard>
@@ -89,7 +89,7 @@
             <div class="font-medium text-gray-900 dark:text-white">Pipeline Failure Notifications</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Notify when a pipeline job fails</p>
           </div>
-          <UToggle v-model="prefs.pipelineFailures" />
+          <USwitch v-model="prefs.pipelineFailures" />
         </div>
 
         <div class="flex items-center justify-between">
@@ -97,7 +97,7 @@
             <div class="font-medium text-gray-900 dark:text-white">Deployment Completion Alerts</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Notify when deployments complete successfully</p>
           </div>
-          <UToggle v-model="prefs.deploymentCompletions" />
+          <USwitch v-model="prefs.deploymentCompletions" />
         </div>
       </div>
     </UCard>
@@ -122,7 +122,7 @@
             <div class="font-medium text-gray-900 dark:text-white">Enable Email Digest</div>
             <p class="text-sm text-gray-500 dark:text-gray-400">Receive a digest email summarizing your notifications</p>
           </div>
-          <UToggle v-model="prefs.emailDigestEnabled" />
+          <USwitch v-model="prefs.emailDigestEnabled" />
         </div>
 
         <template v-if="prefs.emailDigestEnabled">
@@ -133,10 +133,11 @@
             </div>
             <USelectMenu
               v-model="prefs.emailDigestFrequency"
-              :options="digestFrequencyOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="digestFrequencyOptions"
+              label-key="label"
+              value-key="value"
               class="w-36"
+              :search-input="false"
             />
           </div>
 
@@ -147,10 +148,11 @@
             </div>
             <USelectMenu
               v-model="prefs.emailDigestTime"
-              :options="hourOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="hourOptions"
+              label-key="label"
+              value-key="value"
               class="w-36"
+              :search-input="false"
             />
           </div>
 
@@ -161,10 +163,11 @@
             </div>
             <USelectMenu
               v-model="prefs.emailDigestDay"
-              :options="dayOptions"
-              option-attribute="label"
-              value-attribute="value"
+              :items="dayOptions"
+              label-key="label"
+              value-key="value"
               class="w-36"
+              :search-input="false"
             />
           </div>
         </template>
@@ -200,11 +203,11 @@
         </div>
 
         <div class="flex gap-3">
-          <UDropdown :items="muteOptions" :popper="{ placement: 'bottom-start' }">
-            <UButton icon="i-heroicons-bell-slash" color="gray" variant="outline" :loading="muting">
+          <UDropdownMenu :items="muteOptions" :content="{ side: 'bottom', align: 'start' }">
+            <UButton icon="i-heroicons-bell-slash" color="neutral" variant="outline" :loading="muting">
               Mute Notifications
             </UButton>
-          </UDropdown>
+          </UDropdownMenu>
 
           <UButton icon="i-heroicons-trash" color="red" variant="outline" @click="showClearConfirm = true" :loading="clearing">
             Clear All
@@ -214,21 +217,23 @@
     </UCard>
 
     <!-- Clear Confirmation Modal -->
-    <UModal v-model="showClearConfirm">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold">Clear All Notifications</h3>
-        </template>
-        <p class="text-gray-600 dark:text-gray-400">
-          This will permanently delete all your notifications. This action cannot be undone.
-        </p>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton variant="ghost" @click="showClearConfirm = false">Cancel</UButton>
-            <UButton color="red" @click="clearAll" :loading="clearing">Delete All</UButton>
-          </div>
-        </template>
-      </UCard>
+    <UModal v-model:open="showClearConfirm" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold">Clear All Notifications</h3>
+          </template>
+          <p class="text-gray-600 dark:text-gray-400">
+            This will permanently delete all your notifications. This action cannot be undone.
+          </p>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton variant="ghost" @click="showClearConfirm = false">Cancel</UButton>
+              <UButton color="red" @click="clearAll" :loading="clearing">Delete All</UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Save Button -->
@@ -286,9 +291,9 @@ const dayOptions = [
 ]
 
 const muteOptions = [[
-  { label: '1 hour', click: () => mute('1h') },
-  { label: '4 hours', click: () => mute('4h') },
-  { label: 'Until tomorrow', click: () => mute('24h') }
+  { label: '1 hour', onSelect: () => mute('1h') },
+  { label: '4 hours', onSelect: () => mute('4h') },
+  { label: 'Until tomorrow', onSelect: () => mute('24h') }
 ]]
 
 function formatMuteTime(iso: string): string {

@@ -9,27 +9,27 @@
     </ClientOnly>
 
     <!-- Table -->
-    <UTable :rows="groups" :columns="columns" :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }">
-      <template #resource_id-data="{ row }">
+    <UTable :data="groups" :columns="toTableColumns(columns)" :ui="{ td: 'text-xs', th: 'text-xs' }">
+      <template #resource_id-cell="{ row: { original: row } }">
         <UTooltip :text="row.resourceId">
           <span class="font-mono text-xs truncate max-w-[200px] block">
             {{ truncateResourceId(row.resourceId) }}
           </span>
         </UTooltip>
       </template>
-      <template #critical-data="{ row }">
+      <template #critical-cell="{ row: { original: row } }">
         <UBadge v-if="row.critical > 0" color="red" variant="soft" size="xs">{{ row.critical }}</UBadge>
         <span v-else class="text-gray-400">0</span>
       </template>
-      <template #high-data="{ row }">
+      <template #high-cell="{ row: { original: row } }">
         <UBadge v-if="row.high > 0" color="orange" variant="soft" size="xs">{{ row.high }}</UBadge>
         <span v-else class="text-gray-400">0</span>
       </template>
-      <template #medium-data="{ row }">
+      <template #medium-cell="{ row: { original: row } }">
         <UBadge v-if="row.medium > 0" color="yellow" variant="soft" size="xs">{{ row.medium }}</UBadge>
         <span v-else class="text-gray-400">0</span>
       </template>
-      <template #low-data="{ row }">
+      <template #low-cell="{ row: { original: row } }">
         <span class="text-gray-500">{{ row.low }}</span>
       </template>
     </UTable>

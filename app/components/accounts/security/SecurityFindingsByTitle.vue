@@ -2,26 +2,26 @@
   <div>
     <UTable
       v-if="groups.length > 0"
-      :rows="paginatedRows"
-      :columns="columns"
-      :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }"
+      :data="paginatedRows"
+      :columns="toTableColumns(columns)"
+      :ui="{ td: 'text-xs', th: 'text-xs' }"
     >
-      <template #title-data="{ row }">
+      <template #title-cell="{ row: { original: row } }">
         <span class="line-clamp-2">{{ row.title }}</span>
       </template>
-      <template #severity-data="{ row }">
+      <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="soft" size="xs">
           {{ row.severity }}
         </UBadge>
       </template>
-      <template #productName-data="{ row }">
+      <template #productName-cell="{ row: { original: row } }">
         <span class="text-gray-600 dark:text-gray-400">{{ row.productName }}</span>
       </template>
     </UTable>
 
     <!-- Pagination -->
     <div v-if="totalPages > 1" class="flex justify-center mt-4">
-      <UPagination v-model="currentPage" :total="groups.length" :page-count="pageSize" />
+      <UPagination v-model:page="currentPage" :total="groups.length" :items-per-page="pageSize" />
     </div>
 
     <div v-if="groups.length === 0" class="flex flex-col items-center justify-center py-10 gap-2">

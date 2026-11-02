@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">Organization Pipeline Trends</div>
-        <UBadge color="gray" variant="soft" size="sm">
+        <UBadge color="neutral" variant="soft" size="sm">
           {{ dateRangeLabel }}
         </UBadge>
       </div>

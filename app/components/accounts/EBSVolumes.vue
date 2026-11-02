@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-sm font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
-        <UBadge v-if="!loading" color="gray" variant="soft">
+        <UBadge v-if="!loading" color="neutral" variant="soft">
           {{ volumes.length }} volumes
         </UBadge>
       </div>
@@ -51,9 +51,9 @@
 
       <!-- Volumes Table -->
       <div class="overflow-y-auto" style="max-height: 450px;">
-        <UTable :rows="volumes" :columns="columns">
+        <UTable :data="volumes" :columns="toTableColumns(columns)">
           <!-- Volume ID -->
-          <template #resourceId-data="{ row }">
+          <template #resourceId-cell="{ row: { original: row } }">
             <div>
               <div class="font-medium text-sm">{{ row.resourceId }}</div>
               <div class="text-xs text-gray-500">{{ row.configuration?.volumeType || 'Unknown' }}</div>
@@ -61,12 +61,12 @@
           </template>
 
           <!-- Size -->
-          <template #size-data="{ row }">
+          <template #size-cell="{ row: { original: row } }">
             <div class="text-sm">{{ row.configuration?.size || 0 }} GB</div>
           </template>
 
           <!-- State -->
-          <template #state-data="{ row }">
+          <template #state-cell="{ row: { original: row } }">
             <UBadge
               :color="row.configuration?.state === 'in-use' ? 'green' : 'yellow'"
               variant="soft"
@@ -77,14 +77,14 @@
           </template>
 
           <!-- Attached To -->
-          <template #attachedTo-data="{ row }">
+          <template #attachedTo-cell="{ row: { original: row } }">
             <div class="text-sm text-gray-600 dark:text-gray-400">
               {{ getAttachedInstance(row) || 'Not attached' }}
             </div>
           </template>
 
           <!-- Region -->
-          <template #region-data="{ row }">
+          <template #region-cell="{ row: { original: row } }">
             <div class="text-sm text-gray-600 dark:text-gray-400">{{ row.region }}</div>
           </template>
         </UTable>
@@ -93,7 +93,7 @@
       <div v-if="hasMore" class="text-center mt-4">
         <UButton
           :loading="loadingMore"
-          color="gray"
+          color="neutral"
           variant="soft"
           @click="loadMore"
         >

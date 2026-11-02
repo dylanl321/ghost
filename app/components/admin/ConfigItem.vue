@@ -47,7 +47,7 @@
           <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
             {{ localValue ? 'Enabled' : 'Disabled' }}
           </span>
-          <UToggle
+          <USwitch
             :model-value="localValue"
             :disabled="!config.isEditable || saving"
             @update:model-value="handleBooleanChange"
@@ -120,7 +120,7 @@
           <UTooltip text="Reset to default">
             <UButton
               icon="i-heroicons-arrow-uturn-left"
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               :disabled="!config.isEditable || saving || isDefaultValue"

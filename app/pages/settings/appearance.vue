@@ -115,7 +115,7 @@
                 Start with the sidebar collapsed on page load
               </p>
             </div>
-            <UToggle v-model="sidebarCollapsed" @change="saveSidebarPreference" />
+            <USwitch v-model="sidebarCollapsed" @change="saveSidebarPreference" />
           </div>
 
           <div class="flex items-center justify-between">
@@ -125,7 +125,7 @@
                 Expand sidebar when hovering over it
               </p>
             </div>
-            <UToggle v-model="hoverExpand" @change="saveSidebarPreference" />
+            <USwitch v-model="hoverExpand" @change="saveSidebarPreference" />
           </div>
         </div>
       </UCard>
@@ -189,8 +189,9 @@
             </label>
             <USelectMenu
               v-model="tablePageSize"
-              :options="pageSizeOptions"
+              :items="pageSizeOptions"
               @change="saveTablePreference"
+              :search-input="false"
             />
           </div>
 
@@ -201,7 +202,7 @@
                 Alternate row colors for easier reading
               </p>
             </div>
-            <UToggle v-model="stripedTables" @change="saveTablePreference" />
+            <USwitch v-model="stripedTables" @change="saveTablePreference" />
           </div>
         </div>
       </UCard>

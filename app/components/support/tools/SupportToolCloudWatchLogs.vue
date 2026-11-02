@@ -23,7 +23,7 @@
         <UInput v-model="filterPattern" placeholder="Filter pattern (e.g., ERROR, { $.statusCode = 500 })" />
       </div>
       <div class="flex gap-4 flex-wrap items-center">
-        <USelect v-model="timeRange" :options="timeRangeOptions" class="w-40" />
+        <USelect v-model="timeRange" :items="timeRangeOptions" class="w-40" />
         <UButton color="primary" :loading="loading" :disabled="!logGroup || !supportContext.isAccountReady.value" @click="searchLogs">
           <Icon name="i-heroicons-magnifying-glass" class="w-4 h-4 mr-1" />
           Search
@@ -65,7 +65,7 @@
           Found {{ results.length }} log entries
           <span v-if="hasMore" class="text-blue-600">(more available)</span>
         </div>
-        <UButton size="xs" variant="ghost" color="gray" @click="exportLogs">
+        <UButton size="xs" variant="ghost" color="neutral" @click="exportLogs">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export
         </UButton>
@@ -187,6 +187,6 @@ function exportLogs() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `cloudwatch-logs-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Logs exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Logs exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

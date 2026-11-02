@@ -3,7 +3,7 @@
     <!-- Header with Back Button -->
     <div class="mb-6">
       <UButton
-        color="gray"
+        color="neutral"
         variant="ghost"
         icon="i-heroicons-arrow-left"
         @click="navigateTo('/admin')"
@@ -28,8 +28,9 @@
     <!-- Tabs -->
     <UTabs
       v-model="activeTab"
-      :items="tabs"
+      :items="withIndexValues(tabs)"
       class="mb-6"
+      :unmount-on-hide="false"
     />
 
     <!-- Tab Content -->

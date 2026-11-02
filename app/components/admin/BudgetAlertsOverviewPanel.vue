@@ -73,7 +73,7 @@
       <template #header>
         <div class="flex items-center justify-between">
           <div class="text-lg font-semibold">Alert Level Breakdown</div>
-          <USelect v-model="selectedMonth" :options="monthOptions" class="w-40" />
+          <USelect v-model="selectedMonth" :items="monthOptions" class="w-40" />
         </div>
       </template>
 
@@ -112,9 +112,9 @@
               icon="i-heroicons-magnifying-glass"
               class="w-64"
             />
-            <USelect v-model="statusFilter" :options="statusFilterOptions" class="w-36" />
+            <USelect v-model="statusFilter" :items="statusFilterOptions" class="w-36" />
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               icon="i-heroicons-arrow-path"
               :loading="loading"
@@ -135,7 +135,7 @@
       <div v-else-if="error" class="flex flex-col items-center justify-center py-12 text-center">
         <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-red-500 mb-4" />
         <p class="text-gray-400 mb-4">{{ error }}</p>
-        <UButton color="gray" @click="fetchOverview">Try Again</UButton>
+        <UButton color="neutral" @click="fetchOverview">Try Again</UButton>
       </div>
 
       <!-- Empty State -->
@@ -147,13 +147,13 @@
       <!-- Accounts Table -->
       <UTable
         v-else
-        :rows="paginatedAccounts"
-        :columns="columns"
+        :data="paginatedAccounts"
+        :columns="toTableColumns(columns)"
         class="min-w-full"
-        :sort="{ column: 'currentSpend', direction: 'desc' }"
+        v-model:sorting="sorting"
       >
         <!-- Account Name Column -->
-        <template #accountName-data="{ row }">
+        <template #accountName-cell="{ row: { original: row } }">
           <NuxtLink
             :to="`/account/${row.accountId}`"
             class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
@@ -163,13 +163,13 @@
         </template>
 
         <!-- Alert Status Column (OK / Exceeded) with Popover -->
-        <template #alertStatus-data="{ row }">
+        <template #alertStatus-cell="{ row: { original: row } }">
           <UPopover v-if="row.alertsThisMonth > 0 || row.hasOverspend" mode="hover">
             <div class="flex items-center gap-1.5 cursor-pointer">
               <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-400" />
               <span class="text-yellow-400 hover:underline">Exceeded ({{ row.alertsThisMonth }})</span>
             </div>
-            <template #panel>
+            <template #content>
               <div class="p-3 min-w-[280px] max-w-[350px]">
                 <div class="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-200">Recent Alerts</div>
                 <div v-if="row.recentAlerts && row.recentAlerts.length > 0" class="space-y-2">
@@ -209,7 +209,7 @@
         </template>
 
         <!-- Health Column -->
-        <template #health-data="{ row }">
+        <template #health-cell="{ row: { original: row } }">
           <div class="flex items-center gap-1.5">
             <UIcon
               :name="getHealthIcon(row.status)"
@@ -221,27 +221,27 @@
         </template>
 
         <!-- Budget Column -->
-        <template #budget-data="{ row }">
+        <template #budget-cell="{ row: { original: row } }">
           <span v-if="row.budget">{{ formatCurrency(row.budget, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
         <!-- Current Spend Column -->
-        <template #currentSpend-data="{ row }">
+        <template #currentSpend-cell="{ row: { original: row } }">
           <span>{{ formatCurrency(row.currentSpend, 0) }}</span>
         </template>
 
         <!-- Forecast Column -->
-        <template #forecastedSpend-data="{ row }">
+        <template #forecastedSpend-cell="{ row: { original: row } }">
           <span v-if="row.forecastedSpend">{{ formatCurrency(row.forecastedSpend, 0) }}</span>
           <span v-else class="text-gray-500">-</span>
         </template>
 
         <!-- Utilization Progress Bar Column -->
-        <template #budgetUtilization-data="{ row }">
+        <template #budgetUtilization-cell="{ row: { original: row } }">
           <div v-if="row.budget && row.budget > 0" class="w-24">
             <UProgress
-              :value="Math.min(row.budgetUtilization || 0, 100)"
+              :model-value="Math.min(row.budgetUtilization || 0, 100)"
               :color="getBudgetUtilizationColor(row.budgetUtilization)"
               size="sm"
             />
@@ -253,8 +253,8 @@
       <!-- Pagination -->
       <div v-if="filteredAccounts.length > 0" class="flex justify-end items-center mt-4">
         <UPagination
-          v-model="page"
-          :page-count="pageCount"
+          v-model:page="page"
+          :items-per-page="pageCount"
           :total="filteredAccounts.length"
         />
       </div>
@@ -273,6 +273,7 @@ const emit = defineEmits<{
 
 // State
 const loading = ref(false)
+const sorting = ref([{ id: 'currentSpend', desc: true }])
 const error = ref<string | null>(null)
 const overview = ref<any>(null)
 

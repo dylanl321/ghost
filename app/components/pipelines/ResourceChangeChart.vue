@@ -50,10 +50,10 @@
       <!-- Expandable full table -->
       <div v-if="showAllTable" class="border-t border-gray-700 mt-4 pt-4">
         <UTable
-          :rows="paginatedTableRows"
-          :columns="tableColumns"
+          :data="paginatedTableRows"
+          :columns="toTableColumns(tableColumns)"
         >
-          <template #action-data="{ row }">
+          <template #action-cell="{ row: { original: row } }">
             <UBadge
               :color="getActionColor(row.action)"
               variant="soft"
@@ -68,8 +68,8 @@
             Showing {{ tableStart }}-{{ tableEnd }} of {{ allTableRows.length }} resources
           </div>
           <UPagination
-            v-model="tablePage"
-            :page-count="tablePageSize"
+            v-model:page="tablePage"
+            :items-per-page="tablePageSize"
             :total="allTableRows.length"
           />
         </div>

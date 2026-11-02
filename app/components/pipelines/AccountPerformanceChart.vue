@@ -15,10 +15,11 @@
           </UButton>
           <USelectMenu
             v-model="sortBy"
-            :options="sortOptions"
-            value-attribute="value"
-            option-attribute="label"
+            :items="sortOptions"
+            value-key="value"
+            label-key="label"
             class="w-40"
+            :search-input="false"
           />
         </div>
       </div>
@@ -37,10 +38,10 @@
       <!-- Table view (all, paginated) -->
       <div v-else>
         <UTable
-          :rows="paginatedAccounts"
-          :columns="accountTableColumns"
+          :data="paginatedAccounts"
+          :columns="toTableColumns(accountTableColumns)"
         >
-          <template #success_rate-data="{ row }">
+          <template #success_rate-cell="{ row: { original: row } }">
             <div class="flex items-center gap-2">
               <div class="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
                 <div class="h-full bg-green-500 rounded-full" :style="{ width: `${row.success_rate || 0}%` }" />
@@ -54,8 +55,8 @@
             Showing {{ accountTableStart }}-{{ accountTableEnd }} of {{ allSortedAccounts.length }} accounts
           </div>
           <UPagination
-            v-model="accountPage"
-            :page-count="accountPageSize"
+            v-model:page="accountPage"
+            :items-per-page="accountPageSize"
             :total="allSortedAccounts.length"
           />
         </div>

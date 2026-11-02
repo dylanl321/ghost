@@ -17,7 +17,7 @@
 
     <!-- Array of strings -->
     <div v-else-if="isStringArray(value)" class="flex flex-wrap gap-1">
-      <UBadge v-for="(item, i) in (value as string[])" :key="i" color="gray" variant="soft" size="xs">
+      <UBadge v-for="(item, i) in (value as string[])" :key="i" color="neutral" variant="soft" size="xs">
         {{ item }}
       </UBadge>
       <span v-if="!(value as string[]).length" class="text-sm text-gray-500 italic">None</span>

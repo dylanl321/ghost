@@ -19,7 +19,7 @@
     <div v-else class="space-y-1.5">
       <div class="flex items-center gap-2 mb-2">
         <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400">Service Breakdown</h4>
-        <UBadge color="gray" variant="soft" size="xs">Exact billable</UBadge>
+        <UBadge color="neutral" variant="soft" size="xs">Exact billable</UBadge>
       </div>
       <template v-for="svc in services" :key="svc.name">
         <div

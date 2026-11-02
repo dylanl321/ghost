@@ -103,7 +103,7 @@ export function useUserPreferences() {
    */
   function showAuthErrorToast(): void {
     try {
-      const toast = useToast()
+      const toast = useAppToast()
       const { requireAuth } = useAuthRedirect()
 
       toast.add({
@@ -112,10 +112,10 @@ export function useUserPreferences() {
         description: 'Your session may have expired. Click to refresh your login.',
         color: 'amber',
         icon: 'i-heroicons-exclamation-triangle',
-        timeout: 0, // Don't auto-dismiss
+        duration: 0, // Don't auto-dismiss
         actions: [{
           label: 'Refresh Login',
-          click: () => {
+          onClick: () => {
             requireAuth()
           }
         }, {

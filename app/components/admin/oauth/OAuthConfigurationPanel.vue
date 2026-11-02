@@ -108,7 +108,7 @@ function releaseValue(value?: string) {
           <template #header>
             <div class="flex items-center justify-between">
               <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Settings</h3>
-              <UBadge color="gray" variant="subtle" size="xs">
+              <UBadge color="neutral" variant="subtle" size="xs">
                 <UIcon name="i-heroicons-lock-closed" class="mr-1 size-3" />
                 Read-only
               </UBadge>
@@ -126,7 +126,7 @@ function releaseValue(value?: string) {
                 <UBadge :color="provenanceMeta(setting.value.provenance).color" variant="subtle" size="xs">
                   {{ provenanceMeta(setting.value.provenance).label }}
                 </UBadge>
-                <UBadge v-if="setting.value.readOnly" color="gray" variant="subtle" size="xs">Read-only</UBadge>
+                <UBadge v-if="setting.value.readOnly" color="neutral" variant="subtle" size="xs">Read-only</UBadge>
               </div>
               <span class="break-words text-sm text-gray-600 dark:text-gray-400 sm:max-w-md sm:text-right">
                 {{ displayValue(setting.value) }}
@@ -147,9 +147,9 @@ function releaseValue(value?: string) {
             >
               <div class="flex flex-wrap items-center gap-2">
                 <code class="text-xs text-gray-700 dark:text-gray-300">{{ key.keyId }}</code>
-                <UBadge color="gray" variant="subtle" size="xs">{{ key.keyType }}</UBadge>
-                <UBadge v-if="key.algorithm" color="gray" variant="subtle" size="xs">{{ key.algorithm }}</UBadge>
-                <UBadge v-if="key.use" color="gray" variant="subtle" size="xs">{{ key.use }}</UBadge>
+                <UBadge color="neutral" variant="subtle" size="xs">{{ key.keyType }}</UBadge>
+                <UBadge v-if="key.algorithm" color="neutral" variant="subtle" size="xs">{{ key.algorithm }}</UBadge>
+                <UBadge v-if="key.use" color="neutral" variant="subtle" size="xs">{{ key.use }}</UBadge>
               </div>
               <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 Rotated: {{ key.rotatedAt || 'Unknown' }} · Expires: {{ key.expiresAt || 'Unknown' }}

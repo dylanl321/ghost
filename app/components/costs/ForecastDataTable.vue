@@ -9,7 +9,7 @@
             placeholder="Quick search by account name, ID, LOB, or project type..."
             size="sm"
             icon="i-heroicons-magnifying-glass"
-            :ui="{ icon: { trailing: { pointer: '' } } }"
+            :ui="{ trailing: 'pointer-events-auto' }"
           />
         </div>
         <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
@@ -31,7 +31,7 @@
       </div>
       <div class="flex items-center gap-2">
         <!-- View Mode Toggle -->
-        <UButtonGroup size="xs">
+        <UFieldGroup size="xs">
           <UButton
             variant="ghost"
             :color="viewMode === 'detailed' ? 'primary' : 'gray'"
@@ -46,14 +46,15 @@
           >
             Grouped
           </UButton>
-        </UButtonGroup>
+        </UFieldGroup>
         
         <!-- Group By Selector -->
         <USelectMenu
           v-model="selectedGroupBy"
-          :options="groupByOptions"
+          :items="groupByOptions"
           size="xs"
           class="w-40"
+          :search-input="false"
         />
         
         <!-- Expand/Collapse All for Grouped View -->
@@ -61,7 +62,7 @@
           <UButton
             size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             icon="i-heroicons-chevron-down"
             @click="expandAllGroups"
             title="Expand all groups"
@@ -69,7 +70,7 @@
           <UButton
             size="xs"
             variant="ghost"
-            color="gray"
+            color="neutral"
             icon="i-heroicons-chevron-right"
             @click="collapseAllGroups"
             title="Collapse all groups"
@@ -79,7 +80,7 @@
         <UButton
           size="xs"
           variant="ghost"
-          color="gray"
+          color="neutral"
           icon="i-heroicons-funnel"
           @click="showFilterPanel = !showFilterPanel"
         >
@@ -409,7 +410,7 @@
                     <UButton size="xs" variant="soft" @click="exportSingleAccount(item)">
                       Export This Account
                     </UButton>
-                    <UButton size="xs" variant="soft" color="gray" @click="toggleRowExpansion(item.id)">
+                    <UButton size="xs" variant="soft" color="neutral" @click="toggleRowExpansion(item.id)">
                       Close Details
                     </UButton>
                   </div>
@@ -567,25 +568,27 @@
     </div>
 
     <!-- Clear Confirmation Dialog -->
-    <UModal v-model="showClearDialog">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Clear All Forecast Data</h3>
-        </template>
-        <p class="text-gray-700 dark:text-gray-300">
-          Are you sure you want to clear all forecast data? This action cannot be undone.
-        </p>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton variant="ghost" @click="showClearDialog = false">
-              Cancel
-            </UButton>
-            <UButton color="red" @click="clearAllData">
-              Clear All
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+    <UModal v-model:open="showClearDialog" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Clear All Forecast Data</h3>
+          </template>
+          <p class="text-gray-700 dark:text-gray-300">
+            Are you sure you want to clear all forecast data? This action cannot be undone.
+          </p>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton variant="ghost" @click="showClearDialog = false">
+                Cancel
+              </UButton>
+              <UButton color="red" @click="clearAllData">
+                Clear All
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

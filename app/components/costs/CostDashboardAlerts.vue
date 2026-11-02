@@ -9,7 +9,7 @@
           </UBadge>
         </div>
         <UButton
-          color="gray"
+          color="neutral"
           variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="loading"
@@ -35,18 +35,18 @@
     <!-- Alerts Table -->
     <UTable
       v-else
-      :rows="alerts"
-      :columns="columns"
+      :data="alerts"
+      :columns="toTableColumns(columns)"
       class="min-w-full"
-      :ui="{ td: { base: 'py-2' } }"
+      :ui="{ td: 'py-2' }"
     >
       <!-- Date Column -->
-      <template #created_at-data="{ row }">
+      <template #created_at-cell="{ row: { original: row } }">
         <span class="text-sm">{{ formatShortDateTime(row.created_at) }}</span>
       </template>
 
       <!-- Account Column -->
-      <template #account_name-data="{ row }">
+      <template #account_name-cell="{ row: { original: row } }">
         <NuxtLink
           :to="`/account/${row.account_id}`"
           class="text-sm text-blue-400 hover:text-blue-300 hover:underline truncate block max-w-[150px]"
@@ -57,21 +57,21 @@
       </template>
 
       <!-- Level Column -->
-      <template #alert_level-data="{ row }">
+      <template #alert_level-cell="{ row: { original: row } }">
         <UBadge :color="getLevelColor(row.alert_level)" variant="subtle" size="xs">
           {{ row.alert_level }}
         </UBadge>
       </template>
 
       <!-- Type Column -->
-      <template #alert_type-data="{ row }">
+      <template #alert_type-cell="{ row: { original: row } }">
         <UBadge :color="getTypeColor(row.alert_type)" variant="subtle" size="xs">
           {{ row.alert_type }}
         </UBadge>
       </template>
 
       <!-- Spend/Budget Column -->
-      <template #overspend-data="{ row }">
+      <template #overspend-cell="{ row: { original: row } }">
         <span v-if="row.overspend_amount" class="text-red-400 font-medium text-sm">
           +{{ formatCurrency(row.overspend_amount, 0) }} over
         </span>
@@ -81,17 +81,17 @@
       </template>
 
       <!-- Status Column -->
-      <template #delivery_status-data="{ row }">
+      <template #delivery_status-cell="{ row: { original: row } }">
         <UBadge :color="getStatusColor(row.delivery_status)" variant="subtle" size="xs">
           {{ row.delivery_status }}
         </UBadge>
       </template>
 
       <!-- Actions Column -->
-      <template #actions-data="{ row }">
+      <template #actions-cell="{ row: { original: row } }">
         <UButton
           v-if="row.email_body_s3_uri"
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="xs"
           icon="i-heroicons-envelope"
@@ -104,43 +104,45 @@
     </UTable>
 
     <!-- Email Preview Slideover -->
-    <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
-      <div class="flex flex-col h-full">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
-          </div>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="showEmailModal = false"
-          />
-        </div>
-
-        <!-- Loading -->
-        <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
-        </div>
-
-        <!-- Email Content -->
-        <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
-          <div class="bg-white rounded-lg h-full">
-            <iframe
-              :srcdoc="emailHtml"
-              class="w-full h-full rounded-lg"
-              sandbox="allow-same-origin"
+    <USlideover v-model:open="showEmailModal" :ui="{ content: 'max-w-3xl' }">
+      <template #content>
+        <div class="flex flex-col h-full">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
+              <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
+            </div>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              @click="showEmailModal = false"
             />
           </div>
-        </div>
 
-        <!-- Error State -->
-        <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          <!-- Loading -->
+          <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+          </div>
+
+          <!-- Email Content -->
+          <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
+            <div class="bg-white rounded-lg h-full">
+              <iframe
+                :srcdoc="emailHtml"
+                class="w-full h-full rounded-lg"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div v-else class="flex-1 flex items-center justify-center">
+            <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+          </div>
         </div>
-      </div>
+      </template>
     </USlideover>
   </UCard>
 </template>

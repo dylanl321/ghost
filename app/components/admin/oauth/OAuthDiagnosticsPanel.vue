@@ -157,9 +157,9 @@ onBeforeUnmount(() => admin.resetDiagnostics())
           </div>
         </div>
 
-        <UFormGroup label="Reason" required hint="Recorded in the operation audit trail.">
+        <UFormField label="Reason" required hint="Recorded in the operation audit trail.">
           <UInput v-model="reason" placeholder="Why these checks are being run" aria-label="Reason" />
-        </UFormGroup>
+        </UFormField>
 
         <div class="flex items-center gap-2">
           <UButton :disabled="!canRun" :loading="diagnostics.creating" icon="i-heroicons-play" @click="runDiagnostic">
@@ -219,7 +219,7 @@ onBeforeUnmount(() => admin.resetDiagnostics())
           >
             {{ outcomeMeta(job.results.find(result => result.check === check)!.outcome).label }}
           </UBadge>
-          <UBadge v-else color="gray" variant="subtle" size="xs">Waiting</UBadge>
+          <UBadge v-else color="neutral" variant="subtle" size="xs">Waiting</UBadge>
         </li>
       </ul>
     </div>

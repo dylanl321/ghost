@@ -13,7 +13,7 @@
           Admin
         </span>
         <UButton
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="sm"
           :icon="sidebarCollapsed ? 'i-heroicons-chevron-right' : 'i-heroicons-chevron-left'"
@@ -31,16 +31,16 @@
           placeholder="Search panels..."
           icon="i-heroicons-magnifying-glass"
           size="sm"
-          :ui="{ icon: { trailing: { pointer: '' } } }"
+          :ui="{ trailing: 'pointer-events-auto' }"
           @focus="showSearchResults = true"
           @keydown="handleSearchKeydown"
         >
           <template v-if="searchQuery" #trailing>
             <UButton
-              color="gray"
+              color="neutral"
               variant="link"
               icon="i-heroicons-x-mark"
-              :padded="false"
+              :ui="{ base: 'p-0' }"
               size="xs"
               @click="clearSearch"
             />
@@ -48,7 +48,7 @@
         </UInput>
         <UButton
           v-else
-          color="gray"
+          color="neutral"
           variant="ghost"
           icon="i-heroicons-magnifying-glass"
           size="sm"

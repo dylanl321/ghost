@@ -27,7 +27,7 @@
         <UTooltip text="Export trend data as CSV">
           <UButton
             icon="i-heroicons-arrow-down-tray"
-            color="gray"
+            color="neutral"
             variant="ghost"
             size="xs"
             @click="exportTrendCSV"

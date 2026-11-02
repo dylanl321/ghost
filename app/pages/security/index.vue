@@ -13,7 +13,7 @@
         <UTooltip text="Recompute from Security Hub (takes ~30-60s)">
           <UButton
             icon="i-heroicons-arrow-path"
-            color="gray"
+            color="neutral"
             variant="soft"
             :loading="loading"
             @click="refreshData"
@@ -36,7 +36,7 @@
           </template>
 
           <div class="space-y-4">
-            <UProgress :value="progress.percent" />
+            <UProgress :model-value="progress.percent" />
 
             <p class="text-sm text-gray-600 dark:text-gray-300">
               {{ progress.message || 'Initializing...' }}
@@ -51,7 +51,7 @@
             </div>
 
             <div v-if="progress.totalAccounts" class="flex items-center gap-2">
-              <UBadge color="gray" variant="subtle" size="xs">
+              <UBadge color="neutral" variant="subtle" size="xs">
                 {{ progress.totalAccounts }} accounts
               </UBadge>
             </div>
@@ -85,7 +85,7 @@
       />
 
       <!-- Tabbed Sections -->
-      <UTabs v-model="activeTab" :items="tabs">
+      <UTabs v-model="activeTab" :items="withIndexValues(tabs)" :unmount-on-hide="false">
         <!-- Overview Tab -->
         <template #overview>
           <div class="space-y-6 pt-4">

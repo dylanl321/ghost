@@ -13,7 +13,7 @@
       <div class="flex gap-2">
         <UButton
           icon="i-heroicons-arrow-down-tray"
-          color="gray"
+          color="neutral"
           variant="soft"
           size="sm"
           @click="exportToCSV"
@@ -64,20 +64,23 @@
             />
           </div>
           <div class="w-full sm:w-64">
-            <USelect
+            <!-- USelectMenu: v4 USelect rejects an empty-string item value -->
+            <USelectMenu
               v-model="timezoneFilter"
-              :options="[{ label: 'All Timezones', value: '' }, ...timezoneOptions]"
+              value-key="value"
+              :search-input="false"
+              :items="[{ label: 'All Timezones', value: '' }, ...timezoneOptions]"
               size="lg"
               placeholder="Filter by timezone"
             />
           </div>
           <div class="w-full sm:w-48">
-            <USelect v-model="sortBy" :options="sortOptions" size="lg" />
+            <USelect v-model="sortBy" :items="sortOptions" size="lg" />
           </div>
           <div class="w-full sm:w-40">
             <USelect
               v-model="activityPeriod"
-              :options="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
+              :items="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
               size="lg"
               @update:model-value="loadActivityMetrics"
             />
@@ -99,7 +102,7 @@
               <Icon name="i-heroicons-x-mark" class="w-3 h-3" />
             </button>
           </UBadge>
-          <UButton size="xs" color="gray" variant="ghost" @click="searchQuery = ''; timezoneFilter = ''">
+          <UButton size="xs" color="neutral" variant="ghost" @click="searchQuery = ''; timezoneFilter = ''">
             Clear all
           </UButton>
         </div>

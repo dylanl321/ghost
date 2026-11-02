@@ -390,7 +390,7 @@ const updateBreadcrumbs = () => {
                     </UButton>
 
                     <!-- More Actions Dropdown -->
-                    <UDropdown :items="[
+                    <UDropdownMenu :items="[
                       [{
                         label: 'Access History',
                         icon: 'i-heroicons-clock',
@@ -399,13 +399,13 @@ const updateBreadcrumbs = () => {
                       [{
                         label: 'Share Profile',
                         icon: 'i-heroicons-share',
-                        click: () => {} // UserShareButton functionality would go here
+                        onSelect: () => {} // UserShareButton functionality would go here
                       }]
                     ]">
                       <UButton icon="i-heroicons-ellipsis-horizontal" variant="outline" size="sm">
                         More
                       </UButton>
-                    </UDropdown>
+                    </UDropdownMenu>
                   </div>
                 </div>
               </div>
@@ -459,7 +459,7 @@ const updateBreadcrumbs = () => {
                       v-for="tag in userTags"
                       :key="tag.title"
                       :text="tag.description || tag.title"
-                      :popper="{ placement: 'top' }"
+                      :content="{ side: 'top' }"
                     >
                       <UBadge
                         :color="tag.color as any"
@@ -494,15 +494,16 @@ const updateBreadcrumbs = () => {
           <USelectMenu
             v-if="userAccessRef?.allRoles?.length > 5"
             v-model="userAccessRef.selectedRoleFilter"
-            :options="[
+            :items="[
               { label: 'All Roles', value: '' },
               ...userAccessRef.allRoles.map((role: string) => ({ label: role, value: role }))
             ]"
             placeholder="All Roles"
             size="sm"
             class="w-40"
-            value-attribute="value"
-            option-attribute="label"
+            value-key="value"
+            label-key="label"
+            :search-input="false"
           />
 
           <!-- View Toggle -->
@@ -523,26 +524,26 @@ const updateBreadcrumbs = () => {
           />
 
           <!-- Export Options -->
-          <UDropdown :items="[
+          <UDropdownMenu :items="[
             [{
               label: 'Detailed CSV',
               icon: 'i-heroicons-document-text',
-              click: () => userAccessRef?.exportDetailed()
+              onSelect: () => userAccessRef?.exportDetailed()
             }, {
               label: 'Summary CSV',
               icon: 'i-heroicons-document-chart-bar',
-              click: () => userAccessRef?.exportSummary()
+              onSelect: () => userAccessRef?.exportSummary()
             }],
             [{
               label: 'JSON Export',
               icon: 'i-heroicons-code-bracket',
-              click: () => userAccessRef?.exportJSON()
+              onSelect: () => userAccessRef?.exportJSON()
             }, {
               label: 'User CSV',
               icon: 'i-heroicons-user',
-              click: handleExportCSV
+              onSelect: handleExportCSV
             }]
-          ]" :popper="{ placement: 'bottom-end' }">
+          ]" :content="{ side: 'bottom', align: 'end' }">
             <UButton
               icon="i-heroicons-arrow-down-tray"
               variant="outline"
@@ -550,7 +551,7 @@ const updateBreadcrumbs = () => {
             >
               Export
             </UButton>
-          </UDropdown>
+          </UDropdownMenu>
         </div>
       </div>
 
@@ -584,7 +585,7 @@ const updateBreadcrumbs = () => {
                   />
                   <h3 class="text-lg font-semibold text-white">Inactive Accounts</h3>
                   <UBadge 
-                    color="gray" 
+                    color="neutral" 
                     variant="soft" 
                     size="sm"
                   >
@@ -631,7 +632,7 @@ const updateBreadcrumbs = () => {
                               {{ account.accountName }}
                             </h5>
                             <UBadge 
-                              color="gray" 
+                              color="neutral" 
                               variant="soft" 
                               size="xs"
                               label="Inactive"

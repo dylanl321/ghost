@@ -1,83 +1,85 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-2xl' }">
-    <UCard :ui="{ body: { padding: '' }, header: { padding: 'p-4' } }">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Add Filter</h3>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" size="sm" @click="isOpen = false" />
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-2xl' }" scrollable>
+    <template #content>
+      <UCard :ui="{ body: 'p-0 sm:p-0', header: 'p-4 sm:px-4' }">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Add Filter</h3>
+            <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" size="sm" @click="isOpen = false" />
+          </div>
+        </template>
+
+        <!-- Search filters -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <UInput
+            v-model="searchQuery"
+            placeholder="Search filters..."
+            icon="i-heroicons-magnifying-glass"
+            size="md"
+          />
         </div>
-      </template>
 
-      <!-- Search filters -->
-      <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-        <UInput
-          v-model="searchQuery"
-          placeholder="Search filters..."
-          icon="i-heroicons-magnifying-glass"
-          size="md"
-        />
-      </div>
-
-      <!-- Category tabs -->
-      <div class="border-b border-gray-200 dark:border-gray-700">
-        <div class="flex gap-1 p-2">
-          <UButton
-            v-for="tab in tabs"
-            :key="tab.key"
-            :variant="selectedTabKey === tab.key ? 'solid' : 'ghost'"
-            :color="selectedTabKey === tab.key ? 'primary' : 'gray'"
-            size="sm"
-            @click="selectedTabKey = tab.key"
-          >
-            {{ tab.label }}
-          </UButton>
-        </div>
-      </div>
-
-      <!-- Tab content -->
-      <div class="p-4 space-y-2 max-h-[400px] overflow-y-auto">
-        <div
-          v-for="config in getFilteredConfigs(selectedTabKey)"
-          :key="config.field"
-          class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-          @click="selectFilter(config)"
-        >
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <div class="font-medium text-sm text-gray-900 dark:text-white">
-                {{ config.label }}
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {{ config.description }}
-              </div>
-              <div class="flex items-center gap-2 mt-2">
-                <UBadge color="gray" variant="subtle" size="xs">
-                  {{ getFilterTypeLabel(config.type) }}
-                </UBadge>
-              </div>
-              <div
-                v-if="config.type !== 'boolean' && getValuesPreviewText(config)"
-                class="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono"
-              >
-                {{ getValuesPreviewText(config) }}
-              </div>
-            </div>
+        <!-- Category tabs -->
+        <div class="border-b border-gray-200 dark:border-gray-700">
+          <div class="flex gap-1 p-2">
             <UButton
-              icon="i-heroicons-plus"
-              size="xs"
-              color="emerald"
-              variant="soft"
-            />
+              v-for="tab in tabs"
+              :key="tab.key"
+              :variant="selectedTabKey === tab.key ? 'solid' : 'ghost'"
+              :color="selectedTabKey === tab.key ? 'primary' : 'gray'"
+              size="sm"
+              @click="selectedTabKey = tab.key"
+            >
+              {{ tab.label }}
+            </UButton>
           </div>
         </div>
 
-        <!-- Empty state -->
-        <div v-if="getFilteredConfigs(selectedTabKey).length === 0" class="text-center py-8 text-gray-500">
-          <UIcon name="i-heroicons-funnel" class="w-8 h-8 mx-auto mb-2" />
-          <p>No filters found</p>
+        <!-- Tab content -->
+        <div class="p-4 space-y-2 max-h-[400px] overflow-y-auto">
+          <div
+            v-for="config in getFilteredConfigs(selectedTabKey)"
+            :key="config.field"
+            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+            @click="selectFilter(config)"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="font-medium text-sm text-gray-900 dark:text-white">
+                  {{ config.label }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {{ config.description }}
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                  <UBadge color="neutral" variant="subtle" size="xs">
+                    {{ getFilterTypeLabel(config.type) }}
+                  </UBadge>
+                </div>
+                <div
+                  v-if="config.type !== 'boolean' && getValuesPreviewText(config)"
+                  class="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono"
+                >
+                  {{ getValuesPreviewText(config) }}
+                </div>
+              </div>
+              <UButton
+                icon="i-heroicons-plus"
+                size="xs"
+                color="emerald"
+                variant="soft"
+              />
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <div v-if="getFilteredConfigs(selectedTabKey).length === 0" class="text-center py-8 text-gray-500">
+            <UIcon name="i-heroicons-funnel" class="w-8 h-8 mx-auto mb-2" />
+            <p>No filters found</p>
+          </div>
         </div>
-      </div>
-    </UCard>
+      </UCard>
+    </template>
   </UModal>
 </template>
 

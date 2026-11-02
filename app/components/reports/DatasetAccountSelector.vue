@@ -13,7 +13,7 @@
       <div class="border-l border-gray-300 dark:border-gray-600 mx-1" />
       <UButton
         size="xs"
-        color="gray"
+        color="neutral"
         variant="soft"
         @click="selectCommercial"
       >
@@ -21,7 +21,7 @@
       </UButton>
       <UButton
         size="xs"
-        color="gray"
+        color="neutral"
         variant="soft"
         @click="selectGovCloud"
       >

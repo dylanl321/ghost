@@ -313,8 +313,8 @@
         color="red"
         variant="soft"
         :title="error"
-        :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
-        @close="error = null"
+        :close="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }"
+        @update:open="error = null"
       />
     </div>
   </UCard>

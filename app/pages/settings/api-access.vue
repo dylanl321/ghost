@@ -27,9 +27,9 @@
         <template #header><h2 class="text-lg font-semibold">Developer resources</h2></template>
         <div class="grid gap-3 sm:grid-cols-2">
           <UButton to="/api/swagger-ui" target="_blank" icon="i-heroicons-code-bracket-square">Swagger UI</UButton>
-          <UButton to="/api/swagger.json" target="_blank" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray">Raw OpenAPI</UButton>
-          <UButton to="/support/docs#api-keys-guide" color="gray" variant="soft" icon="i-heroicons-book-open">API key guide</UButton>
-          <UButton to="/support/docs#swagger-ui-guide" color="gray" variant="soft" icon="i-heroicons-question-mark-circle">Swagger guide</UButton>
+          <UButton to="/api/swagger.json" target="_blank" color="neutral" variant="soft" icon="i-heroicons-arrow-down-tray">Raw OpenAPI</UButton>
+          <UButton to="/support/docs#api-keys-guide" color="neutral" variant="soft" icon="i-heroicons-book-open">API key guide</UButton>
+          <UButton to="/support/docs#swagger-ui-guide" color="neutral" variant="soft" icon="i-heroicons-question-mark-circle">Swagger guide</UButton>
         </div>
       </UCard>
     </section>

@@ -7,7 +7,7 @@
     <div class="flex gap-4 flex-wrap">
       <UInput v-model="resourceId" placeholder="Resource ID (e.g., i-1234567890abcdef0)" class="w-64" />
       <UInput v-model="userName" placeholder="IAM user or role name" class="w-64" />
-      <USelect v-model="hoursBack" :options="hoursBackOptions" class="w-40" />
+      <USelect v-model="hoursBack" :items="hoursBackOptions" class="w-40" />
       <UButton color="primary" :loading="loading" :disabled="!supportContext.isAccountReady.value || (!resourceId && !userName)" @click="fetchAccessAudit">
         <Icon name="i-heroicons-eye" class="w-4 h-4 mr-1" />
         Audit
@@ -54,7 +54,7 @@
       <div v-if="data.topUsers.length > 0" class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
         <div class="flex items-center justify-between mb-2">
           <h4 class="font-medium text-gray-900 dark:text-white">Top Users</h4>
-          <UButton size="xs" variant="ghost" color="gray" @click="exportData">
+          <UButton size="xs" variant="ghost" color="neutral" @click="exportData">
             <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
             Export
           </UButton>
@@ -124,6 +124,6 @@ function exportData() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `access-audit-${supportContext.state.accountId}-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Audit data exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Audit data exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

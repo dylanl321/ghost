@@ -13,13 +13,13 @@
         </div>
         <div class="w-40">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-          <USelectMenu v-model="filters.category" :options="categoryOptions" placeholder="All" />
+          <USelectMenu value-key="value" v-model="filters.category" :items="categoryOptions" placeholder="All" :search-input="false" />
         </div>
         <div class="w-36">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-          <USelectMenu v-model="filters.status" :options="statusOptions" placeholder="All" />
+          <USelectMenu value-key="value" v-model="filters.status" :items="statusOptions" placeholder="All" :search-input="false" />
         </div>
-        <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications" :loading="loading">
+        <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications()" :loading="loading">
           Search
         </UButton>
       </div>
@@ -49,29 +49,29 @@
 
     <!-- Notifications Table -->
     <UCard>
-      <UTable :rows="notifications" :columns="columns" :loading="loading" :empty-state="{ icon: 'i-heroicons-inbox', label: 'No notifications found' }">
-        <template #userId-data="{ row }">
+      <UTable :data="notifications" :columns="toTableColumns(columns)" :loading="loading" empty="No notifications found">
+        <template #userId-cell="{ row: { original: row } }">
           <span class="text-xs font-mono truncate max-w-[160px] inline-block">{{ row.userId }}</span>
         </template>
-        <template #category-data="{ row }">
+        <template #category-cell="{ row: { original: row } }">
           <UBadge :color="getCategoryColor(row.category)" variant="subtle" size="xs">
             {{ getCategoryLabel(row.category) }}
           </UBadge>
         </template>
-        <template #severity-data="{ row }">
+        <template #severity-cell="{ row: { original: row } }">
           <UBadge :color="row.severity === 'critical' ? 'red' : row.severity === 'warning' ? 'yellow' : 'gray'" variant="subtle" size="xs">
             {{ row.severity }}
           </UBadge>
         </template>
-        <template #status-data="{ row }">
+        <template #status-cell="{ row: { original: row } }">
           <UBadge :color="row.status === 'unread' ? 'blue' : 'gray'" variant="subtle" size="xs">
             {{ row.status }}
           </UBadge>
         </template>
-        <template #emailSent-data="{ row }">
+        <template #emailSent-cell="{ row: { original: row } }">
           <Icon :name="row.emailSent ? 'i-heroicons-check-circle' : 'i-heroicons-clock'" :class="row.emailSent ? 'text-green-500' : 'text-gray-400'" class="w-5 h-5" />
         </template>
-        <template #createdAt-data="{ row }">
+        <template #createdAt-cell="{ row: { original: row } }">
           <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </UTable>

@@ -10,7 +10,7 @@ const logger = createLogger('Clipboard')
  */
 export async function copyToClipboard(text: string, successMessage?: string): Promise<boolean> {
   // Resolve the toast before the first await so the Nuxt app context is still available
-  const toast = useToast()
+  const toast = useAppToast()
   try {
     await navigator.clipboard.writeText(text)
 
@@ -18,7 +18,7 @@ export async function copyToClipboard(text: string, successMessage?: string): Pr
       title: successMessage || 'Copied to clipboard',
       icon: 'i-heroicons-check-circle',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
 
     return true
@@ -30,7 +30,7 @@ export async function copyToClipboard(text: string, successMessage?: string): Pr
       description: 'Unable to copy to clipboard',
       icon: 'i-heroicons-x-circle',
       color: 'red',
-      timeout: 3000
+      duration: 3000
     })
 
     return false

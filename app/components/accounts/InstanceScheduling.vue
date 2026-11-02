@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-sm font-semibold text-gray-900 dark:text-white">Instance Scheduling</div>
-        <UBadge v-if="!loading" color="gray" variant="soft">
+        <UBadge v-if="!loading" color="neutral" variant="soft">
           {{ instances.length }} instances
         </UBadge>
       </div>

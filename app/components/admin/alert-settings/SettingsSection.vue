@@ -18,11 +18,11 @@
                 @keyup.escape="cancelEdit"
               />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('email_domain')" :loading="savingField === 'email_domain'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm font-mono text-gray-900 dark:text-white">{{ settings.email_domain || 'Not set' }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('email_domain', settings.email_domain)" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('email_domain', settings.email_domain)" />
             </div>
           </div>
 
@@ -40,11 +40,11 @@
                 @keyup.escape="cancelEdit"
               />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('from_email')" :loading="savingField === 'from_email'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm font-mono text-gray-900 dark:text-white">{{ settings.from_email || 'Not set' }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('from_email', settings.from_email)" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('from_email', settings.from_email)" />
             </div>
           </div>
 
@@ -61,11 +61,11 @@
                 @keyup.escape="cancelEdit"
               />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('from_name')" :loading="savingField === 'from_name'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm text-gray-900 dark:text-white">{{ settings.from_name || 'Budget Alert System' }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('from_name', settings.from_name || 'Budget Alert System')" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('from_name', settings.from_name || 'Budget Alert System')" />
             </div>
           </div>
         </div>
@@ -81,16 +81,17 @@
             <div v-if="editingField === 'timezone'" class="flex items-center gap-2">
               <USelectMenu
                 v-model="editValue"
-                :options="timezoneOptions"
+                :items="timezoneOptions"
                 size="sm"
                 class="w-48"
+                :search-input="false"
               />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('timezone')" :loading="savingField === 'timezone'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm text-gray-900 dark:text-white">{{ settings.timezone || 'America/New_York' }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('timezone', settings.timezone || 'America/New_York')" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('timezone', settings.timezone || 'America/New_York')" />
             </div>
           </div>
 
@@ -116,11 +117,11 @@
                 :max="23"
               />
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveBusinessHours" :loading="savingField === 'business_hours'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm text-gray-900 dark:text-white">{{ formatHour(settings.business_hours_start ?? 8) }} - {{ formatHour(settings.business_hours_end ?? 18) }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startBusinessHoursEdit" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startBusinessHoursEdit" />
             </div>
           </div>
 
@@ -141,11 +142,11 @@
                 />
               </div>
               <UButton icon="i-heroicons-check" size="xs" color="green" @click="saveField('min_budget')" :loading="savingField === 'min_budget'" />
-              <UButton icon="i-heroicons-x-mark" size="xs" color="gray" variant="ghost" @click="cancelEdit" />
+              <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="cancelEdit" />
             </div>
             <div v-else class="flex items-center gap-2">
               <span class="text-sm text-gray-900 dark:text-white">${{ (settings.min_budget || 1000).toLocaleString() }}</span>
-              <UButton icon="i-heroicons-pencil" size="2xs" color="gray" variant="ghost" @click="startEdit('min_budget', settings.min_budget || 1000)" />
+              <UButton icon="i-heroicons-pencil" size="xs" color="neutral" variant="ghost" @click="startEdit('min_budget', settings.min_budget || 1000)" />
             </div>
           </div>
         </div>
@@ -246,7 +247,7 @@ async function saveField(field: string) {
       title: 'Saved',
       description: `${field.replace(/_/g, ' ')} updated`,
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {
@@ -291,7 +292,7 @@ async function saveBusinessHours() {
       title: 'Saved',
       description: 'Business hours updated',
       color: 'green',
-      timeout: 2000
+      duration: 2000
     })
     cancelEdit()
   } catch (e: any) {

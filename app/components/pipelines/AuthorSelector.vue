@@ -2,23 +2,22 @@
   <ClientOnly>
     <USelectMenu
       v-model="selectedAuthorEmail"
-      :options="authorOptions"
+      :items="authorOptions"
       placeholder="Filter by author..."
-      searchable
-      searchable-placeholder="Search authors..."
-      value-attribute="value"
-      :search-attributes="['label', 'email']"
+      value-key="value"
+      :filter-fields="['label', 'email']"
       :loading="loading"
       class="w-64"
+      :search-input="{ placeholder: 'Search authors...' }"
     >
-      <template #label>
+      <template #default>
         <span v-if="selectedAuthorEmail">
           {{ getSelectedAuthorLabel() }}
         </span>
         <span v-else class="text-gray-500">All Authors</span>
       </template>
 
-      <template #option="{ option }">
+      <template #item-label="{ item: option }">
         <div class="flex items-center justify-between w-full">
           <div class="flex items-center gap-2">
             <div
@@ -32,7 +31,7 @@
               <span class="text-xs text-gray-500">{{ option.email }}</span>
             </div>
           </div>
-          <UBadge size="xs" color="gray" variant="subtle">
+          <UBadge size="xs" color="neutral" variant="subtle">
             {{ option.count }}
           </UBadge>
         </div>

@@ -14,7 +14,7 @@
         </span>
       </div>
       <div class="flex items-center gap-2">
-        <UButtonGroup size="xs">
+        <UFieldGroup size="xs">
           <UButton
             :color="viewMode === 'table' ? 'primary' : 'gray'"
             @click="viewMode = 'table'"
@@ -29,15 +29,15 @@
             <Icon name="i-heroicons-code-bracket" class="w-4 h-4 mr-1" />
             JSON
           </UButton>
-        </UButtonGroup>
-        <UDropdown :items="exportMenuItems">
-          <UButton color="gray" size="xs">
+        </UFieldGroup>
+        <UDropdownMenu :items="exportMenuItems">
+          <UButton color="neutral" size="xs">
             <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
             Export
           </UButton>
-        </UDropdown>
+        </UDropdownMenu>
         <UButton
-          color="gray"
+          color="neutral"
           variant="ghost"
           size="xs"
           @click="$emit('close')"
@@ -113,7 +113,7 @@
       <div class="flex items-center gap-2">
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           :disabled="currentPage === 1"
           @click="currentPage--"
         >
@@ -124,7 +124,7 @@
         </span>
         <UButton
           size="xs"
-          color="gray"
+          color="neutral"
           :disabled="currentPage === totalPages"
           @click="currentPage++"
         >
@@ -246,12 +246,12 @@ const exportMenuItems = computed(() => [
   [{
     label: 'Copy as JSON',
     icon: 'i-heroicons-clipboard-document',
-    click: () => copyToClipboard('json')
+    onSelect: () => copyToClipboard('json')
   }],
   [{
     label: 'Copy as CSV',
     icon: 'i-heroicons-table-cells',
-    click: () => copyToClipboard('csv')
+    onSelect: () => copyToClipboard('csv')
   }]
 ])
 

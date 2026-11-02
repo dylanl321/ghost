@@ -4,7 +4,7 @@
       <div class="flex items-center gap-2">
         <UIcon name="i-heroicons-star-solid" class="w-5 h-5 text-yellow-500" />
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Favorite Accounts</h2>
-        <UBadge v-if="favorites.length > 0" size="xs" color="gray" variant="subtle">{{ favorites.length }}</UBadge>
+        <UBadge v-if="favorites.length > 0" size="xs" color="neutral" variant="subtle">{{ favorites.length }}</UBadge>
       </div>
       <NuxtLink v-if="favorites.length > 0" to="/account/explorer" class="text-xs text-blue-500 hover:text-blue-400 font-medium transition-colors">
         View All →

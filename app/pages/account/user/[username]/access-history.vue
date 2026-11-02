@@ -68,9 +68,9 @@
             <label class="block text-sm font-medium text-gray-300 mb-2">Date Range</label>
             <USelect 
               v-model="selectedDateRange" 
-              :options="dateRangeOptions"
+              :items="dateRangeOptions"
               @change="loadAccessHistory"
-              color="gray"
+              color="neutral"
             />
           </div>
           
@@ -78,9 +78,9 @@
             <label class="block text-sm font-medium text-gray-300 mb-2">Event Type</label>
             <USelect 
               v-model="selectedEventType" 
-              :options="eventTypeOptions"
+              :items="eventTypeOptions"
               @change="loadAccessHistory"
-              color="gray"
+              color="neutral"
             />
           </div>
           
@@ -88,9 +88,9 @@
             <label class="block text-sm font-medium text-gray-300 mb-2">AWS Account</label>
             <USelect 
               v-model="selectedAccount" 
-              :options="accountOptions"
+              :items="accountOptions"
               @change="loadAccessHistory"
-              color="gray"
+              color="neutral"
             />
           </div>
           
@@ -98,9 +98,9 @@
             <label class="block text-sm font-medium text-gray-300 mb-2">Service</label>
             <USelect 
               v-model="selectedService" 
-              :options="serviceOptions"
+              :items="serviceOptions"
               @change="loadAccessHistory"
-              color="gray"
+              color="neutral"
             />
           </div>
         </div>
@@ -453,31 +453,31 @@
           </template>
           <div class="overflow-x-auto">
             <UTable
-              :rows="loginEvents.slice(0, 50)"
-              :columns="[
+              :data="loginEvents.slice(0, 50)"
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'sourceIPAddress', label: 'Source IP' },
                 { key: 'userAgent', label: 'User Agent' },
                 { key: 'status', label: 'Status' }
-              ]"
+              ])"
               class="w-full min-w-[800px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #sourceIPAddress-data="{ row }">
+              <template #sourceIPAddress-cell="{ row: { original: row } }">
                 <span class="text-sm text-blue-400 font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
               </template>
-              <template #userAgent-data="{ row }">
+              <template #userAgent-cell="{ row: { original: row } }">
                 <span class="text-xs text-gray-400 truncate max-w-[200px] block" :title="row.userAgent">
                   {{ row.userAgent || 'N/A' }}
                 </span>
               </template>
-              <template #status-data="{ row }">
+              <template #status-cell="{ row: { original: row } }">
                 <UBadge
                   :color="row.errorCode ? 'red' : 'green'"
                   variant="subtle"
@@ -606,26 +606,26 @@
             </div>
           </template>
           <UTable
-            :rows="serviceAnalytics.topServices"
-            :columns="[
+            :data="serviceAnalytics.topServices"
+            :columns="toTableColumns([
               { key: 'name', label: 'Service', sortable: true },
               { key: 'count', label: 'API Calls', sortable: true },
               { key: 'errors', label: 'Errors', sortable: true },
               { key: 'errorRate', label: 'Error Rate', sortable: true },
               { key: 'lastUsed', label: 'Last Used', sortable: true }
-            ]"
+            ])"
             class="w-full overflow-x-auto"
           >
-            <template #name-data="{ row }">
+            <template #name-cell="{ row: { original: row } }">
               <span class="font-medium text-white">{{ row.name }}</span>
             </template>
-            <template #count-data="{ row }">
+            <template #count-cell="{ row: { original: row } }">
               <span class="text-blue-400 font-medium">{{ row.count.toLocaleString() }}</span>
             </template>
-            <template #errors-data="{ row }">
+            <template #errors-cell="{ row: { original: row } }">
               <span :class="row.errors > 0 ? 'text-red-400' : 'text-gray-400'">{{ row.errors }}</span>
             </template>
-            <template #errorRate-data="{ row }">
+            <template #errorRate-cell="{ row: { original: row } }">
               <UBadge
                 :color="row.errorRate > 10 ? 'red' : row.errorRate > 5 ? 'yellow' : 'green'"
                 variant="subtle"
@@ -634,7 +634,7 @@
                 {{ row.errorRate }}%
               </UBadge>
             </template>
-            <template #lastUsed-data="{ row }">
+            <template #lastUsed-cell="{ row: { original: row } }">
               <span class="text-sm text-gray-400">{{ formatTimeAgo(row.lastUsed) }}</span>
             </template>
           </UTable>
@@ -758,29 +758,29 @@
           </template>
           <div class="overflow-x-auto">
             <UTable
-              :rows="securityEvents.slice(0, 50)"
-              :columns="[
+              :data="securityEvents.slice(0, 50)"
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'sourceIPAddress', label: 'Source IP' },
                 { key: 'errorCode', label: 'Error Code' },
                 { key: 'riskLevel', label: 'Risk Level' }
-              ]"
+              ])"
               class="w-full min-w-[700px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #sourceIPAddress-data="{ row }">
+              <template #sourceIPAddress-cell="{ row: { original: row } }">
                 <span class="text-sm text-blue-400 font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
               </template>
-              <template #errorCode-data="{ row }">
+              <template #errorCode-cell="{ row: { original: row } }">
                 <span class="text-sm text-red-400">{{ row.errorCode || 'None' }}</span>
               </template>
-              <template #riskLevel-data="{ row }">
+              <template #riskLevel-cell="{ row: { original: row } }">
                 <UBadge
                   :color="getRiskColor(row) as any"
                   variant="subtle"
@@ -887,29 +887,29 @@
           </template>
           <div class="overflow-x-auto">
             <UTable
-              :rows="complianceEvents.slice(0, 100)"
-              :columns="[
+              :data="complianceEvents.slice(0, 100)"
+              :columns="toTableColumns([
                 { key: 'eventTime', label: 'Time', sortable: true },
                 { key: 'eventName', label: 'Event', sortable: true },
                 { key: 'eventSource', label: 'Service', sortable: true },
                 { key: 'awsRegion', label: 'Region' },
                 { key: 'complianceCategory', label: 'Category' }
-              ]"
+              ])"
               class="w-full min-w-[700px]"
             >
-              <template #eventTime-data="{ row }">
+              <template #eventTime-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-300 whitespace-nowrap">{{ formatDateTime(row.eventTime) }}</span>
               </template>
-              <template #eventName-data="{ row }">
+              <template #eventName-cell="{ row: { original: row } }">
                 <span class="text-sm text-white truncate max-w-[150px] block">{{ row.eventName }}</span>
               </template>
-              <template #eventSource-data="{ row }">
+              <template #eventSource-cell="{ row: { original: row } }">
                 <span class="text-blue-400 text-sm">{{ getCleanServiceName(row.eventSource) }}</span>
               </template>
-              <template #awsRegion-data="{ row }">
+              <template #awsRegion-cell="{ row: { original: row } }">
                 <span class="text-sm text-gray-400">{{ row.awsRegion || 'N/A' }}</span>
               </template>
-              <template #complianceCategory-data="{ row }">
+              <template #complianceCategory-cell="{ row: { original: row } }">
                 <UBadge
                   :color="getComplianceColor(row) as any"
                   variant="subtle"
@@ -925,31 +925,31 @@
         <!-- Compliance Activity Log -->
         <div class="overflow-x-auto">
           <UTable 
-            :rows="complianceEvents" 
-            :columns="[
+            :data="complianceEvents" 
+            :columns="toTableColumns([
               { key: 'eventTime', label: 'Time', sortable: true },
               { key: 'eventName', label: 'Event', sortable: true },
               { key: 'eventSource', label: 'Service', sortable: true },
               { key: 'category', label: 'Category', sortable: true },
               { key: 'sourceIPAddress', label: 'IP Address', sortable: true }
-            ]"
+            ])"
             class="w-full min-w-[700px]"
           >
-            <template #eventTime-data="{ row }">
+            <template #eventTime-cell="{ row: { original: row } }">
               <span class="whitespace-nowrap text-sm">{{ formatTimeAgo(row.eventTime) }}</span>
             </template>
-            <template #eventName-data="{ row }">
+            <template #eventName-cell="{ row: { original: row } }">
               <span class="truncate max-w-[200px] block">{{ row.eventName }}</span>
             </template>
-            <template #eventSource-data="{ row }">
+            <template #eventSource-cell="{ row: { original: row } }">
               <span class="text-sm">{{ getCleanServiceName(row.eventSource) }}</span>
             </template>
-            <template #category-data="{ row }">
+            <template #category-cell="{ row: { original: row } }">
               <UBadge :color="getComplianceColor(getComplianceCategory(row.eventName)) as any" variant="subtle">
                 {{ getComplianceCategory(row.eventName) }}
               </UBadge>
             </template>
-            <template #sourceIPAddress-data="{ row }">
+            <template #sourceIPAddress-cell="{ row: { original: row } }">
               <span class="text-sm font-mono">{{ row.sourceIPAddress || 'N/A' }}</span>
             </template>
           </UTable>
@@ -958,66 +958,68 @@
     </div>
 
     <!-- Event Details Modal -->
-    <UModal v-model="showEventDetails" :ui="{ width: 'sm:max-w-4xl' }">
-      <UCard>
-        <template #header>
-          <div class="flex justify-between items-center">
-            <h3 class="text-lg font-semibold text-white">Event Details</h3>
-            <UButton
-              icon="i-heroicons-x-mark"
-              variant="ghost"
-              @click="showEventDetails = false"
-            />
-          </div>
-        </template>
-        
-        <div v-if="selectedEvent" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Event Name</label>
-              <p class="text-sm text-gray-100">{{ selectedEvent.eventName }}</p>
+    <UModal v-model:open="showEventDetails" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex justify-between items-center">
+              <h3 class="text-lg font-semibold text-white">Event Details</h3>
+              <UButton
+                icon="i-heroicons-x-mark"
+                variant="ghost"
+                @click="showEventDetails = false"
+              />
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Event Time</label>
-              <p class="text-sm text-gray-100">{{ formatDateTime(selectedEvent.eventTime) }}</p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Service</label>
-              <p class="text-sm text-gray-100">{{ selectedEvent.eventSource }}</p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Region</label>
-              <p class="text-sm text-gray-100">{{ selectedEvent.awsRegion }}</p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Account ID</label>
-              <p class="text-sm text-gray-100">{{ selectedEvent.accountId }}</p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Source IP</label>
-              <p class="text-sm text-gray-100">{{ selectedEvent.sourceIPAddress }}</p>
-            </div>
-          </div>
+          </template>
           
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">User Identity</label>
-            <pre class="text-xs text-gray-100 bg-gray-800 p-3 rounded border overflow-auto">{{ JSON.stringify(selectedEvent.userIdentity, null, 2) }}</pre>
-          </div>
-          
-          <div v-if="selectedEvent.requestParameters">
-            <label class="block text-sm font-medium text-gray-300 mb-1">Request Parameters</label>
-            <pre class="text-xs text-gray-100 bg-gray-800 p-3 rounded border overflow-auto max-h-40">{{ JSON.stringify(selectedEvent.requestParameters, null, 2) }}</pre>
-          </div>
-          
-          <div v-if="selectedEvent.errorCode">
-            <label class="block text-sm font-medium text-gray-300 mb-1">Error Details</label>
-            <div class="text-sm text-red-400 bg-red-900/20 p-3 rounded border">
-              <p><strong>Error Code:</strong> {{ selectedEvent.errorCode }}</p>
-              <p v-if="selectedEvent.errorMessage"><strong>Error Message:</strong> {{ selectedEvent.errorMessage }}</p>
+          <div v-if="selectedEvent" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Event Name</label>
+                <p class="text-sm text-gray-100">{{ selectedEvent.eventName }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Event Time</label>
+                <p class="text-sm text-gray-100">{{ formatDateTime(selectedEvent.eventTime) }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Service</label>
+                <p class="text-sm text-gray-100">{{ selectedEvent.eventSource }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Region</label>
+                <p class="text-sm text-gray-100">{{ selectedEvent.awsRegion }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Account ID</label>
+                <p class="text-sm text-gray-100">{{ selectedEvent.accountId }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Source IP</label>
+                <p class="text-sm text-gray-100">{{ selectedEvent.sourceIPAddress }}</p>
+              </div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">User Identity</label>
+              <pre class="text-xs text-gray-100 bg-gray-800 p-3 rounded border overflow-auto">{{ JSON.stringify(selectedEvent.userIdentity, null, 2) }}</pre>
+            </div>
+            
+            <div v-if="selectedEvent.requestParameters">
+              <label class="block text-sm font-medium text-gray-300 mb-1">Request Parameters</label>
+              <pre class="text-xs text-gray-100 bg-gray-800 p-3 rounded border overflow-auto max-h-40">{{ JSON.stringify(selectedEvent.requestParameters, null, 2) }}</pre>
+            </div>
+            
+            <div v-if="selectedEvent.errorCode">
+              <label class="block text-sm font-medium text-gray-300 mb-1">Error Details</label>
+              <div class="text-sm text-red-400 bg-red-900/20 p-3 rounded border">
+                <p><strong>Error Code:</strong> {{ selectedEvent.errorCode }}</p>
+                <p v-if="selectedEvent.errorMessage"><strong>Error Message:</strong> {{ selectedEvent.errorMessage }}</p>
+              </div>
             </div>
           </div>
-        </div>
-      </UCard>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

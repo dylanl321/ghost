@@ -36,7 +36,7 @@
             <UBadge
               v-if="recentAccounts.length > 0"
               size="xs"
-              color="gray"
+              color="neutral"
               variant="subtle"
             >
               {{ recentAccounts.length }}

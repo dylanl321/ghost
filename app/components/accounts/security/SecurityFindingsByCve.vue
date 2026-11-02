@@ -2,11 +2,11 @@
   <div>
     <UTable
       v-if="groups.length > 0"
-      :rows="groups"
-      :columns="columns"
-      :ui="{ td: { base: 'text-xs' }, th: { base: 'text-xs' } }"
+      :data="groups"
+      :columns="toTableColumns(columns)"
+      :ui="{ td: 'text-xs', th: 'text-xs' }"
     >
-      <template #cveId-data="{ row }">
+      <template #cveId-cell="{ row: { original: row } }">
         <a
           :href="`https://nvd.nist.gov/vuln/detail/${row.cveId}`"
           target="_blank"
@@ -16,10 +16,10 @@
           {{ row.cveId }}
         </a>
       </template>
-      <template #title-data="{ row }">
+      <template #title-cell="{ row: { original: row } }">
         <span class="line-clamp-2">{{ row.title }}</span>
       </template>
-      <template #severity-data="{ row }">
+      <template #severity-cell="{ row: { original: row } }">
         <UBadge :color="severityColor(row.severity)" variant="soft" size="xs">
           {{ row.severity }}
         </UBadge>

@@ -6,7 +6,7 @@
       color="orange"
       variant="solid"
       icon="i-heroicons-exclamation-triangle"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
     >
       <template #title>
         <span class="font-semibold">Account {{ accountStatus }}</span>
@@ -33,7 +33,7 @@
               @click="favoritesComposable.toggleFavorite(accountId)"
             />
             <template #fallback>
-              <UButton icon="i-heroicons-star" color="gray" variant="ghost" size="sm" disabled />
+              <UButton icon="i-heroicons-star" color="neutral" variant="ghost" size="sm" disabled />
             </template>
           </ClientOnly>
           <span data-tour="account-docs-link">
@@ -41,7 +41,7 @@
               <NuxtLink to="/support/docs?topic=favorites-guide">
                 <UButton
                   icon="i-heroicons-question-mark-circle"
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   size="sm"
                 />
@@ -51,7 +51,7 @@
           <UTooltip text="Start Guided Tour">
             <UButton
               icon="i-heroicons-sparkles"
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="sm"
               @click="handleStartAccountTour"
@@ -67,10 +67,10 @@
           />
           
           <!-- AWS Console Access Dropdown -->
-          <UDropdown
+          <UDropdownMenu
             v-if="accountId"
             :items="consoleMenuItems"
-            :popper="{ placement: 'bottom-end' }"
+            :content="{ side: 'bottom', align: 'end' }"
           >
             <UButton
               icon="i-heroicons-arrow-top-right-on-square"
@@ -80,7 +80,7 @@
             >
               AWS Console
             </UButton>
-          </UDropdown>
+          </UDropdownMenu>
 
           <UButton
             v-if="accountId"
@@ -97,7 +97,7 @@
     </div>
 
     <!-- Tabs -->
-    <UTabs v-model="selectedTab" :items="tabs" :unmount="true" data-tour="account-tabs">
+    <UTabs v-model="selectedTab" :items="withIndexValues(tabs)" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 row-auto">

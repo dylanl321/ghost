@@ -18,7 +18,7 @@
           </NuxtLink>
         </ClientOnly>
       </div>
-      <UButtonGroup size="sm">
+      <UFieldGroup size="sm">
         <UButton
           :color="selectedDays === 7 ? 'primary' : 'gray'"
           :variant="selectedDays === 7 ? 'solid' : 'ghost'"
@@ -40,7 +40,7 @@
         >
           90 Days
         </UButton>
-      </UButtonGroup>
+      </UFieldGroup>
     </div>
 
     <!-- Error message -->
@@ -49,8 +49,8 @@
       color="red"
       icon="i-heroicons-exclamation-triangle"
       variant="solid"
-      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
-      @close="error = null"
+      :close="{ icon: 'i-heroicons-x-mark', color: 'neutral', variant: 'link' }"
+      @update:open="error = null"
     >
       <template #title>Failed to load pipeline data</template>
       <template #description>{{ error }}</template>

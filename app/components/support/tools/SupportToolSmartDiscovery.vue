@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <UTextarea v-model="query" placeholder="Describe what you're looking for in natural language (e.g., 'find the instance running payment service' or 'show me prod instances in finance account')" :rows="2" />
     <div class="flex gap-4 flex-wrap items-center">
-      <USelect v-model="environment" :options="environmentOptions" class="w-40" />
+      <USelect v-model="environment" :items="environmentOptions" class="w-40" />
       <UButton color="primary" :loading="loading" :disabled="!query.trim()" @click="runSmartDiscovery">
         <Icon name="i-heroicons-sparkles" class="w-4 h-4 mr-1" />
         Discover
@@ -19,7 +19,7 @@
           Found {{ results.length }} results
           <span v-if="confidence" class="ml-2 text-indigo-600">({{ confidence }}% confidence)</span>
         </span>
-        <UButton size="xs" variant="ghost" color="gray" @click="exportResults">
+        <UButton size="xs" variant="ghost" color="neutral" @click="exportResults">
           <Icon name="i-heroicons-arrow-down-tray" class="w-4 h-4 mr-1" />
           Export
         </UButton>
@@ -86,6 +86,6 @@ function exportResults() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `smart-discovery-${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', timeout: 2000 })
+  toast.add({ title: 'Results exported', icon: 'i-heroicons-arrow-down-tray', color: 'green', duration: 2000 })
 }
 </script>

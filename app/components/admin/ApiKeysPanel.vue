@@ -40,7 +40,7 @@
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             Your API Keys
           </h2>
-          <UBadge color="gray" variant="soft">
+          <UBadge color="neutral" variant="soft">
             {{ apiKeys.length }} {{ apiKeys.length === 1 ? 'key' : 'keys' }}
           </UBadge>
         </div>
@@ -59,7 +59,7 @@
         <p class="text-gray-500 dark:text-gray-400 mb-6">
           {{ loadError }}
         </p>
-        <UButton color="gray" variant="soft" icon="i-heroicons-arrow-path" @click="loadKeys">
+        <UButton color="neutral" variant="soft" icon="i-heroicons-arrow-path" @click="loadKeys">
           Try Again
         </UButton>
       </div>
@@ -91,7 +91,7 @@
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                     {{ key.name }}
                   </h3>
-                  <UBadge v-if="!key.isActive" color="gray" variant="soft" size="xs">
+                  <UBadge v-if="!key.isActive" color="neutral" variant="soft" size="xs">
                     Revoked
                   </UBadge>
                   <UBadge v-else-if="isExpired(key)" color="red" variant="soft" size="xs">
@@ -158,7 +158,7 @@
                 </UButton>
                 <UButton
                   v-if="key.isActive"
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   size="sm"
                   icon="i-heroicons-pencil"
@@ -201,347 +201,355 @@
     </UCard>
 
     <!-- Create API Key Modal -->
-    <UModal v-model="showCreateModal" :ui="{ width: 'sm:max-w-2xl' }">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Create New API Key
-          </h3>
-        </template>
+    <UModal v-model:open="showCreateModal" :ui="{ content: 'sm:max-w-2xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Create New API Key
+            </h3>
+          </template>
 
-        <div v-if="!createdKey" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Permissions
-            </label>
-            <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
-              Every permission is read-only and covers the whole organization. Pick only what the integration calls.
-            </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <UCheckbox
-                v-for="scope in scopeOptions"
-                :key="scope.value"
-                v-model="newKeyScopes"
-                :value="scope.value"
-                :label="scope.label"
-                :help="scope.help"
-              />
+          <div v-if="!createdKey" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Permissions
+              </label>
+              <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                Every permission is read-only and covers the whole organization. Pick only what the integration calls.
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <UCheckbox
+                  v-for="scope in scopeOptions"
+                  :key="scope.value"
+                  v-model="newKeyScopes"
+                  :value="scope.value"
+                  :label="scope.label"
+                  :description="scope.help"
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Key Name
-            </label>
-            <UInput
-              v-model="newKeyName"
-              placeholder="e.g., Production Scripts, CI/CD Pipeline"
-              size="lg"
-              :maxlength="100"
-            />
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Give your API key a descriptive name to remember its purpose
-            </p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Description (Optional)
-            </label>
-            <UTextarea
-              v-model="newKeyDescription"
-              placeholder="Add notes about this key's purpose, where it's used, etc."
-              :rows="3"
-              size="lg"
-              :maxlength="DESCRIPTION_MAX"
-            />
-            <p class="mt-1 text-right text-xs text-gray-400">{{ newKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Expiration
-            </label>
-            <USelect
-              v-model="newKeyExpiration"
-              :options="expirationOptions"
-              size="lg"
-            />
-          </div>
-
-          <UAlert
-            color="amber"
-            variant="soft"
-            icon="i-heroicons-exclamation-triangle"
-            title="Important"
-            description="The API key will only be shown once. Make sure to copy it to a secure location."
-          />
-        </div>
-
-        <!-- Show Generated Key -->
-        <div v-else class="space-y-4">
-          <UAlert
-            color="green"
-            variant="soft"
-            icon="i-heroicons-check-circle"
-            title="API Key Created Successfully"
-            description="Copy this key now - it will not be shown again!"
-          />
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Your API Key
-            </label>
-            <div class="flex gap-2">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Key Name
+              </label>
               <UInput
-                :model-value="createdKey"
-                readonly
+                v-model="newKeyName"
+                placeholder="e.g., Production Scripts, CI/CD Pipeline"
                 size="lg"
-                class="flex-1 font-mono"
+                :maxlength="100"
               />
-              <UButton
-                color="blue"
-                icon="i-heroicons-clipboard-document"
-                @click="copyToClipboard"
-              >
-                {{ copied ? 'Copied!' : 'Copy' }}
-              </UButton>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Give your API key a descriptive name to remember its purpose
+              </p>
             </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description (Optional)
+              </label>
+              <UTextarea
+                v-model="newKeyDescription"
+                placeholder="Add notes about this key's purpose, where it's used, etc."
+                :rows="3"
+                size="lg"
+                :maxlength="DESCRIPTION_MAX"
+              />
+              <p class="mt-1 text-right text-xs text-gray-400">{{ newKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Expiration
+              </label>
+              <USelect
+                v-model="newKeyExpiration"
+                :items="expirationOptions"
+                size="lg"
+              />
+            </div>
+
+            <UAlert
+              color="amber"
+              variant="soft"
+              icon="i-heroicons-exclamation-triangle"
+              title="Important"
+              description="The API key will only be shown once. Make sure to copy it to a secure location."
+            />
           </div>
 
-          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              How to Use This Key
-            </h4>
-            <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
-              Include this key in the x-api-key header:
-            </p>
-            <div class="space-y-2">
-              <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
-                <span class="text-gray-500"># Header method</span><br>
-                curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/v1/accounts
+          <!-- Show Generated Key -->
+          <div v-else class="space-y-4">
+            <UAlert
+              color="green"
+              variant="soft"
+              icon="i-heroicons-check-circle"
+              title="API Key Created Successfully"
+              description="Copy this key now - it will not be shown again!"
+            />
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Your API Key
+              </label>
+              <div class="flex gap-2">
+                <UInput
+                  :model-value="createdKey"
+                  readonly
+                  size="lg"
+                  class="flex-1 font-mono"
+                />
+                <UButton
+                  color="blue"
+                  icon="i-heroicons-clipboard-document"
+                  @click="copyToClipboard"
+                >
+                  {{ copied ? 'Copied!' : 'Copy' }}
+                </UButton>
+              </div>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                How to Use This Key
+              </h4>
+              <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                Include this key in the x-api-key header:
+              </p>
+              <div class="space-y-2">
+                <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
+                  <span class="text-gray-500"># Header method</span><br>
+                  curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/v1/accounts
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <UButton
-              v-if="!createdKey"
-              color="gray"
-              variant="ghost"
-              @click="showCreateModal = false"
-            >
-              Cancel
-            </UButton>
-            <UButton
-              v-if="!createdKey"
-              color="blue"
-              :loading="creating"
-              :disabled="!newKeyName.trim() || newKeyScopes.length === 0"
-              @click="createKey"
-            >
-              Create API Key
-            </UButton>
-            <UButton
-              v-else
-              color="blue"
-              @click="closeCreateModal"
-            >
-              Done
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-3">
+              <UButton
+                v-if="!createdKey"
+                color="neutral"
+                variant="ghost"
+                @click="showCreateModal = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                v-if="!createdKey"
+                color="blue"
+                :loading="creating"
+                :disabled="!newKeyName.trim() || newKeyScopes.length === 0"
+                @click="createKey"
+              >
+                Create API Key
+              </UButton>
+              <UButton
+                v-else
+                color="blue"
+                @click="closeCreateModal"
+              >
+                Done
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model="showDeleteModal">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Revoke API Key
-          </h3>
-        </template>
+    <UModal v-model:open="showDeleteModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Revoke API Key
+            </h3>
+          </template>
 
-        <div class="space-y-4">
-          <p class="text-gray-600 dark:text-gray-400">
-            Are you sure you want to revoke the API key <strong class="text-gray-900 dark:text-white">{{ keyToDelete?.name }}</strong>?
-          </p>
-          <UAlert
-            color="red"
-            variant="soft"
-            icon="i-heroicons-exclamation-triangle"
-            title="This action cannot be undone"
-            description="Any systems using this key will immediately lose access to GHOST APIs."
-          />
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showDeleteModal = false"
-            >
-              Cancel
-            </UButton>
-            <UButton
+          <div class="space-y-4">
+            <p class="text-gray-600 dark:text-gray-400">
+              Are you sure you want to revoke the API key <strong class="text-gray-900 dark:text-white">{{ keyToDelete?.name }}</strong>?
+            </p>
+            <UAlert
               color="red"
-              :loading="deleting"
-              @click="deleteKey"
-            >
-              Revoke Key
-            </UButton>
+              variant="soft"
+              icon="i-heroicons-exclamation-triangle"
+              title="This action cannot be undone"
+              description="Any systems using this key will immediately lose access to GHOST APIs."
+            />
           </div>
-        </template>
-      </UCard>
+
+          <template #footer>
+            <div class="flex justify-end gap-3">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="showDeleteModal = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                color="red"
+                :loading="deleting"
+                @click="deleteKey"
+              >
+                Revoke Key
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Usage History Modal -->
-    <UModal v-model="showUsageModal" :ui="{ width: 'sm:max-w-4xl' }">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Usage History - {{ selectedKey?.name }}
-          </h3>
-        </template>
+    <UModal v-model:open="showUsageModal" :ui="{ content: 'sm:max-w-4xl' }" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Usage History - {{ selectedKey?.name }}
+            </h3>
+          </template>
 
-        <div v-if="loadingUsage" class="text-center py-12">
-          <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
-          <p class="text-gray-500 dark:text-gray-400">Loading usage data...</p>
-        </div>
-
-        <div v-else class="space-y-6">
-          <!-- Statistics -->
-          <div v-if="usageStats" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ usageStats.totalCalls.toLocaleString() }}
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">Last {{ usageStats.windowDays || 30 }} Days</div>
-            </div>
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ usageStats.last24Hours.toLocaleString() }}
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">Last 24 Hours</div>
-            </div>
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ usageStats.last7Days.toLocaleString() }}
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">Last 7 Days</div>
-            </div>
+          <div v-if="loadingUsage" class="text-center py-12">
+            <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+            <p class="text-gray-500 dark:text-gray-400">Loading usage data...</p>
           </div>
 
-          <p v-if="usageStats?.truncated" class="text-xs text-amber-600 dark:text-amber-400">
-            This key made more calls than GHOST can count in one view; totals are a lower bound.
-          </p>
-
-          <!-- Last Used -->
-          <div v-if="usageStats?.lastUsed" class="text-sm text-gray-600 dark:text-gray-400">
-            <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-2" />
-            Last used: {{ formatDateTime(usageStats.lastUsed) }}
-          </div>
-
-          <!-- Top Endpoints -->
-          <div v-if="topEndpoints.length > 0">
-            <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top Endpoints</h4>
-            <div class="space-y-2">
-              <div
-                v-for="[endpoint, count] in topEndpoints"
-                :key="endpoint"
-                class="flex items-center justify-between text-sm"
-              >
-                <span class="font-mono text-xs text-gray-600 dark:text-gray-400">{{ endpoint }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ count }} calls</span>
+          <div v-else class="space-y-6">
+            <!-- Statistics -->
+            <div v-if="usageStats" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                  {{ usageStats.totalCalls.toLocaleString() }}
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">Last {{ usageStats.windowDays || 30 }} Days</div>
+              </div>
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                  {{ usageStats.last24Hours.toLocaleString() }}
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">Last 24 Hours</div>
+              </div>
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                  {{ usageStats.last7Days.toLocaleString() }}
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">Last 7 Days</div>
               </div>
             </div>
-          </div>
 
-          <div v-if="usageStats && Object.keys(usageStats.callsByStatus).length > 0">
-            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Response statuses</h4>
-            <div class="flex flex-wrap gap-2">
-              <UBadge v-for="(count, status) in usageStats.callsByStatus" :key="status" color="gray" variant="soft">
-                {{ status }} · {{ count }}
-              </UBadge>
+            <p v-if="usageStats?.truncated" class="text-xs text-amber-600 dark:text-amber-400">
+              This key made more calls than GHOST can count in one view; totals are a lower bound.
+            </p>
+
+            <!-- Last Used -->
+            <div v-if="usageStats?.lastUsed" class="text-sm text-gray-600 dark:text-gray-400">
+              <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-2" />
+              Last used: {{ formatDateTime(usageStats.lastUsed) }}
+            </div>
+
+            <!-- Top Endpoints -->
+            <div v-if="topEndpoints.length > 0">
+              <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top Endpoints</h4>
+              <div class="space-y-2">
+                <div
+                  v-for="[endpoint, count] in topEndpoints"
+                  :key="endpoint"
+                  class="flex items-center justify-between text-sm"
+                >
+                  <span class="font-mono text-xs text-gray-600 dark:text-gray-400">{{ endpoint }}</span>
+                  <span class="font-medium text-gray-900 dark:text-white">{{ count }} calls</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="usageStats && Object.keys(usageStats.callsByStatus).length > 0">
+              <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Response statuses</h4>
+              <div class="flex flex-wrap gap-2">
+                <UBadge v-for="(count, status) in usageStats.callsByStatus" :key="status" color="neutral" variant="soft">
+                  {{ status }} · {{ count }}
+                </UBadge>
+              </div>
+            </div>
+
+            <div v-if="usageHistory.length > 0">
+              <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Recent calls</h4>
+              <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table class="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-700">
+                  <thead class="bg-gray-50 dark:bg-gray-800">
+                    <tr><th class="px-3 py-2">Time</th><th class="px-3 py-2">Method</th><th class="px-3 py-2">Endpoint</th><th class="px-3 py-2">Status</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    <tr v-for="call in usageHistory.slice(0, 20)" :key="`${call.timestamp}-${call.endpoint}`">
+                      <td class="whitespace-nowrap px-3 py-2">{{ formatDateTime(call.timestamp) }}</td>
+                      <td class="px-3 py-2 font-mono">{{ call.method }}</td>
+                      <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
+                      <td class="px-3 py-2">
+                        <span :class="call.statusCode >= 400 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ call.statusCode }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="!usageStats?.totalCalls" class="text-center py-8 text-gray-500 dark:text-gray-400">
+              No calls in the last {{ usageStats?.windowDays || 30 }} days
             </div>
           </div>
 
-          <div v-if="usageHistory.length > 0">
-            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Recent calls</h4>
-            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-              <table class="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-700">
-                <thead class="bg-gray-50 dark:bg-gray-800">
-                  <tr><th class="px-3 py-2">Time</th><th class="px-3 py-2">Method</th><th class="px-3 py-2">Endpoint</th><th class="px-3 py-2">Status</th></tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                  <tr v-for="call in usageHistory.slice(0, 20)" :key="`${call.timestamp}-${call.endpoint}`">
-                    <td class="whitespace-nowrap px-3 py-2">{{ formatDateTime(call.timestamp) }}</td>
-                    <td class="px-3 py-2 font-mono">{{ call.method }}</td>
-                    <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
-                    <td class="px-3 py-2">
-                      <span :class="call.statusCode >= 400 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ call.statusCode }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          <template #footer>
+            <div class="flex justify-end">
+              <UButton color="neutral" variant="ghost" @click="showUsageModal = false">
+                Close
+              </UButton>
             </div>
-          </div>
-
-          <div v-if="!usageStats?.totalCalls" class="text-center py-8 text-gray-500 dark:text-gray-400">
-            No calls in the last {{ usageStats?.windowDays || 30 }} days
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end">
-            <UButton color="gray" variant="ghost" @click="showUsageModal = false">
-              Close
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          </template>
+        </UCard>
+      </template>
     </UModal>
 
     <!-- Edit Description Modal -->
-    <UModal v-model="showEditModal">
-      <UCard>
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Edit Description - {{ selectedKey?.name }}
-          </h3>
-        </template>
+    <UModal v-model:open="showEditModal" scrollable>
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Edit Description - {{ selectedKey?.name }}
+            </h3>
+          </template>
 
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Description / Notes
-            </label>
-            <UTextarea
-              v-model="editKeyDescription"
-              placeholder="Add notes about this key's purpose, where it's used, etc."
-              :rows="5"
-              size="lg"
-              :maxlength="DESCRIPTION_MAX"
-            />
-            <p class="mt-1 text-right text-xs text-gray-400">{{ editKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description / Notes
+              </label>
+              <UTextarea
+                v-model="editKeyDescription"
+                placeholder="Add notes about this key's purpose, where it's used, etc."
+                :rows="5"
+                size="lg"
+                :maxlength="DESCRIPTION_MAX"
+              />
+              <p class="mt-1 text-right text-xs text-gray-400">{{ editKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
+            </div>
           </div>
-        </div>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <UButton color="gray" variant="ghost" @click="showEditModal = false">
-              Cancel
-            </UButton>
-            <UButton color="blue" :loading="updating" @click="saveDescription">
-              Save
-            </UButton>
-          </div>
-        </template>
-      </UCard>
+          <template #footer>
+            <div class="flex justify-end gap-3">
+              <UButton color="neutral" variant="ghost" @click="showEditModal = false">
+                Cancel
+              </UButton>
+              <UButton color="blue" :loading="updating" @click="saveDescription">
+                Save
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
     </UModal>
   </div>
 </template>

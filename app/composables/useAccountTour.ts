@@ -76,7 +76,7 @@ export function useAccountTour() {
       })
     } catch (error: any) {
       logger.error('Failed to start account tour:', error)
-      const toast = useToast()
+      const toast = useAppToast()
       toast.add({
         title: 'Tour Error',
         description: error.message || 'Failed to start the guided tour. Please try again.',

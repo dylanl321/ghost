@@ -65,7 +65,7 @@ export function useAchievements() {
       description: badge.description,
       icon: 'i-heroicons-trophy',
       color: 'yellow',
-      timeout: 5000
+      duration: 5000
     })
 
     // Fire-and-forget: record award + send notification via server
