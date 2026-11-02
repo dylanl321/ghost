@@ -29,7 +29,7 @@
       <div v-if="group.name" class="flex items-baseline justify-between gap-3 text-sm">
         <button
           type="button"
-          class="truncate text-left font-semibold text-gray-900 hover:underline dark:text-white"
+          class="truncate rounded text-left font-semibold text-gray-900 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary dark:text-white"
           :title="`Select every account in ${group.name}`"
           @click="emit('select-group', group.tiles.map(t => t.id))"
         >
@@ -44,8 +44,8 @@
           v-for="tile in group.shown"
           :key="tile.id"
           type="button"
-          class="flex h-24 min-w-0 flex-col justify-between gap-1 rounded-lg border-2 px-3 py-2 text-left transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          :class="[tileClass(tile.status), tile.selected ? 'border-gray-900 dark:border-white' : 'border-transparent', tile.dimmed ? 'opacity-45' : '']"
+          class="flex h-24 min-w-0 flex-col justify-between gap-1 rounded-lg border px-3 py-2 text-left transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          :class="[tileClass(tile.status), tile.selected ? borderClass(tile.status) : 'border-transparent', tile.dimmed ? 'opacity-45' : '']"
           :style="{ flex: `${Math.round(tile.weight * 100)} 1 ${Math.round(96 + tile.weight * 140)}px` }"
           :aria-pressed="tile.selected"
           :title="`${tile.name}: ${formatCurrency(tile.spend)}${tile.budget > 0 ? ` of ${formatCurrency(tile.budget)}` : ''}`"
@@ -101,6 +101,13 @@ const tileClass = (status: BudgetStatus) => ({
   healthy: 'bg-emerald-50 dark:bg-emerald-500/15',
   under: 'bg-blue-50 dark:bg-blue-500/15',
   'no-budget': 'bg-gray-100 dark:bg-gray-800'
+}[status])
+
+const borderClass = (status: BudgetStatus) => ({
+  over: 'border-red-300 dark:border-red-400/50',
+  healthy: 'border-emerald-300 dark:border-emerald-400/50',
+  under: 'border-blue-300 dark:border-blue-400/50',
+  'no-budget': 'border-gray-300 dark:border-gray-600'
 }[status])
 
 const textClass = (status: BudgetStatus) => ({

@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+  <div class="-mt-4 h-[calc(100%+1rem)] min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950">
     <!-- Dark header band: controls, the summary sentence and the key numbers -->
     <section class="dark !bg-[#0f172a] px-4 pb-7 pt-4 !text-white md:px-8">
       <CostsHeader
@@ -401,9 +401,9 @@
           </div>
 
           <!-- Overview: account tiles (or the focused account) and the attention feed -->
-          <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-wrap items-start gap-6">
+          <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-wrap gap-6" :class="focusedAccount ? 'items-stretch' : 'items-start'">
             <div class="min-w-0 flex-[999_1_560px]">
-              <UCard v-if="focusedAccount" :ui="{ body: 'flex flex-col gap-4' }">
+              <UCard v-if="focusedAccount" class="h-full" :ui="{ body: 'flex flex-col gap-6' }">
                 <div class="flex flex-wrap items-start gap-3">
                   <div class="min-w-0 flex-1">
                     <UBadge color="neutral" variant="subtle">Single account</UBadge>
@@ -414,10 +414,12 @@
                   </div>
                   <UButton color="neutral" variant="outline" @click="clearSelection">Show all accounts</UButton>
                 </div>
-                <dl class="m-0 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">Spend</dt><dd class="m-0 text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatCurrency(focusedAccount.spend) }}</dd></div>
-                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">{{ isHistoricalTimeframe ? 'Budget' : 'Budget to date' }}</dt><dd class="m-0 text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ focusedAccount.budget > 0 ? formatCurrency(focusedAccount.budget) : '—' }}</dd></div>
-                  <div><dt class="text-xs text-gray-500 dark:text-gray-400">Utilization</dt><dd class="m-0 text-xl font-bold tabular-nums" :class="focusedAccount.budget > 0 && focusedAccount.spend > focusedAccount.budget ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ focusedAccount.budget > 0 ? Math.round(focusedAccount.spend / focusedAccount.budget * 100) + '%' : '—' }}</dd></div>
+                <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+                  <div v-for="stat in focusedStats" :key="stat.label">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ stat.label }}</dt>
+                    <dd class="m-0 mt-0.5 text-xl font-bold tabular-nums" :class="stat.over ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ stat.value }}</dd>
+                    <dd v-if="stat.sub" class="m-0 text-xs text-gray-500 dark:text-gray-400">{{ stat.sub }}</dd>
+                  </div>
                 </dl>
               </UCard>
               <CostsAccountTiles
@@ -1372,6 +1374,7 @@ const toDashboardAccount = (account: Account) => ({
   name: accountDisplayName(account),
   spend: getSpend(account),
   budget: isHistoricalTimeframe.value ? 0 : getBudget(account) * paceRatio.value,
+  fullBudget: isHistoricalTimeframe.value ? 0 : getBudget(account),
   lineOfBusiness: account.linesOfBusiness || account.lineOfBusiness || null,
   department: (account as any).pepDepartment || account.departmentNumber || account.department || null
 })
@@ -1453,8 +1456,49 @@ const accountTiles = computed(() => buildAccountTiles(
   { selectedIds: selectedAccounts.value, groupBy: tileGroupBy.value }
 ))
 
-const focusedAccount = computed(() =>
-  selectedAccounts.value.length === 1 && dashboardAccounts.value.length === 1 ? dashboardAccounts.value[0] : null)
+const focusedAccount = computed(() => {
+  if (selectedAccounts.value.length !== 1 || dashboardAccounts.value.length !== 1) return null
+  const account = dashboardAccounts.value[0]!
+  const w = currentWindow.value
+  // Straight-line projection for the current period; none for past periods
+  const projected = !isHistoricalTimeframe.value && w && w.observedDays > 0 ? account.spend / paceRatio.value : null
+  return { ...account, projected }
+})
+
+const focusedStats = computed(() => {
+  const a = focusedAccount.value
+  if (!a) return []
+  const money = (v: number) => formatCurrency(v)
+  const utilization = a.budget > 0 ? a.spend / a.budget : null
+  const stats: { label: string, value: string, sub?: string, over: boolean }[] = [
+    { label: 'Spend', value: money(a.spend), over: false },
+    { label: isHistoricalTimeframe.value ? 'Budget' : 'Budget to date', value: a.budget > 0 ? money(a.budget) : '—', over: false },
+    {
+      label: 'Utilization',
+      value: utilization !== null ? `${Math.round(utilization * 100)}%` : '—',
+      sub: utilization !== null ? (utilization > 1 ? `${money(a.spend - a.budget)} over` : `${money(a.budget - a.spend)} left`) : undefined,
+      over: utilization !== null && utilization > 1
+    }
+  ]
+  if (!isHistoricalTimeframe.value) {
+    stats.push(
+      { label: 'Full period budget', value: a.fullBudget > 0 ? money(a.fullBudget) : '—', over: false },
+      {
+        label: 'Projected',
+        value: a.projected !== null ? money(a.projected) : '—',
+        sub: a.projected !== null ? 'At the current daily rate' : undefined,
+        over: a.projected !== null && a.fullBudget > 0 && a.projected > a.fullBudget
+      },
+      {
+        label: 'Budget remaining',
+        value: a.fullBudget > 0 ? money(Math.max(0, a.fullBudget - a.spend)) : '—',
+        sub: a.fullBudget > 0 ? `${Math.max(0, Math.round((1 - a.spend / a.fullBudget) * 100))}% of the full budget` : undefined,
+        over: false
+      }
+    )
+  }
+  return stats
+})
 
 const attentionItems = computed<AttentionItem[]>(() => buildAttentionItems({
   accounts: dashboardAccounts.value,
@@ -1465,7 +1509,11 @@ const attentionItems = computed<AttentionItem[]>(() => buildAttentionItems({
     ? { count: carriedForwardBudgets.value.count, year: carriedForwardBudgets.value.year, from: carriedForwardBudgets.value.from }
     : undefined,
   format: formatCurrency
-}))
+}).map(item =>
+  // Already focused on this account: point to its budget alerts instead
+  item.action.type === 'focus-account' && focusedAccount.value?.id === item.action.accountId
+    ? { ...item, action: { label: 'Open budget alerts', type: 'open-alerts' as const } }
+    : item))
 
 const handleAttentionAction = (item: AttentionItem) => {
   switch (item.action.type) {

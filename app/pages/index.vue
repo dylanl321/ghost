@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 lg:space-y-8 p-6 max-w-[1600px] mx-auto">
+  <div class="space-y-5 p-6 max-w-[1600px] mx-auto">
     <!-- Header band: greeting, scope, the month in one sentence, and quick links -->
     <section class="dark rounded-2xl !bg-[#0f172a] px-5 py-5 !text-white md:px-8 md:py-6">
       <div class="flex flex-wrap items-center gap-3">
@@ -120,7 +120,7 @@
 
     <!-- Dynamic Sections (ordered by user preference, client-only to avoid hydration mismatch from localStorage-based layout) -->
     <ClientOnly>
-      <div class="grid grid-cols-12 gap-6 lg:gap-8">
+      <div class="grid grid-cols-12 gap-4 lg:gap-5">
         <template v-for="section in visibleSections" :key="section.id">
           <div class="grid min-w-0 overflow-hidden" :class="sectionColSpan(section.displayStyle)">
             <QuickStartCard v-if="section.id === 'quickStart'" :display-style="section.displayStyle || 'full'" />
