@@ -556,6 +556,7 @@
               :active-tab-prop="activeChartTab"
               :show-advanced-charts="showAdvancedCharts"
               :sidebar-tab="activeTab"
+              :scenario="scenario"
               :warnings="fetchWarnings"
               :cost-summary-context="costSummaryContext"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
@@ -578,7 +579,7 @@ import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
 import { useCostData } from '~/composables/useCostData'
-import { useCostScenario } from '~/composables/useCostScenario'
+import { useCostScenario, toGroupableAccounts } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { DataMode } from '~/types/costs'
 import type { BudgetAlert } from '#shared/types/budget-alerts'
@@ -1397,7 +1398,8 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
 // 2. useCostScenario: Determines the viewing context based on user selections
 //    Scenarios: 'all-accounts', 'single-account', 'few-accounts', 'lob-group', 'department-group'
 //    This determines which charts are most relevant to show
-const { scenario } = useCostScenario({ selectedAccounts, activeTab })
+const groupableAccounts = computed(() => toGroupableAccounts(accountsWithCosts.value))
+const { scenario } = useCostScenario({ selectedAccounts, activeTab, accounts: groupableAccounts })
 
 // Advanced charts toggle (persisted in localStorage)
 const showAdvancedCharts = ref(false)
