@@ -400,41 +400,51 @@
             <UButton size="xs" color="red" variant="soft" @click="refreshData">Retry</UButton>
           </div>
 
-          <!-- Overview: account tiles (or the focused account) and the attention feed -->
-          <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-wrap gap-6" :class="focusedAccount ? 'items-stretch' : 'items-start'">
-            <div class="min-w-0 flex-[999_1_560px]">
-              <UCard v-if="focusedAccount" class="h-full" :ui="{ body: 'flex flex-col gap-6' }">
-                <div class="flex flex-wrap items-start gap-3">
-                  <div class="min-w-0 flex-1">
-                    <UBadge color="neutral" variant="subtle">Single account</UBadge>
-                    <h2 class="m-0 mt-2 text-xl font-bold text-gray-900 dark:text-white">{{ focusedAccount.name }}</h2>
-                    <p class="m-0 text-sm tabular-nums text-gray-500 dark:text-gray-400">
-                      {{ focusedAccount.id }}<template v-if="focusedAccount.lineOfBusiness"> · {{ focusedAccount.lineOfBusiness }}</template><template v-if="focusedAccount.department"> · {{ focusedAccount.department }}</template>
-                    </p>
+          <!-- Overview: the hero chart (actuals, forecast and budget for the year; monthly history for
+               past periods) beside the attention feed, then the account tiles or the focused account -->
+          <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-col gap-6">
+            <div class="flex flex-wrap items-start gap-6">
+              <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
+                <ChartsRenderer
+                  v-if="heroChart"
+                  data-tour="costs-hero-chart"
+                  :charts="[heroChart]"
+                  :dataset="chartDataset"
+                  :selected-accounts="selectedAccounts"
+                />
+                <UCard v-if="focusedAccount" :ui="{ body: 'flex flex-col gap-6' }">
+                  <div class="flex flex-wrap items-start gap-3">
+                    <div class="min-w-0 flex-1">
+                      <UBadge color="neutral" variant="subtle">Single account</UBadge>
+                      <h2 class="m-0 mt-2 text-xl font-bold text-gray-900 dark:text-white">{{ focusedAccount.name }}</h2>
+                      <p class="m-0 text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                        {{ focusedAccount.id }}<template v-if="focusedAccount.lineOfBusiness"> · {{ focusedAccount.lineOfBusiness }}</template><template v-if="focusedAccount.department"> · {{ focusedAccount.department }}</template>
+                      </p>
+                    </div>
+                    <UButton color="neutral" variant="outline" @click="clearSelection">Show all accounts</UButton>
                   </div>
-                  <UButton color="neutral" variant="outline" @click="clearSelection">Show all accounts</UButton>
-                </div>
-                <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-                  <div v-for="stat in focusedStats" :key="stat.label">
-                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ stat.label }}</dt>
-                    <dd class="m-0 mt-0.5 text-xl font-bold tabular-nums" :class="stat.over ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ stat.value }}</dd>
-                    <dd v-if="stat.sub" class="m-0 text-xs text-gray-500 dark:text-gray-400">{{ stat.sub }}</dd>
-                  </div>
-                </dl>
-              </UCard>
-              <CostsAccountTiles
-                v-else
-                v-model:group-by="tileGroupBy"
-                :groups="accountTiles"
-                :format-currency="formatCurrency"
-                @toggle="toggleAccount"
-                @select-group="handleSelectGroup"
+                  <dl class="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+                    <div v-for="stat in focusedStats" :key="stat.label">
+                      <dt class="text-xs text-gray-500 dark:text-gray-400">{{ stat.label }}</dt>
+                      <dd class="m-0 mt-0.5 text-xl font-bold tabular-nums" :class="stat.over ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ stat.value }}</dd>
+                      <dd v-if="stat.sub" class="m-0 text-xs text-gray-500 dark:text-gray-400">{{ stat.sub }}</dd>
+                    </div>
+                  </dl>
+                </UCard>
+              </div>
+              <CostsAttentionFeed
+                class="min-w-0 flex-[1_1_300px] lg:max-w-[420px]"
+                :items="attentionItems"
+                @action="handleAttentionAction"
               />
             </div>
-            <CostsAttentionFeed
-              class="min-w-0 flex-[1_1_300px] lg:max-w-[420px]"
-              :items="attentionItems"
-              @action="handleAttentionAction"
+            <CostsAccountTiles
+              v-if="!focusedAccount"
+              v-model:group-by="tileGroupBy"
+              :groups="accountTiles"
+              :format-currency="formatCurrency"
+              @toggle="toggleAccount"
+              @select-group="handleSelectGroup"
             />
           </div>
 
@@ -475,7 +485,7 @@
             <ChartTabs
               v-model:tag="selectedTag"
               v-model:tag-view="tagView"
-              :smart-charts="charts"
+              :smart-charts="tabCharts"
               :dataset="chartDataset"
               :show-regression-line="showRegressionLine"
               :selected-accounts="selectedAccounts"
@@ -511,6 +521,7 @@ import CostsAttentionFeed from '~/components/costs/CostsAttentionFeed.vue'
 import { buildAccountTiles, buildAttentionItems, buildCostNarrative } from '#shared/utils/cost-dashboard'
 import type { AttentionItem } from '#shared/utils/cost-dashboard'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
+import ChartsRenderer from '~/components/costs/ChartsRenderer.vue'
 import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
 import { useCostData } from '~/composables/useCostData'
 import { useCostScenario, toGroupableAccounts } from '~/composables/useCostScenario'
@@ -1555,6 +1566,13 @@ const toggleAdvancedCharts = () => {
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
+
+// The first chart of every scenario is the year-end projection (actuals, forecast and
+// budget); for past periods it is the monthly history. It leads the page as the hero
+// chart, so the Smart Analysis tab shows the rest.
+const HERO_CHART_IDS = ['yearEndForecast', 'historicalMonthlyTrend']
+const heroChart = computed(() => charts.value.find(chart => HERO_CHART_IDS.includes(chart.id)) ?? null)
+const tabCharts = computed(() => charts.value.filter(chart => chart !== heroChart.value))
 
 const route = useRoute()
 const router = useRouter()
