@@ -41,7 +41,6 @@ workflow:
 variables:
   AWS_ACCOUNT_ID: "461760157232" # Make sure this matches the account id Terraform variable
   AWS_REGION: "us-gov-west-1"
-#   ECR_REPO: "ghost-dashboard" # ECR repository name. Ensure this matches what is in the ECR Terraform setup
   TF_WORKING_DIR: "terraform" # Directory where the Terraform lives
 
 .assume_role:
@@ -68,7 +67,8 @@ test_docker_build:
 
 code_quality_check:
   stage: test
-  image: node:22.23.1-bookworm-slim
+  # Keep in step with NODE_VERSION in the Dockerfile.
+  image: node:26.13.0-bookworm-slim
   rules:
     - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
   before_script:
@@ -100,7 +100,7 @@ code_quality_check:
 
     # The parallel Docker job verifies the complete production build.
     - echo "Running automated tests..."
-    - npm run test:shared-content
+    - npm test
 
     # TypeScript strict checking (non-blocking until existing errors are resolved)
     - echo "Checking TypeScript types..."
@@ -227,7 +227,6 @@ Refresh Service:
       when: manual
   script:
     - aws sts get-caller-identity
-    # - aws ecs update-service --cluster $ECR_REPO --service $ECR_REPO-service --force-new-deployment
     - aws ecs update-service --cluster $APP_NAME --service $APP_NAME-service --force-new-deployment
     - aws ecs wait services-stable --cluster $APP_NAME --services $APP_NAME-service
     - aws ecs describe-services --cluster $APP_NAME --services $APP_NAME-service --query 'services[0].deployments[0].{status:status,rolloutState:rolloutState,runningCount:runningCount,desiredCount:desiredCount}'

@@ -42,7 +42,12 @@
     "test:notifications": "tsx --test tests/notifications/*.test.ts",
     "test:budget-alert-retry": "tsx --test server/utils/__tests__/budget-alert-retry.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts",
-    "test:shared-content": "tsx --test tests/shared-content/*.test.ts"
+    "test:shared-content": "tsx --test tests/shared-content/*.test.ts",
+    "test:aws": "tsx --test tests/aws/*.test.ts",
+    "test:dataset-reports": "tsx --test tests/dataset-reports/*.test.ts",
+    "test:observability": "tsx --test tests/observability/*.test.ts",
+    "test:server-utils": "tsx --test server/utils/__tests__/*.test.ts",
+    "test": "tsx --test tests/*/*.test.ts server/utils/__tests__/*.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
