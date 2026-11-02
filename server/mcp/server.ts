@@ -6,7 +6,7 @@ import {
   type AuthInfo,
   type McpRequestContext
 } from '@modelcontextprotocol/server'
-import * as z from 'zod-v4'
+import * as z from 'zod'
 import { findAccountByIdentifierOptimized } from '../utils/account-lookup-optimized'
 import { getAllAccountsUnified } from '../utils/accounts-consolidated'
 import { resolveAccountReference } from './tool-input'

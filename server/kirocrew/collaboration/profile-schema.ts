@@ -249,7 +249,7 @@ const workflowProfile = z
     /** Declarative evidence expectations pinned into this version (Requirement 18.1). */
     evidenceExpectations: z.array(evidenceExpectation).max(256).default([]),
     /** Declarative Checkpoint template pinned into this version (Requirement 18.1, 18.7). */
-    checkpointTemplate: checkpointTemplate.default({}),
+    checkpointTemplate: checkpointTemplate.prefault({}),
     /**
      * The immutable reviewed source commit the definition was imported from
      * (design: `sourceCommit?: immutable reviewed commit`). When the reviewed

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { webcrypto } from 'node:crypto'
 import test from 'node:test'
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server'
-import * as z from 'zod-v4'
+import * as z from 'zod'
 import { registerGhostTool } from '../../server/mcp/tools/register'
 import type { GhostMcpPrincipal } from '../../server/mcp/types'
 

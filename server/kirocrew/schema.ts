@@ -95,7 +95,7 @@ export const bootstrapValueSchema = z.object({
     allowThirdPartyApps: z.boolean().optional(),
     injectCertifi: z.boolean().optional(),
     sandboxAllowUnsandboxedExec: z.boolean().optional(),
-    agentEnv: z.record(z.string()).optional()
+    agentEnv: z.record(z.string(), z.string()).optional()
   }).strict().optional(),
   tls: z.object({
     gitHosts: z.array(z.string()).optional(),
@@ -116,7 +116,7 @@ export const bootstrapValueSchema = z.object({
     }).strict().optional(),
     config_hardening: z.object({
       ...policyFlags,
-      keys: z.record(z.unknown()).optional()
+      keys: z.record(z.string(), z.unknown()).optional()
     }).strict().optional(),
     channel_lockout: z.object({
       ...policyFlags,

@@ -314,7 +314,7 @@ export const appendEventBodySchema = collaborationOpenApiRegistry.register(
       checkId: z.string().min(1).max(200).optional(),
       sourceSubject: subjectReferenceSchema.optional(),
       occurredAt: z.string().datetime().optional(),
-      body: z.record(z.unknown()).optional(),
+      body: z.record(z.string(), z.unknown()).optional(),
       artifactIds: z.array(z.string().min(1).max(200)).max(200).optional(),
       provenance: eventProvenanceSchema,
       limitations: z.array(coverageLimitationSchema).max(50).optional()
