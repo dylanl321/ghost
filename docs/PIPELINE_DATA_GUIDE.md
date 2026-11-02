@@ -166,7 +166,7 @@ All endpoints live under `/api/pipelines/` and are documented in Swagger at `/ap
 | Endpoint | Purpose | Key Parameters |
 |---|---|---|
 | `GET /api/pipelines/authors/list` | All pipeline authors with aggregate metrics | `days` |
-| `GET /api/pipelines/authors/[email]` | Runs and summary for a specific author | `email` (route param), `days` |
+| `GET /api/pipelines/authors/[authorEmail]/timeline` | Runs and summary for a specific author | `authorEmail` (route param), `days` (1-90, default 30), `limit` (1-1000, default 200) |
 
 All endpoints accept a `days` parameter (1-90, default varies) and always query GovCloud regardless of any `environment` parameter.
 

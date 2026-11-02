@@ -919,15 +919,7 @@ table.put_item(Item={
 
 ## Migration from YAML
 
-Use the provided seeding script to migrate from YAML to DynamoDB:
-
-```bash
-# Preview items without writing
-python scripts/seed_config_dynamodb.py --dry-run
-
-# Seed to DynamoDB
-python scripts/seed_config_dynamodb.py --table-name budget-alert-config-dev
-```
+The `scripts/seed_config_dynamodb.py` seeding script this section used to reference is not in the repository. Change configuration on the admin Budget Alerts page (`/admin/costs/budget-alerts`), or through the admin API: `GET /api/admin/alert-config`, `GET /api/admin/alert-config/[section]`, and the `PUT /api/admin/alert-config/*` section endpoints.
 
 ---
 

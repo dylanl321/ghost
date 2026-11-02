@@ -1,9 +1,11 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository. The human-oriented
+setup and workflow guide is [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
 
 When the user invokes AI-DLC, read and follow
-`.aidlc/aidlc-rules/aws-aidlc-rules/core-workflow.md` to start the workflow.
+`.aidlc/aidlc-rules/aws-aidlc-rules/core-workflow.md` to start the workflow. `.aidlc/` is
+local tooling and is git-ignored, so it exists only on machines where it has been installed.
 
 ## Project Overview
 GHOST is a web dashboard providing centralized access to AWS account data and functionality. It's built with Nuxt 4, uses Entra ID for authentication, and integrates with multiple AWS services.
@@ -16,7 +18,7 @@ GHOST is a web dashboard providing centralized access to AWS account data and fu
 
 ## CRITICAL: Never Build This App Locally
 - **NEVER run any local application build on this machine.** Builds are too slow and interrupt development.
-- Do not run `npm run build`, `npm run generate`, `npm run preview`, `npm run story:build`, `npm run story:preview`, `nuxt build`, `nuxi build`, or any local `docker build` for this repository.
+- Do not run `npm run build`, `npm run generate`, `npm run preview`, `nuxt build`, `nuxi build`, or any local `docker build` for this repository.
 - Do not use a production build as a verification step. Use focused tests, linting, formatting, or targeted type checks instead.
 - CI/CD owns application and image builds. Do not change or trigger deployment/build jobs unless the user explicitly requests it.
 
@@ -24,13 +26,19 @@ GHOST is a web dashboard providing centralized access to AWS account data and fu
 
 ### Development
 ```bash
-npm install --legacy-peer-deps  # Install dependencies (legacy-peer-deps required for Histoire module)
-npm run dev                     # Start development server on http://localhost:3000
+npm ci --legacy-peer-deps   # Install the locked dependencies (resolves through the internal Nexus mirror)
+npm run dev                 # Start development server on http://localhost:3000
 ```
 
-### Component Development
+Never commit a rewritten `package-lock.json` (for example one pointed at registry.npmjs.org)
+or registry configuration. Dependency changes must be locked against Nexus.
+
+### Verification
 ```bash
-npm run story:dev      # Start Histoire component development
+npm test                    # Every node:test suite (tests/** and server/utils/__tests__)
+npm run test:<area>         # One area, e.g. test:api, test:costs, test:mcp
+npm run check:lint          # ESLint (the repo has pre-existing findings; do not add new ones)
+npm run check:types         # nuxi typecheck (pre-existing errors; do not add new ones)
 ```
 
 ### Versioning & Releases
@@ -51,12 +59,15 @@ npm run changelog:generate X.Y.Z  # Generate changelog from commits (uses AI)
 ## Architecture Overview
 
 ### Tech Stack
+- **Runtime**: Node 26 LTS (container pins 26.13.0), npm 11
 - **Frontend**: Nuxt 4, Vue 3, NuxtUI components, TailwindCSS
-- **State Management**: Pinia stores with persistence
+- **State Management**: Pinia 4 stores with `pinia-plugin-persistedstate`
+- **Validation**: zod 4, with `@asteasolutions/zod-to-openapi` 9 for schema-driven OpenAPI
 - **Authentication**: Nuxt OIDC Auth with Entra ID
 - **AWS Integration**: AWS SDK v3 for multiple services
 - **API**: Nitro server with auto-imported utilities
 - **Documentation**: Swagger UI available at `/api/swagger-ui`
+- **MCP**: Hosted MCP server at `/mcp` (`server/routes/mcp.post.ts`, `server/mcp/`) with its own OAuth flow
 
 ### Project Structure
 
@@ -74,10 +85,17 @@ npm run changelog:generate X.Y.Z  # Generate changelog from commits (uses AI)
   - `/utils` - Server utilities (auto-imported in server context)
   - `/lib` - Server libraries (AWS client factory, config)
   - `/types` - TypeScript type definitions
-  - `/plugins` - Server plugins (Swagger integration)
+  - `/plugins` - Nitro plugins (Swagger, report scheduler, OAuth background loops, export worker)
+  - `/middleware` - Request timing and Entra / API-key authentication
+  - `/routes` - Non-`/api` routes (MCP endpoint, OAuth)
+  - `/mcp` - MCP server, tools and OAuth implementation
+  - `/generated` - Generated, committed files (`swagger-routes.ts`; regenerate with `npm run swagger:prepare`)
 
-- `/shared` - Code shared between frontend and backend
+- `/shared` - Code shared between frontend and backend (import via `#shared/*`)
   - `/types` - Shared TypeScript types
+  - `/utils` - Shared pure utilities (exports, report schedules, author parsing)
+
+- `/tests` - `node:test` suites grouped by area (run with `npm test`)
 
 ### Authentication Flow
 The app uses Entra ID (Azure AD) for authentication:
@@ -90,7 +108,7 @@ The app uses Entra ID (Azure AD) for authentication:
 The app integrates with two AWS environments (Commercial and GovCloud):
 - Uses cross-account role assumption for accessing different accounts
 - Credentials configured via environment variables
-- AWS services used: Organizations, Cost Explorer, DynamoDB, EC2, S3, Security Lake, etc.
+- AWS services used: Organizations, Cost Explorer, DynamoDB, EC2, S3, Athena (Security Lake and pipeline data), Security Hub, Inspector, Bedrock, SES, CloudWatch, etc.
 
 ## Environment Setup
 
@@ -112,7 +130,10 @@ Create a `.env` file at the root (get from another contributor). Key variables:
 - Use file-based routing: `server/api/[path].[method].ts`
 - Return data using `defineEventHandler`
 - Auto-imported utilities available in server context
-- Use `/server/utils/api-response.ts` for consistent error handling
+- Use `/server/utils/api-response.ts` for consistent error handling (`handleAsync`, `sendSuccess`, `errors.*`)
+- Register OpenAPI docs with `registerEndpoint` from `/server/plugins/swagger.ts`; only files that call it appear in Swagger
+- Every `/api/admin/*` route is Administrator-only, enforced centrally in `server/middleware/entra-auth.ts` (a short allowlist is exempt); any other permission check (role, account scope) belongs in the handler
+- `/api/v1/*` is the supported integration contract: API keys only (`x-api-key`), v1 error envelope
 - Check existing endpoints before creating new ones:
   - `/api/accounts/*` - Account management endpoints
   - `/api/admin/*` - Admin functionality
@@ -134,6 +155,7 @@ Create a `.env` file at the root (get from another contributor). Key variables:
 - Existing stores to reuse:
   - `useEnclaveStore` - AWS enclave/environment management
   - `useUserGroupStore` - User groups and permissions
+  - `useAwsAccountsStore`, `useCostSettingsStore`, `useNavigationStore`, `useSiteConfigStore`
 
 ### TypeScript Usage
 - Use TypeScript for all new code
@@ -153,7 +175,7 @@ Create a `.env` file at the root (get from another contributor). Key variables:
    - `/app/utils` - Frontend utilities (accountHelpers.ts exists)
    - `/server/utils` - Server utilities (accounts-consolidated, api-response, dynamodb, etc.)
    - `/server/api` - Existing API endpoints
-   - `/app/stores` - Existing Pinia stores (useEnclaveStore, useUserGroupStore)
+   - `/app/stores` - Existing Pinia stores (useEnclaveStore, useUserGroupStore, useAwsAccountsStore, ...)
    - `/shared/types` - Existing TypeScript types
 
 **Common existing utilities and patterns:**
@@ -189,9 +211,10 @@ grep -r "TypeName" shared/types/
 ```
 
 ### Testing
-- Check for testing commands in package.json
-- Verify changes don't break existing functionality
-- Use Swagger UI for API testing during development
+- Tests use `node:test` via `tsx`; add new tests under `tests/<area>/` (or `server/utils/__tests__/`)
+- Run `npm test` (or the relevant `npm run test:<area>`) before handing off a change
+- Tests must not call AWS; inject or stub clients as existing suites do
+- Use Swagger UI for manual API testing during development
 
 ### Common Issues
 - If auto-imports aren't working, restart dev server
@@ -200,6 +223,7 @@ grep -r "TypeName" shared/types/
 
 ## Deployment
 - Deployed to AWS ECS using Terraform
-- CI/CD via GitLab pipeline
+- CI/CD via GitLab pipeline (`.gitlab-ci.yml`); see section 9 of `docs/DEVELOPER_GUIDE.md`
+- The `code_quality_check` CI image and the Dockerfile `NODE_VERSION` must stay on the same Node version
 - Secrets stored in AWS Secrets Manager
 - Terraform configuration in `/terraform` directory
