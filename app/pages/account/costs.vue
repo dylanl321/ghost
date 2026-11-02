@@ -405,8 +405,14 @@
           <div v-if="!isTagAnalysis && hasAccounts" class="flex flex-col gap-6">
             <div class="flex flex-wrap items-start gap-6">
               <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
+                <CostsYearChart
+                  v-if="heroChart?.id === 'yearEndForecast'"
+                  :chart="heroChart"
+                  :dataset="chartDataset"
+                  :scope-label="scopeLabel"
+                />
                 <ChartsRenderer
-                  v-if="heroChart"
+                  v-else-if="heroChart"
                   data-tour="costs-hero-chart"
                   :charts="[heroChart]"
                   :dataset="chartDataset"
@@ -522,6 +528,7 @@ import { buildAccountTiles, buildAttentionItems, buildCostNarrative } from '#sha
 import type { AttentionItem } from '#shared/utils/cost-dashboard'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import ChartsRenderer from '~/components/costs/ChartsRenderer.vue'
+import CostsYearChart from '~/components/costs/CostsYearChart.vue'
 import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
 import { useCostData } from '~/composables/useCostData'
 import { useCostScenario, toGroupableAccounts } from '~/composables/useCostScenario'
