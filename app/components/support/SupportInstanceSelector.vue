@@ -6,14 +6,13 @@
       v-model="selectedInstance"
       :items="instanceOptions"
       :loading="context.state.instancesLoading"
-     
-     
       :placeholder="placeholder"
       :filter-fields="['label', 'instanceId', 'instanceName', 'privateIp', 'publicIp']"
       value-key="value"
       class="w-full"
       :disabled="disabled"
-     :search-input="{ placeholder: 'Search by ID, name, or IP...' }">
+      :search-input="{ placeholder: 'Search by ID, name, or IP...' }"
+    >
       <template #default>
         <span v-if="context.state.instancesLoading" class="text-gray-500">Loading instances...</span>
         <span v-else-if="selectedInstanceData" class="flex items-center gap-2 min-w-0">

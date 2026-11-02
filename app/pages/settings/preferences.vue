@@ -80,11 +80,10 @@
                 :items="timezoneOptions"
                 label-key="label"
                 value-key="value"
-               
-               
                 class="flex-1"
                 size="lg"
-               :search-input="{ placeholder: 'Search timezones...' }">
+                :search-input="{ placeholder: 'Search timezones...' }"
+              >
                 <template #item-label="{ item: option }">
                   <div class="flex items-center justify-between w-full">
                     <span>{{ option.label }}</span>

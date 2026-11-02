@@ -19,7 +19,7 @@
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
           <USelectMenu value-key="value" v-model="filters.status" :items="statusOptions" placeholder="All" :search-input="false" />
         </div>
-        <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications" :loading="loading">
+        <UButton icon="i-heroicons-magnifying-glass" @click="loadNotifications()" :loading="loading">
           Search
         </UButton>
       </div>

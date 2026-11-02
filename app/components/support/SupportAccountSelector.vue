@@ -3,14 +3,13 @@
     v-model="selectedAccount"
     :items="filteredAccounts"
     :loading="!isReady"
-   
-   
     :placeholder="placeholder"
     :filter-fields="['label', 'name', 'value']"
     value-key="value"
     class="w-full"
     :disabled="disabled"
-   :search-input="{ placeholder: 'Search accounts...' }">
+    :search-input="{ placeholder: 'Search accounts...' }"
+  >
     <template #default>
       <span v-if="!isReady" class="text-gray-500">Loading accounts...</span>
       <span v-else-if="selectedAccountData" class="flex items-center gap-2 min-w-0">

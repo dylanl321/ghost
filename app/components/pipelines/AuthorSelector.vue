@@ -4,13 +4,12 @@
       v-model="selectedAuthorEmail"
       :items="authorOptions"
       placeholder="Filter by author..."
-     
-     
       value-key="value"
       :filter-fields="['label', 'email']"
       :loading="loading"
       class="w-64"
-     :search-input="{ placeholder: 'Search authors...' }">
+      :search-input="{ placeholder: 'Search authors...' }"
+    >
       <template #default>
         <span v-if="selectedAuthorEmail">
           {{ getSelectedAuthorLabel() }}
