@@ -154,9 +154,12 @@ export function buildCostNarrative(input: CostNarrativeInput): CostNarrative {
       const drivers = over.slice(0, 2)
       const share = drivers.reduce((sum, a) => sum + (a.spend - a.budget), 0) / overTotal
       const names = joinNames(drivers.map(a => shortName(a.name)))
+      // With many accounts over, two names rarely explain the overrun; give the count instead
       tail = drivers.length === over.length
         ? `. ${names} ${drivers.length === 1 ? 'is' : 'are'} the only ${drivers.length === 1 ? 'account' : 'accounts'} over budget.`
-        : `. ${names} drive ${percent(share)} of the overrun.`
+        : share >= 0.25
+          ? `. ${names} drive ${percent(share)} of the overrun.`
+          : `. ${over.length} accounts are over budget, led by ${shortName(over[0]!.name)}.`
     } else {
       tail = '.'
     }

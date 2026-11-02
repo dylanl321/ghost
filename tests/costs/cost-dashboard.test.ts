@@ -128,3 +128,9 @@ test('narrative supports a prorated budget noun and a no-budget note', () => {
   const past = buildCostNarrative({ periodPhrase: 'Last month', scopeLabel: 'all 6 accounts', noBudgetText: 'Budgets are not compared for past periods.', accounts: accounts.map(a => ({ ...a, budget: 0 })) })
   assert.equal(past.text, 'Last month, all 6 accounts spent $108.3K. Budgets are not compared for past periods.')
 })
+
+test('narrative gives a count when many accounts share the overrun', () => {
+  const many = Array.from({ length: 300 }, (_, i) => ({ id: `m${i}`, name: `Project Vega ${i}`, spend: 1_100 + (300 - i), budget: 1_000 }))
+  const n = buildCostNarrative({ periodPhrase: 'So far this month', scopeLabel: 'all 300 accounts', accounts: many })
+  assert.match(n.tail, /^\. 300 accounts are over budget, led by Vega 0\.$/)
+})

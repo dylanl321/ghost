@@ -57,10 +57,31 @@
             <span v-if="tile.utilization !== null" class="text-[13px] font-semibold tabular-nums" :class="textClass(tile.status)">{{ percent(tile.utilization) }}</span>
           </span>
         </button>
-        <span v-if="group.hidden > 0" class="flex items-center px-2 text-xs text-gray-500 dark:text-gray-400">
+        <button
+          v-if="group.hidden > 0"
+          type="button"
+          class="flex items-center rounded-lg px-3 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          @click="expanded = true"
+        >
           +{{ group.hidden }} smaller
-        </span>
+        </button>
       </div>
+    </div>
+
+    <!-- Large estates: start with the biggest groups and tiles, expand on demand -->
+    <div v-if="hiddenGroups > 0 || expanded" class="flex flex-wrap items-center gap-3 text-sm">
+      <UButton
+        color="neutral"
+        variant="outline"
+        size="sm"
+        :icon="expanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? 'Show fewer' : `Show all ${totalTiles} accounts` }}
+      </UButton>
+      <span v-if="!expanded && hiddenGroups > 0" class="text-gray-500 dark:text-gray-400">
+        {{ hiddenGroups }} smaller {{ hiddenGroups === 1 ? 'group' : 'groups' }} hidden
+      </span>
     </div>
   </section>
 </template>
@@ -71,9 +92,13 @@ import type { AccountTileGroup, BudgetStatus } from '#shared/utils/cost-dashboar
 const props = withDefaults(defineProps<{
   groups: AccountTileGroup[]
   formatCurrency: (value: number) => string
-  /** Most tiles drawn per group; the rest are summarised */
+  /** Tiles drawn per group before expanding; the rest are summarised */
   maxPerGroup?: number
-}>(), { maxPerGroup: 24 })
+  /** Groups drawn before expanding (groups arrive sorted by spend) */
+  maxGroups?: number
+  /** Tiles drawn per group once expanded, to keep the DOM bounded */
+  expandedMaxPerGroup?: number
+}>(), { maxPerGroup: 12, maxGroups: 6, expandedMaxPerGroup: 60 })
 
 const emit = defineEmits<{
   toggle: [accountId: string]
@@ -88,11 +113,25 @@ const groupByItems = [
   { label: 'Flat', value: 'none' }
 ]
 
-const visibleGroups = computed(() => props.groups.map(group => {
-  // Keep selected tiles visible even past the cap
-  const shown = group.tiles.filter((tile, index) => index < props.maxPerGroup || tile.selected)
-  return { ...group, shown, hidden: group.tiles.length - shown.length }
-}))
+const expanded = ref(false)
+
+const totalTiles = computed(() => props.groups.reduce((sum, g) => sum + g.tiles.length, 0))
+
+// Groups beyond the cap stay visible when they hold a selected tile
+const groupsInView = computed(() => expanded.value
+  ? props.groups
+  : props.groups.filter((group, index) => index < props.maxGroups || group.tiles.some(t => t.selected)))
+
+const hiddenGroups = computed(() => props.groups.length - groupsInView.value.length)
+
+const visibleGroups = computed(() => {
+  const cap = expanded.value ? props.expandedMaxPerGroup : props.maxPerGroup
+  return groupsInView.value.map(group => {
+    // Keep selected tiles visible even past the cap
+    const shown = group.tiles.filter((tile, index) => index < cap || tile.selected)
+    return { ...group, shown, hidden: group.tiles.length - shown.length }
+  })
+})
 
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`
 

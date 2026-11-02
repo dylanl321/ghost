@@ -1,7 +1,8 @@
 <template>
-  <div class="space-y-5 p-6 max-w-[1600px] mx-auto">
+  <div class="-mt-4">
+    <!-- -mt-4 cancels the layout's top padding so the band meets the top bar, as on Costs -->
     <!-- Header band: greeting, scope, the month in one sentence, and quick links -->
-    <section class="dark rounded-2xl !bg-[#0f172a] px-5 py-5 !text-white md:px-8 md:py-6">
+    <section class="dark !bg-[#0f172a] px-4 pb-7 pt-5 !text-white md:px-8">
       <div class="flex flex-wrap items-center gap-3">
         <div class="mr-auto min-w-0">
           <ClientOnly>
@@ -103,6 +104,7 @@
       </nav>
     </section>
 
+    <div class="space-y-5 p-6 max-w-[1600px] mx-auto">
     <ClientOnly>
       <DashboardMcpOfferingBanner />
     </ClientOnly>
@@ -294,13 +296,14 @@
 
     <!-- Customize Panel -->
     <DashboardCustomizePanel v-model="showCustomizePanel" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import CostsHero from '~/components/costs/CostsHero.vue'
 import type { HeroStat, HeroPace } from '~/components/costs/CostsHero.vue'
-import { buildCostNarrative } from '#shared/utils/cost-dashboard'
+import { buildCostNarrative, formatCompactCurrency } from '#shared/utils/cost-dashboard'
 import { getCurrentPeriodWindow } from '~/utils/cost-period'
 
 const { user } = useOidcAuth()
@@ -504,6 +507,9 @@ const homeNarrative = computed(() => buildCostNarrative({
   noBudgetText: monthWindow.value?.observedDays === 0 ? 'No complete days of data yet this month.' : undefined
 }))
 
+// Whole dollars until seven figures, then compact ($1.0M) so the stats row stays on one line
+const heroMoney = (value: number) => Math.abs(value) >= 1_000_000 ? formatCompactCurrency(value) : formatCurrency(value, 0)
+
 const homeStats = computed<HeroStat[]>(() => {
   const accts = homeAccounts.value
   const spend = accts.reduce((sum, a) => sum + a.spend, 0)
@@ -515,9 +521,9 @@ const homeStats = computed<HeroStat[]>(() => {
     : (w && w.observedDays > 0 ? spend / w.observedDays * w.totalDays : 0)
   const overCount = accts.filter(a => a.budget > 0 && a.spend > a.budget).length
   return [
-    { label: 'Month to date', value: formatCurrency(spend, 0), sub: monthToDateTrend.value !== null && dashboardScope.value === 'org' ? `${monthToDateTrend.value >= 0 ? '+' : ''}${monthToDateTrend.value.toFixed(1)}% vs last month to date` : `${w?.observedDays ?? 0} days of data` },
-    { label: 'Projected', value: projected > 0 ? formatCurrency(projected, 0) : '—', sub: dashboardScope.value === 'org' ? 'AWS forecast for the month' : 'At the current daily rate', tone: fullBudget > 0 && projected > fullBudget ? 'over' : undefined },
-    { label: 'Monthly budget', value: fullBudget > 0 ? formatCurrency(fullBudget, 0) : '—', sub: fullBudget > 0 && projected > 0 ? `${Math.round(projected / fullBudget * 100)}% at this pace` : 'No budgets set' },
+    { label: 'Month to date', value: heroMoney(spend), sub: monthToDateTrend.value !== null && dashboardScope.value === 'org' ? `${monthToDateTrend.value >= 0 ? '+' : ''}${monthToDateTrend.value.toFixed(1)}% vs last month to date` : `${w?.observedDays ?? 0} days of data` },
+    { label: 'Projected', value: projected > 0 ? heroMoney(projected) : '—', sub: dashboardScope.value === 'org' ? 'AWS forecast for the month' : 'At the current daily rate', tone: fullBudget > 0 && projected > fullBudget ? 'over' : undefined },
+    { label: 'Monthly budget', value: fullBudget > 0 ? heroMoney(fullBudget) : '—', sub: fullBudget > 0 && projected > 0 ? `${Math.round(projected / fullBudget * 100)}% at this pace` : 'No budgets set' },
     { label: 'Accounts', value: String(accts.length), sub: `${overCount} over budget to date` }
   ]
 })
@@ -531,8 +537,8 @@ const homePace = computed<HeroPace | null>(() => {
   const ratio = w.totalDays > 0 ? w.observedDays / w.totalDays : 0
   return {
     caption: `Day ${w.observedDays} of ${w.totalDays} this month`,
-    right: `${formatCurrency(spend, 0)} of ${formatCurrency(full, 0)}`,
-    aria: `${formatCurrency(spend, 0)} spent of a ${formatCurrency(full, 0)} monthly budget`,
+    right: `${heroMoney(spend)} of ${heroMoney(full)}`,
+    aria: `${heroMoney(spend)} spent of a ${heroMoney(full)} monthly budget`,
     periodLabel: 'month',
     spendRatio: spend / full,
     markerRatio: ratio,
